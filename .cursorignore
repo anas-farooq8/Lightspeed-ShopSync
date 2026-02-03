@@ -1,0 +1,26 @@
+# Editor folders
+.vscode/
+.idea/
+
+# Build output
+.next/
+out/
+dist/
+build/
+
+# Dependencies
+node_modules/
+.next/
+
+# Public assets (optional — if you want to index them remove this)
+public/
+
+# Environment files
+.env
+.env*.local
+
+# Logs
+*.log
+
+# Misc
+.DS_Store
