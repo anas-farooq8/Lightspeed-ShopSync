@@ -51,7 +51,7 @@ export function Sidebar() {
 
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/sync', icon: RefreshCw, label: 'Sync Status' },
+    { href: '/dashboard/sync', icon: RefreshCw, label: 'Sync Status' },
   ]
 
   return (
@@ -71,8 +71,8 @@ export function Sidebar() {
               className="h-6 w-6"
             />
             <div className="flex-1">
-              <h1 className="text-sm font-bold text-foreground">ShopSync</h1>
-              <p className="text-[10px] text-muted-foreground">Product Sync</p>
+              <h1 className="text-sm font-bold text-foreground">Lightspeed ShopSync</h1>
+              <p className="text-[10px] text-muted-foreground">Sync Tool</p>
             </div>
           </div>
         )}
@@ -125,12 +125,12 @@ export function Sidebar() {
         
         <Button
           variant="outline"
-          size={isCollapsed ? 'icon' : 'sm'}
+          size={isCollapsed ? 'icon' : 'default'}
           onClick={handleLogout}
           disabled={loading}
           className={cn(
             'cursor-pointer w-full',
-            isCollapsed ? 'h-9 w-9 p-0' : 'justify-start gap-2'
+            isCollapsed ? 'h-10 w-10 p-0' : 'justify-start gap-2 h-11'
           )}
           title={isCollapsed ? 'Logout' : ''}
         >

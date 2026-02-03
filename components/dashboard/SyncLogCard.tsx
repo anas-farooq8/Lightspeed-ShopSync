@@ -67,98 +67,78 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
   }
 
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+    <Card className="p-3 hover:shadow-md transition-shadow">
       {/* Header: Shop, Status, Time */}
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           {getStatusIcon()}
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-sm">{log.shop_name}</h3>
               {getTldBadge(log.shop_tld || 'unknown')}
               {getStatusBadge()}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               {formatDistanceToNow(new Date(log.started_at), { addSuffix: true })}
+              {log.duration_seconds !== null && (
+                <span className="ml-2">• {formatDuration(log.duration_seconds)}</span>
+              )}
             </p>
           </div>
         </div>
-        
-        {log.duration_seconds !== null && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>{formatDuration(log.duration_seconds)}</span>
-          </div>
-        )}
       </div>
 
       {/* Error Message */}
       {log.error_message && (
-        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+        <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
-            <span>{log.error_message}</span>
+            <span className="line-clamp-2">{log.error_message}</span>
           </div>
         </div>
       )}
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {/* API Fetch Metrics */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Download className="h-3 w-3" />
             <span>Fetched</span>
           </div>
-          <div className="text-sm font-medium">
-            <div>{log.products_fetched.toLocaleString()} products</div>
-            <div className="text-xs text-muted-foreground">{log.variants_fetched.toLocaleString()} variants</div>
-          </div>
+          <div className="text-sm font-semibold">{log.products_fetched.toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">products</div>
         </div>
 
         {/* DB Sync Metrics */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Upload className="h-3 w-3" />
             <span>Synced</span>
           </div>
-          <div className="text-sm font-medium">
-            <div>{log.products_synced.toLocaleString()} products</div>
-            <div className="text-xs text-muted-foreground">{log.variants_synced.toLocaleString()} variants</div>
-          </div>
+          <div className="text-sm font-semibold">{log.variants_synced.toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">variants</div>
         </div>
 
         {/* Delete Metrics */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Trash2 className="h-3 w-3" />
             <span>Deleted</span>
           </div>
-          <div className="text-sm font-medium">
-            <div>{log.products_deleted.toLocaleString()} products</div>
-            <div className="text-xs text-muted-foreground">{log.variants_deleted.toLocaleString()} variants</div>
-          </div>
+          <div className="text-sm font-semibold">{log.variants_deleted.toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">variants</div>
         </div>
 
         {/* Filtered Metrics */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Filter className="h-3 w-3" />
             <span>Filtered</span>
           </div>
-          <div className="text-sm font-medium">
-            <div>{log.variants_filtered.toLocaleString()} variants</div>
-            <div className="text-xs text-muted-foreground">Orphaned</div>
-          </div>
+          <div className="text-sm font-semibold">{log.variants_filtered.toLocaleString()}</div>
+          <div className="text-[10px] text-muted-foreground">orphaned</div>
         </div>
-      </div>
-
-      {/* Timestamp Details */}
-      <div className="mt-3 pt-3 border-t text-xs text-muted-foreground space-y-0.5">
-        <div>Started: {new Date(log.started_at).toLocaleString()}</div>
-        {log.completed_at && (
-          <div>Completed: {new Date(log.completed_at).toLocaleString()}</div>
-        )}
       </div>
     </Card>
   )
