@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { SyncLog } from '@/types/variant'
 import { SyncLogCard } from '@/components/dashboard/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -54,8 +54,8 @@ export default function SyncPage() {
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
-  const [initialLoading, setInitialLoading] = useState(true)
-  const [filterLoading, setFilterLoading] = useState(false)
+  const [shopFilterLoading, setShopFilterLoading] = useState(false)
+  const [statusFilterLoading, setStatusFilterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -64,17 +64,21 @@ export default function SyncPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [totalDates, setTotalDates] = useState(0)
-  const isInitialMount = useRef(true)
 
-  const fetchSyncLogs = useCallback(async (page: number = 1) => {
+  const fetchSyncLogs = useCallback(async (
+    page: number = 1,
+    overrides?: { shop?: string; status?: string }
+  ) => {
+    const shop = overrides?.shop ?? shopFilter
+    const status = overrides?.status ?? statusFilter
     setLoading(true)
     setError(null)
     
     try {
       const params = new URLSearchParams({
         page: page.toString(),
-        shop: shopFilter,
-        status: statusFilter
+        shop,
+        status
       })
       
       const response = await fetch(`/api/sync-logs?${params}`)
@@ -104,7 +108,6 @@ export default function SyncPage() {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
       setLoading(false)
-      setInitialLoading(false)
     }
   }, [shopFilter, statusFilter])
 
@@ -113,14 +116,17 @@ export default function SyncPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
-      return
-    }
-    setFilterLoading(true)
-    fetchSyncLogs(1).finally(() => setFilterLoading(false))
-  }, [shopFilter, statusFilter, fetchSyncLogs])
+  const handleShopFilterChange = useCallback((value: string) => {
+    setShopFilter(value)
+    setShopFilterLoading(true)
+    fetchSyncLogs(1, { shop: value }).finally(() => setShopFilterLoading(false))
+  }, [fetchSyncLogs])
+
+  const handleStatusFilterChange = useCallback((value: string) => {
+    setStatusFilter(value)
+    setStatusFilterLoading(true)
+    fetchSyncLogs(1, { status: value }).finally(() => setStatusFilterLoading(false))
+  }, [fetchSyncLogs])
 
   const groupedByDate = useMemo<DateGroup[]>(() => {
     const dateMap = new Map<string, SyncLog[]>()
@@ -174,7 +180,7 @@ export default function SyncPage() {
       <div className="max-w-full mx-auto">
         <SyncPageHeader />
 
-        {initialLoading ? (
+        {loading && syncLogs.length === 0 ? (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
             <div className="text-center">
               <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto mb-2" />
@@ -186,10 +192,10 @@ export default function SyncPage() {
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />
-                <Select value={shopFilter} onValueChange={setShopFilter} disabled={filterLoading}>
+                <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={statusFilterLoading}>
                   <SelectTrigger
                     className="w-[180px] cursor-pointer"
-                    icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                    icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
                   >
                 <SelectValue placeholder="All Shops" />
               </SelectTrigger>
@@ -204,10 +210,10 @@ export default function SyncPage() {
             </Select>
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter} disabled={filterLoading}>
+          <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={shopFilterLoading}>
             <SelectTrigger
               className="w-[180px] cursor-pointer"
-              icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+              icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
             >
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
