@@ -40,6 +40,8 @@ export default function SyncPage() {
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
+  const [shopFilterLoading, setShopFilterLoading] = useState(false)
+  const [statusFilterLoading, setStatusFilterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -102,7 +104,12 @@ export default function SyncPage() {
   // Apply filters - refetch from API
   useEffect(() => {
     if (!initialLoading) {
-      fetchSyncLogs(1)
+      setShopFilterLoading(true)
+      setStatusFilterLoading(true)
+      fetchSyncLogs(1).finally(() => {
+        setShopFilterLoading(false)
+        setStatusFilterLoading(false)
+      })
     }
   }, [shopFilter, statusFilter])
 
@@ -184,7 +191,11 @@ export default function SyncPage() {
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={shopFilter} onValueChange={setShopFilter} disabled={loading}>
+            <Select 
+              value={shopFilter} 
+              onValueChange={setShopFilter} 
+              disabled={shopFilterLoading || statusFilterLoading}
+            >
               <SelectTrigger className="w-[180px] cursor-pointer">
                 <SelectValue placeholder="All Shops" />
               </SelectTrigger>
@@ -197,22 +208,31 @@ export default function SyncPage() {
                 ))}
               </SelectContent>
             </Select>
-            {loading && !initialLoading && (
-              <RefreshCw className="h-4 w-4 text-muted-foreground animate-spin" />
+            {shopFilterLoading && (
+              <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
             )}
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter} disabled={loading}>
-            <SelectTrigger className="w-[140px] cursor-pointer">
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
-              <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
-              <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
-              <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select 
+              value={statusFilter} 
+              onValueChange={setStatusFilter} 
+              disabled={shopFilterLoading || statusFilterLoading}
+            >
+              <SelectTrigger className="w-[140px] cursor-pointer">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
+                <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
+                <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
+                <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
+              </SelectContent>
+            </Select>
+            {statusFilterLoading && (
+              <RefreshCw className="h-4 w-4 text-green-500 animate-spin" />
+            )}
+          </div>
         </div>
 
         {/* Error Alert */}

@@ -13,22 +13,33 @@ export async function GET(request: Request) {
     
     const supabase = await createClient()
 
+    // Fetch all shops once (lightweight query - only 2-5 rows)
+    const { data: shopsData } = await supabase
+      .from('shops')
+      .select('id, tld, role')
+      .order('role', { ascending: true })
+      .order('tld', { ascending: true })
+
+    const shops = (shopsData || []).map((shop: any) => ({
+      tld: shop.tld,
+      role: shop.role
+    }))
+
+    // Get shop_id for filtering if needed
+    let shopId: number | null = null
+    if (shopFilter !== 'all') {
+      const shop = shopsData?.find((s: any) => s.tld === shopFilter)
+      shopId = shop?.id || null
+    }
+
     // Build base query for filtering
     let baseQuery = supabase
       .from('sync_logs')
       .select('started_at', { count: 'exact', head: false })
 
     // Apply filters to base query
-    if (shopFilter !== 'all') {
-      const { data: shopData } = await supabase
-        .from('shops')
-        .select('id')
-        .eq('tld', shopFilter)
-        .single()
-      
-      if (shopData) {
-        baseQuery = baseQuery.eq('shop_id', shopData.id)
-      }
+    if (shopId) {
+      baseQuery = baseQuery.eq('shop_id', shopId)
     }
 
     if (statusFilter !== 'all') {
@@ -39,19 +50,7 @@ export async function GET(request: Request) {
     const { data: allDatesData } = await baseQuery
       .order('started_at', { ascending: false })
 
-    if (!allDatesData) {
-      // Fetch shops even if no logs
-      const { data: shopsData } = await supabase
-        .from('shops')
-        .select('tld, role')
-        .order('role', { ascending: true })
-        .order('tld', { ascending: true })
-
-      const shops = (shopsData || []).map((shop: any) => ({
-        tld: shop.tld,
-        role: shop.role
-      }))
-
+    if (!allDatesData || allDatesData.length === 0) {
       return NextResponse.json({ 
         syncLogs: [], 
         totalDates: 0,
@@ -78,18 +77,6 @@ export async function GET(request: Request) {
     const pageDates = uniqueDates.slice(offset, offset + DATES_PER_PAGE)
 
     if (pageDates.length === 0) {
-      // Fetch shops even if no logs for this page
-      const { data: shopsData } = await supabase
-        .from('shops')
-        .select('tld, role')
-        .order('role', { ascending: true })
-        .order('tld', { ascending: true })
-
-      const shops = (shopsData || []).map((shop: any) => ({
-        tld: shop.tld,
-        role: shop.role
-      }))
-
       return NextResponse.json({ 
         syncLogs: [], 
         totalDates,
@@ -114,16 +101,8 @@ export async function GET(request: Request) {
       .lte('started_at', pageDates[0] + 'T23:59:59')
 
     // Apply filters to logs query
-    if (shopFilter !== 'all') {
-      const { data: shopData } = await supabase
-        .from('shops')
-        .select('id')
-        .eq('tld', shopFilter)
-        .single()
-      
-      if (shopData) {
-        logsQuery = logsQuery.eq('shop_id', shopData.id)
-      }
+    if (shopId) {
+      logsQuery = logsQuery.eq('shop_id', shopId)
     }
 
     if (statusFilter !== 'all') {
@@ -161,18 +140,6 @@ export async function GET(request: Request) {
       variants_filtered: log.variants_filtered || 0,
       created_at: log.created_at,
       updated_at: log.updated_at,
-    }))
-
-    // Fetch all shops for filter dropdown (lightweight query)
-    const { data: shopsData } = await supabase
-      .from('shops')
-      .select('tld, role')
-      .order('role', { ascending: true })
-      .order('tld', { ascending: true })
-
-    const shops = (shopsData || []).map((shop: any) => ({
-      tld: shop.tld,
-      role: shop.role
     }))
 
     return NextResponse.json({ 
