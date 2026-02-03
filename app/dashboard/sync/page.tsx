@@ -26,10 +26,8 @@ export default function SyncPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
 
-  const fetchSyncLogs = async (showLoading = true) => {
-    if (showLoading) {
-      setLoading(true)
-    }
+  const fetchSyncLogs = async () => {
+    setLoading(true)
     setError(null)
     
     try {
@@ -51,10 +49,7 @@ export default function SyncPage() {
   }
 
   useEffect(() => {
-    fetchSyncLogs(true)
-    // Auto-refresh every 30 seconds (without showing loading spinner)
-    const interval = setInterval(() => fetchSyncLogs(false), 30000)
-    return () => clearInterval(interval)
+    fetchSyncLogs()
   }, [])
 
   // Apply filters and reset to page 1

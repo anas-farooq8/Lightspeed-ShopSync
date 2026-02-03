@@ -270,7 +270,6 @@ create table sync_logs (
     
     -- Standard timestamps
     created_at timestamp with time zone not null default now(),
-    updated_at timestamp with time zone not null default now()
 );
 
 -- Indexes
@@ -341,8 +340,4 @@ for each row execute function set_updated_at();
 
 create trigger trg_variant_content_updated
 before update on variant_content
-for each row execute function set_updated_at();
-
-create trigger trg_sync_logs_updated
-before update on sync_logs
 for each row execute function set_updated_at();
