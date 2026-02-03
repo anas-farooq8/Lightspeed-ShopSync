@@ -4,55 +4,40 @@
  * Represents a product from .nl (via its default variant)
  * and its sync status with .de and .be shops.
  * 
- * Matching logic: Products are matched by their DEFAULT VARIANT SKU
+ * Matching logic: Products matched by variant SKU (default first, then non-default)
  * - .nl product ←→ .de/.be product
- * - Only default variants are used for matching (is_default = true)
- * - All variants within a product are synced together as a unit
+ * - First: match by DEFAULT variant SKU
+ * - Fallback: match by NON-DEFAULT variant SKU (product exists but structured differently)
  */
 export interface ProductSyncStatus {
-  // Source (.nl) product data (via default variant)
+  // Source (.nl) - list display only; fetch full details on product/sync page
   nl_default_variant_id: number
   nl_product_id: number
-  default_sku: string  // 🔑 Matching key for product-level sync
-  price_excl: number
-  is_default: boolean  // Always true (filtered to default variants only)
-  variant_image: {
-    title: string | null
-    thumb: string | null
-    src: string | null
-  } | null
-  product_image: {
-    title: string | null
-    thumb: string | null
-    src: string | null
-  } | null
+  default_sku: string  // 🔑 Matching key
+  price_excl: number | null
+  product_image: { title: string | null; thumb: string | null; src: string | null } | null
   updated_at: string
-  default_variant_title: string
-  product_title: string
-  description: string | null
-  content: string | null
+  default_variant_title: string | null  // variant_content (default lang)
+  product_title: string | null         // product_content (default lang)
   shop_id: string
-  nl_variant_count: number  // Total variants in this .nl product
+  nl_variant_count: number
 
-  // Duplicate default SKU info (multiple .nl products with same default SKU)
+  // Duplicate default SKU info
   nl_duplicate_count: number
   has_nl_duplicates: boolean
-  nl_duplicate_product_ids: number[] | null
 
-  // .de match status (matched by default variant SKU)
+  // .de match (default first, then non-default for structure mismatch)
   de_match_count: number
   de_product_ids: number[] | null
   de_default_variant_ids: number[] | null
-  de_product_titles: string[] | null
-  de_variant_counts: number[] | null  // Variant counts per matched product
+  de_variant_counts: number[] | null
   de_status: 'not_exists' | 'exists_single' | 'exists_multiple'
 
-  // .be match status (matched by default variant SKU)
+  // .be match (default first, then non-default for structure mismatch)
   be_match_count: number
   be_product_ids: number[] | null
   be_default_variant_ids: number[] | null
-  be_product_titles: string[] | null
-  be_variant_counts: number[] | null  // Variant counts per matched product
+  be_variant_counts: number[] | null
   be_status: 'not_exists' | 'exists_single' | 'exists_multiple'
 }
 

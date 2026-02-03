@@ -167,7 +167,7 @@ CREATE INDEX idx_variants_sku ON variants (sku)
 create index idx_variants_product
   on variants (shop_id, lightspeed_product_id);
 
--- Performance indexes for product_sync_status view
+-- Performance indexes for product_sync_status view and get_sync_stats()
 CREATE INDEX idx_variants_default_sku_shop 
   ON variants(shop_id, is_default, sku) 
   WHERE is_default = true AND sku IS NOT NULL AND sku != '';

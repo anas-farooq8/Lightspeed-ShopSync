@@ -53,14 +53,16 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
                     {product.product_image?.thumb && (
                       <img
                         src={product.product_image.thumb}
-                        alt={product.product_title}
+                        alt={product.product_title ?? product.default_sku ?? 'Product'}
                         className="w-12 h-12 object-cover rounded border"
                       />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{product.product_title}</div>
+                      <div className="font-medium truncate">
+                        {product.product_title ?? product.default_sku ?? '—'}
+                      </div>
                       <div className="text-sm text-muted-foreground truncate">
-                        {product.default_variant_title}
+                        {product.default_variant_title ?? '—'}
                       </div>
                     </div>
                   </div>
@@ -69,7 +71,7 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
                   <Badge variant="outline">{product.nl_variant_count}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  €{product.price_excl.toFixed(2)}
+                  €{(product.price_excl ?? 0).toFixed(2)}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-1">

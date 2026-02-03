@@ -24,7 +24,7 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
             {product.product_image?.thumb ? (
               <img
                 src={product.product_image.thumb}
-                alt={product.product_title}
+                alt={product.product_title ?? product.default_sku ?? 'Product'}
                 className="w-24 h-24 object-cover rounded border"
               />
             ) : (
@@ -50,16 +50,18 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
             </div>
 
             {/* Product Title */}
-            <h3 className="font-semibold truncate mb-1">{product.product_title}</h3>
+            <h3 className="font-semibold truncate mb-1">
+              {product.product_title ?? product.default_sku ?? '—'}
+            </h3>
             
             {/* Variant Title */}
             <p className="text-sm text-muted-foreground truncate mb-3">
-              {product.default_variant_title}
+              {product.default_variant_title ?? '—'}
             </p>
 
             {/* Price */}
             <div className="text-lg font-bold mb-3">
-              €{product.price_excl.toFixed(2)}
+              €{(product.price_excl ?? 0).toFixed(2)}
             </div>
 
             {/* Status Badges */}
