@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { SyncLog } from '@/types/variant'
 import { SyncLogCard } from '@/components/dashboard/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -51,6 +51,15 @@ export default function SyncPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [totalDates, setTotalDates] = useState(0)
 
+  // Format date helper function
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
   const fetchSyncLogs = async (page: number = 1) => {
     setLoading(true)
     setError(null)
@@ -77,11 +86,7 @@ export default function SyncPage() {
       
       // Expand the most recent date by default
       if (data.syncLogs.length > 0) {
-        const mostRecentDate = new Date(data.syncLogs[0].started_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
+        const mostRecentDate = formatDate(data.syncLogs[0].started_at)
         setExpandedDates(new Set([mostRecentDate]))
       } else {
         setExpandedDates(new Set())
@@ -121,30 +126,24 @@ export default function SyncPage() {
     }
   }, [statusFilter])
 
-  // Group logs by date
-  const groupedByDate: DateGroup[] = []
-  const dateMap = new Map<string, SyncLog[]>()
+  // Group logs by date (memoized for performance)
+  const groupedByDate = useMemo<DateGroup[]>(() => {
+    const dateMap = new Map<string, SyncLog[]>()
 
-  syncLogs.forEach(log => {
-    const date = new Date(log.started_at).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    syncLogs.forEach(log => {
+      const date = formatDate(log.started_at)
+      if (!dateMap.has(date)) {
+        dateMap.set(date, [])
+      }
+      dateMap.get(date)!.push(log)
     })
-    
-    if (!dateMap.has(date)) {
-      dateMap.set(date, [])
-    }
-    dateMap.get(date)!.push(log)
-  })
 
-  dateMap.forEach((logs, date) => {
-    groupedByDate.push({
+    return Array.from(dateMap.entries()).map(([date, logs]) => ({
       date,
       logs,
       displayCount: dateDisplayCounts.get(date) || ITEMS_PER_DATE
-    })
-  })
+    }))
+  }, [syncLogs, dateDisplayCounts])
 
   const toggleDate = (date: string) => {
     setExpandedDates(prev => {
@@ -205,7 +204,7 @@ export default function SyncPage() {
               disabled={shopFilterLoading}
             >
               <SelectTrigger 
-                className="w-[200px] cursor-pointer"
+                className="w-[180px] cursor-pointer"
                 icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
               >
                 <SelectValue placeholder="All Shops" />
@@ -227,7 +226,7 @@ export default function SyncPage() {
             disabled={statusFilterLoading}
           >
             <SelectTrigger 
-              className="w-[160px] cursor-pointer"
+              className="w-[180px] cursor-pointer"
               icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
             >
               <SelectValue placeholder="All Status" />
@@ -280,7 +279,7 @@ export default function SyncPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
-                Showing page {currentPage} of {totalPages} ({groupedByDate.length} day{groupedByDate.length !== 1 ? 's' : ''} on this page)
+                Showing page {currentPage} of {totalPages}
               </span>
               {totalPages > 1 && (
                 <span>Total: {totalDates} day{totalDates !== 1 ? 's' : ''}</span>
