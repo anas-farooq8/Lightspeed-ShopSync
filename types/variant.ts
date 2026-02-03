@@ -93,5 +93,4 @@ export interface SyncLog {
   
   // Standard timestamps
   created_at: string
-  updated_at: string
 }

@@ -83,7 +83,7 @@ export function StatsCards() {
                   {kpi.shop_name}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  {kpi.role} · {kpi.tld}
+                  {kpi.role} · .{kpi.tld}
                 </p>
               </div>
             </div>

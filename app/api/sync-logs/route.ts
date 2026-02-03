@@ -139,7 +139,6 @@ export async function GET(request: Request) {
       variants_deleted: log.variants_deleted || 0,
       variants_filtered: log.variants_filtered || 0,
       created_at: log.created_at,
-      updated_at: log.updated_at,
     }))
 
     return NextResponse.json({ 
