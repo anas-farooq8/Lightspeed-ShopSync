@@ -85,10 +85,12 @@ export default function SyncPage() {
       }
     })
     .sort((a, b) => {
-      const order = { 'nl': 0, 'de': 1, 'be': 2 }
-      const aTld = a.tld.toLowerCase()
-      const bTld = b.tld.toLowerCase()
-      return (order[aTld as keyof typeof order] || 999) - (order[bTld as keyof typeof order] || 999)
+      // First sort by role: source comes before target
+      if (a.role !== b.role) {
+        return a.role === 'source' ? -1 : 1
+      }
+      // Then sort alphabetically by TLD within the same role
+      return a.tld.toLowerCase().localeCompare(b.tld.toLowerCase())
     })
 
   // Pagination calculations
