@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { SyncLog } from '@/types/variant'
 import { SyncLogCard } from '@/components/dashboard/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,6 +15,10 @@ import {
 } from '@/components/ui/select'
 
 const ITEMS_PER_DATE = 20
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
+
+const formatDate = (dateString: string) =>
+  new Date(dateString).toLocaleDateString('en-US', DATE_OPTIONS)
 
 interface DateGroup {
   date: string
@@ -35,32 +39,34 @@ interface SyncLogsResponse {
   shops: Shop[]
 }
 
+function SyncPageHeader() {
+  return (
+    <div className="mb-4">
+      <h1 className="text-2xl font-bold mb-1">Sync Status</h1>
+      <p className="text-sm text-muted-foreground">
+        Monitor synchronization operations with Lightspeed API
+      </p>
+    </div>
+  )
+}
+
 export default function SyncPage() {
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
-  const [shopFilterLoading, setShopFilterLoading] = useState(false)
-  const [statusFilterLoading, setStatusFilterLoading] = useState(false)
+  const [filterLoading, setFilterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [shopFilter, setShopFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [shopFilter, setShopFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set())
   const [dateDisplayCounts, setDateDisplayCounts] = useState<Map<string, number>>(new Map())
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [totalDates, setTotalDates] = useState(0)
+  const isInitialMount = useRef(true)
 
-  // Format date helper function
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
-
-  const fetchSyncLogs = async (page: number = 1) => {
+  const fetchSyncLogs = useCallback(async (page: number = 1) => {
     setLoading(true)
     setError(null)
     
@@ -100,113 +106,91 @@ export default function SyncPage() {
       setLoading(false)
       setInitialLoading(false)
     }
-  }
+  }, [shopFilter, statusFilter])
 
   useEffect(() => {
     fetchSyncLogs(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Apply shop filter - refetch from API
   useEffect(() => {
-    if (!initialLoading) {
-      setShopFilterLoading(true)
-      fetchSyncLogs(1).finally(() => {
-        setShopFilterLoading(false)
-      })
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
     }
-  }, [shopFilter])
+    setFilterLoading(true)
+    fetchSyncLogs(1).finally(() => setFilterLoading(false))
+  }, [shopFilter, statusFilter, fetchSyncLogs])
 
-  // Apply status filter - refetch from API
-  useEffect(() => {
-    if (!initialLoading) {
-      setStatusFilterLoading(true)
-      fetchSyncLogs(1).finally(() => {
-        setStatusFilterLoading(false)
-      })
-    }
-  }, [statusFilter])
-
-  // Group logs by date (memoized for performance)
   const groupedByDate = useMemo<DateGroup[]>(() => {
     const dateMap = new Map<string, SyncLog[]>()
-
-    syncLogs.forEach(log => {
+    for (const log of syncLogs) {
       const date = formatDate(log.started_at)
-      if (!dateMap.has(date)) {
-        dateMap.set(date, [])
-      }
-      dateMap.get(date)!.push(log)
-    })
-
+      const arr = dateMap.get(date) ?? []
+      arr.push(log)
+      dateMap.set(date, arr)
+    }
     return Array.from(dateMap.entries()).map(([date, logs]) => ({
       date,
       logs,
-      displayCount: dateDisplayCounts.get(date) || ITEMS_PER_DATE
+      displayCount: dateDisplayCounts.get(date) ?? ITEMS_PER_DATE
     }))
   }, [syncLogs, dateDisplayCounts])
 
-  const toggleDate = (date: string) => {
+  const toggleDate = useCallback((date: string) => {
     setExpandedDates(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(date)) {
-        newSet.delete(date)
-      } else {
-        newSet.add(date)
-      }
-      return newSet
+      const next = new Set(prev)
+      next.has(date) ? next.delete(date) : next.add(date)
+      return next
     })
-  }
+  }, [])
 
-  const showMoreForDate = (date: string) => {
+  const showMoreForDate = useCallback((date: string) => {
     setDateDisplayCounts(prev => {
-      const newMap = new Map(prev)
-      const currentCount = newMap.get(date) || ITEMS_PER_DATE
-      newMap.set(date, currentCount + ITEMS_PER_DATE)
-      return newMap
+      const next = new Map(prev)
+      next.set(date, (next.get(date) ?? ITEMS_PER_DATE) + ITEMS_PER_DATE)
+      return next
     })
-  }
+  }, [])
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     fetchSyncLogs(page)
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  }, [fetchSyncLogs])
 
-  // Show full-page loading only on initial load
-  if (initialLoading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">Loading sync logs...</p>
-        </div>
-      </div>
-    )
-  }
+  const hasNoData = totalDates === 0 && syncLogs.length === 0
+  const hasActiveFilters = shopFilter !== 'all' || statusFilter !== 'all'
+
+  const paginationPages = useMemo(() => {
+    const max = 7
+    if (totalPages <= max) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    if (currentPage <= 4) return Array.from({ length: max }, (_, i) => i + 1)
+    if (currentPage >= totalPages - 3) return Array.from({ length: max }, (_, i) => totalPages - 6 + i)
+    return Array.from({ length: max }, (_, i) => currentPage - 3 + i)
+  }, [totalPages, currentPage])
 
   return (
     <div className="w-full h-full p-6">
       <div className="max-w-full mx-auto">
-        {/* Page Header */}
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold mb-1">Sync Status</h1>
-          <p className="text-sm text-muted-foreground">
-            Monitor synchronization operations with Lightspeed API
-          </p>
-        </div>
+        <SyncPageHeader />
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select 
-              value={shopFilter} 
-              onValueChange={setShopFilter} 
-              disabled={shopFilterLoading}
-            >
-              <SelectTrigger 
-                className="w-[180px] cursor-pointer"
-                icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-              >
+        {initialLoading ? (
+          <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Loading sync logs...</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={shopFilter} onValueChange={setShopFilter} disabled={filterLoading}>
+                  <SelectTrigger
+                    className="w-[180px] cursor-pointer"
+                    icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                  >
                 <SelectValue placeholder="All Shops" />
               </SelectTrigger>
               <SelectContent>
@@ -220,14 +204,10 @@ export default function SyncPage() {
             </Select>
           </div>
 
-          <Select 
-            value={statusFilter} 
-            onValueChange={setStatusFilter} 
-            disabled={statusFilterLoading}
-          >
-            <SelectTrigger 
+          <Select value={statusFilter} onValueChange={setStatusFilter} disabled={filterLoading}>
+            <SelectTrigger
               className="w-[180px] cursor-pointer"
-              icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+              icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
             >
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
@@ -248,8 +228,7 @@ export default function SyncPage() {
           </Alert>
         )}
 
-        {/* Empty State - Centered in viewport */}
-        {!error && syncLogs.length === 0 && totalDates === 0 && shopFilter === 'all' && statusFilter === 'all' && (
+        {!error && hasNoData && !hasActiveFilters && (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
             <div className="text-center">
               <RefreshCw className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
@@ -261,8 +240,7 @@ export default function SyncPage() {
           </div>
         )}
 
-        {/* No Results After Filter - Centered in viewport */}
-        {!error && syncLogs.length === 0 && totalDates === 0 && (shopFilter !== 'all' || statusFilter !== 'all') && (
+        {!error && hasNoData && hasActiveFilters && (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
             <div className="text-center">
               <Filter className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
@@ -353,31 +331,18 @@ export default function SyncPage() {
                 </Button>
                 
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                    let pageNum
-                    if (totalPages <= 7) {
-                      pageNum = i + 1
-                    } else if (currentPage <= 4) {
-                      pageNum = i + 1
-                    } else if (currentPage >= totalPages - 3) {
-                      pageNum = totalPages - 6 + i
-                    } else {
-                      pageNum = currentPage - 3 + i
-                    }
-
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        disabled={loading}
-                        className="cursor-pointer w-9"
-                      >
-                        {pageNum}
-                      </Button>
-                    )
-                  })}
+                  {paginationPages.map((pageNum) => (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      disabled={loading}
+                      className="cursor-pointer w-9"
+                    >
+                      {pageNum}
+                    </Button>
+                  ))}
                 </div>
 
                 <Button
@@ -392,6 +357,8 @@ export default function SyncPage() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
