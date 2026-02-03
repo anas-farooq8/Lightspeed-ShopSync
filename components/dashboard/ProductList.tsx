@@ -82,10 +82,10 @@ export function ProductList() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold">Products</h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h2 className="text-xl font-bold">Products</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
             {loading ? 'Loading...' : `${totalCount.toLocaleString()} products found`}
           </p>
         </div>

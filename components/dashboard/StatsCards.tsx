@@ -54,28 +54,30 @@ export function StatsCards() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-3 mb-8">
+    <div className="grid gap-3 md:grid-cols-3 mb-6">
       {/* .nl Card */}
       <Card className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <div className="flex items-center gap-2">
             <span className="text-lg">🇳🇱</span>
-            VerpakkingenXL (.nl)
-          </CardTitle>
-          <div className="text-xs text-muted-foreground">SOURCE</div>
+            <div className="flex-1">
+              <CardTitle className="text-sm font-medium">VerpakkingenXL (.nl)</CardTitle>
+              <p className="text-xs text-muted-foreground">SOURCE</p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div>
+        <CardContent className="pb-3 px-4">
+          <div className="mb-3">
             <div className="text-2xl font-bold">{stats.total_nl_products.toLocaleString()}</div>
             <div className="text-xs text-muted-foreground">Total Products</div>
           </div>
-          <div className="pt-2 space-y-1 text-sm border-t">
+          <div className="space-y-1.5 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Unique SKUs:</span>
               <span className="font-medium">{stats.unique_nl_skus.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Duplicate SKUs:</span>
+              <span className="text-muted-foreground">Duplicates:</span>
               <span className={`font-medium ${stats.nl_duplicate_skus > 0 ? 'text-yellow-600' : ''}`}>
                 {stats.nl_duplicate_skus}
               </span>
@@ -86,31 +88,33 @@ export function StatsCards() {
 
       {/* .de Card */}
       <Card className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <div className="flex items-center gap-2">
             <span className="text-lg">🇩🇪</span>
-            VerpackungenXL (.de)
-          </CardTitle>
-          <div className="text-xs text-muted-foreground">TARGET</div>
+            <div className="flex-1">
+              <CardTitle className="text-sm font-medium">VerpackungenXL (.de)</CardTitle>
+              <p className="text-xs text-muted-foreground">TARGET</p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div>
+        <CardContent className="pb-3 px-4">
+          <div className="mb-3">
             <div className="text-2xl font-bold">{stats.total_de_products.toLocaleString()}</div>
             <div className="text-xs text-muted-foreground">Total Products</div>
           </div>
-          <div className="pt-2 space-y-1 text-sm border-t">
+          <div className="space-y-1.5 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Unique SKUs:</span>
               <span className="font-medium">{stats.unique_de_skus.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Duplicate SKUs:</span>
+              <span className="text-muted-foreground">Duplicates:</span>
               <span className={`font-medium ${stats.de_duplicate_skus > 0 ? 'text-yellow-600' : ''}`}>
                 {stats.de_duplicate_skus}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Missing from .nl:</span>
+              <span className="text-muted-foreground">Missing:</span>
               <span className={`font-medium ${stats.missing_in_de > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {stats.missing_in_de}
               </span>
@@ -121,31 +125,33 @@ export function StatsCards() {
 
       {/* .be Card */}
       <Card className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <div className="flex items-center gap-2">
             <span className="text-lg">🇧🇪</span>
-            VerpakkingenXL (.be)
-          </CardTitle>
-          <div className="text-xs text-muted-foreground">TARGET</div>
+            <div className="flex-1">
+              <CardTitle className="text-sm font-medium">VerpakkingenXL (.be)</CardTitle>
+              <p className="text-xs text-muted-foreground">TARGET</p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div>
+        <CardContent className="pb-3 px-4">
+          <div className="mb-3">
             <div className="text-2xl font-bold">{stats.total_be_products.toLocaleString()}</div>
             <div className="text-xs text-muted-foreground">Total Products</div>
           </div>
-          <div className="pt-2 space-y-1 text-sm border-t">
+          <div className="space-y-1.5 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Unique SKUs:</span>
               <span className="font-medium">{stats.unique_be_skus.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Duplicate SKUs:</span>
+              <span className="text-muted-foreground">Duplicates:</span>
               <span className={`font-medium ${stats.be_duplicate_skus > 0 ? 'text-yellow-600' : ''}`}>
                 {stats.be_duplicate_skus}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Missing from .nl:</span>
+              <span className="text-muted-foreground">Missing:</span>
               <span className={`font-medium ${stats.missing_in_be > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {stats.missing_in_be}
               </span>

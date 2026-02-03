@@ -23,10 +23,10 @@ export function ProductFilters({
   onSortChange
 }: ProductFiltersProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 mb-6">
+    <div className="flex flex-col sm:flex-row gap-3 mb-4">
       {/* Search */}
       <div className="flex-1">
-        <Label htmlFor="search" className="text-sm mb-2 block">Search</Label>
+        <Label htmlFor="search" className="text-xs mb-1.5 block font-medium">Search</Label>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -35,45 +35,45 @@ export function ProductFilters({
             placeholder="Search by SKU or product title..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-9"
           />
         </div>
       </div>
 
       {/* Filter */}
-      <div className="sm:w-64">
-        <Label htmlFor="filter" className="text-sm mb-2 block">Filter</Label>
+      <div className="sm:w-52">
+        <Label htmlFor="filter" className="text-xs mb-1.5 block font-medium">Filter</Label>
         <Select value={filter} onValueChange={onFilterChange}>
-          <SelectTrigger id="filter">
+          <SelectTrigger id="filter" className="cursor-pointer h-9">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Products</SelectItem>
-            <SelectItem value="missing_de">Missing in .de</SelectItem>
-            <SelectItem value="missing_be">Missing in .be</SelectItem>
-            <SelectItem value="missing_both">Missing in Both</SelectItem>
-            <SelectItem value="exists_both">Exists in Both</SelectItem>
-            <SelectItem value="needs_attention">Needs Attention</SelectItem>
-            <SelectItem value="has_duplicates">Has Duplicates</SelectItem>
-            <SelectItem value="nl_duplicates">.nl Has Duplicates</SelectItem>
-            <SelectItem value="de_multiple">.de Multiple Matches</SelectItem>
-            <SelectItem value="be_multiple">.be Multiple Matches</SelectItem>
+          <SelectContent className="cursor-pointer">
+            <SelectItem value="all" className="cursor-pointer">All Products</SelectItem>
+            <SelectItem value="missing_de" className="cursor-pointer">Missing in .de</SelectItem>
+            <SelectItem value="missing_be" className="cursor-pointer">Missing in .be</SelectItem>
+            <SelectItem value="missing_both" className="cursor-pointer">Missing in Both</SelectItem>
+            <SelectItem value="exists_both" className="cursor-pointer">Exists in Both</SelectItem>
+            <SelectItem value="needs_attention" className="cursor-pointer">Needs Attention</SelectItem>
+            <SelectItem value="has_duplicates" className="cursor-pointer">Has Duplicates</SelectItem>
+            <SelectItem value="nl_duplicates" className="cursor-pointer">.nl Has Duplicates</SelectItem>
+            <SelectItem value="de_multiple" className="cursor-pointer">.de Multiple Matches</SelectItem>
+            <SelectItem value="be_multiple" className="cursor-pointer">.be Multiple Matches</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Sort */}
-      <div className="sm:w-48">
-        <Label htmlFor="sort" className="text-sm mb-2 block">Sort By</Label>
+      <div className="sm:w-44">
+        <Label htmlFor="sort" className="text-xs mb-1.5 block font-medium">Sort By</Label>
         <Select value={sort} onValueChange={onSortChange}>
-          <SelectTrigger id="sort">
+          <SelectTrigger id="sort" className="cursor-pointer h-9">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="created_at_desc">Newest First</SelectItem>
-            <SelectItem value="created_at_asc">Oldest First</SelectItem>
-            <SelectItem value="sku_asc">SKU (A-Z)</SelectItem>
-            <SelectItem value="sku_desc">SKU (Z-A)</SelectItem>
+          <SelectContent className="cursor-pointer">
+            <SelectItem value="created_at_desc" className="cursor-pointer">Newest First</SelectItem>
+            <SelectItem value="created_at_asc" className="cursor-pointer">Oldest First</SelectItem>
+            <SelectItem value="sku_asc" className="cursor-pointer">SKU (A-Z)</SelectItem>
+            <SelectItem value="sku_desc" className="cursor-pointer">SKU (Z-A)</SelectItem>
           </SelectContent>
         </Select>
       </div>
