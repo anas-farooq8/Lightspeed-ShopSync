@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import { VariantSyncStatus } from '@/types/variant'
 import { StatsCards } from '@/components/StatsCards'
 import { FiltersPanel, FilterValues } from '@/components/FiltersPanel'
@@ -17,6 +17,7 @@ export default function DashboardPage() {
     status: 'all',
     dateRange: 'all',
   })
+  const supabase = createClient()
 
   // Fetch variants from the view
   useEffect(() => {
