@@ -86,7 +86,9 @@ export default function SyncPage() {
     })
     .sort((a, b) => {
       const order = { 'nl': 0, 'de': 1, 'be': 2 }
-      return (order[a.tld as keyof typeof order] || 999) - (order[b.tld as keyof typeof order] || 999)
+      const aTld = a.tld.toLowerCase()
+      const bTld = b.tld.toLowerCase()
+      return (order[aTld as keyof typeof order] || 999) - (order[bTld as keyof typeof order] || 999)
     })
 
   // Pagination calculations
