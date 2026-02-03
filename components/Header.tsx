@@ -7,21 +7,15 @@ import { LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface UserInterface {
-  email?: string
-}
-
 export function Header() {
-  const [user, setUser] = useState<UserInterface | null>(null)
+  const [userEmail, setUserEmail] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      setUser(session?.user || null)
+      const { data: { session } } = await supabase.auth.getSession()
+      setUserEmail(session?.user?.email || '')
     }
     getUser()
   }, [])
@@ -40,11 +34,8 @@ export function Header() {
       <h1 className="text-2xl font-bold text-slate-900">Lightspeed Sync Tool</h1>
 
       <div className="flex items-center gap-4">
-        {user && (
-          <div className="flex items-center gap-2 text-slate-700">
-            <LogOut className="h-4 w-4" />
-            <span className="text-sm">{user.email}</span>
-          </div>
+        {userEmail && (
+          <span className="text-sm text-slate-700">{userEmail}</span>
         )}
         <Button variant="outline" size="sm" onClick={handleLogout} disabled={loading}>
           <LogOut className="h-4 w-4 mr-2" />
