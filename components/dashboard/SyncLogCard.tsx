@@ -45,15 +45,10 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
   }
 
   const getTldBadge = (tld: string, role?: string) => {
-    const colors = {
-      nl: 'bg-orange-100 text-orange-800 hover:bg-orange-100',
-      de: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100',
-      be: 'bg-red-100 text-red-800 hover:bg-red-100',
-    }
     const roleLabel = role === 'source' ? 'Source' : role === 'target' ? 'Target' : ''
     return (
-      <Badge variant="default" className={colors[tld as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
-        {tld.toUpperCase()} {roleLabel && `- ${roleLabel}`}
+      <Badge variant="secondary" className="font-medium">
+        .{tld.toLowerCase()} {roleLabel && `· ${roleLabel}`}
       </Badge>
     )
   }

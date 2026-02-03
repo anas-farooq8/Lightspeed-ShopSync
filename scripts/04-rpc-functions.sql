@@ -1,68 +1,144 @@
--- Optimized: single base scan, conditional aggregation, SKU-presence join
+-- =====================================================
+-- DASHBOARD KPI FUNCTION
+--
+-- Purpose:
+--   Returns per-shop product KPIs for dashboard display:
+--     - total products (default variants)
+--     - unique SKUs
+--     - duplicate SKUs
+--     - missing SKUs per target (relative to source)
+--
+-- Characteristics:
+--   - Fully dynamic (no hardcoded shops or TLDs)
+--   - Supports any number of target shops
+--   - Optimized using a single normalized base dataset
+--   - SKU-based missing detection (correct logic)
+-- =====================================================
 
-CREATE OR REPLACE FUNCTION get_sync_stats()
+CREATE OR REPLACE FUNCTION get_dashboard_kpis()
 RETURNS json
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-  SELECT row_to_json(stats)
+  SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.tld), '[]'::json)
   FROM (
     WITH base AS (
-      SELECT s.tld, v.sku, v.is_default
-      FROM variants v
-      INNER JOIN shops s ON s.id = v.shop_id
-      WHERE s.tld IN ('nl', 'de', 'be') AND v.sku IS NOT NULL AND v.sku != ''
-    ),
-    agg AS (
       SELECT
-        COUNT(*) FILTER (WHERE tld = 'nl' AND is_default) AS total_nl,
-        COUNT(*) FILTER (WHERE tld = 'de' AND is_default) AS total_de,
-        COUNT(*) FILTER (WHERE tld = 'be' AND is_default) AS total_be,
-        COUNT(DISTINCT sku) FILTER (WHERE tld = 'nl' AND is_default) AS unique_nl,
-        COUNT(DISTINCT sku) FILTER (WHERE tld = 'de' AND is_default) AS unique_de,
-        COUNT(DISTINCT sku) FILTER (WHERE tld = 'be' AND is_default) AS unique_be
-      FROM base
+        s.id     AS shop_id,
+        s.name   AS shop_name,
+        s.tld,
+        s.role,
+        v.sku,
+        v.is_default
+      FROM variants v
+      JOIN shops s ON s.id = v.shop_id
+      WHERE v.sku IS NOT NULL
+        AND v.sku <> ''
     ),
-    dups AS (
-      SELECT tld, COUNT(*) AS cnt
+    shop_stats AS (
+      SELECT
+        shop_id,
+        shop_name,
+        tld,
+        role,
+        COUNT(*) FILTER (WHERE is_default)             AS total_products,
+        COUNT(DISTINCT sku) FILTER (WHERE is_default)  AS unique_skus
+      FROM base
+      GROUP BY shop_id, shop_name, tld, role
+    ),
+    duplicates AS (
+      SELECT
+        shop_id,
+        COUNT(*) AS duplicate_skus
       FROM (
-        SELECT tld, sku FROM base
-        WHERE is_default = true
-        GROUP BY tld, sku HAVING COUNT(*) > 1
-      ) x
-      GROUP BY tld
+        SELECT shop_id, sku
+        FROM base
+        WHERE is_default
+        GROUP BY shop_id, sku
+        HAVING COUNT(*) > 1
+      ) d
+      GROUP BY shop_id
     ),
-    sku_presence AS (
-      SELECT sku,
-        bool_or(tld = 'de') AS in_de,
-        bool_or(tld = 'be') AS in_be
+    source_skus AS (
+      SELECT DISTINCT sku
       FROM base
-      WHERE tld IN ('de', 'be')
-      GROUP BY sku
+      WHERE role = 'source'
+        AND is_default
     ),
-    nl_presence AS (
-      SELECT n.sku, s.in_de, s.in_be
-      FROM (SELECT DISTINCT sku FROM base WHERE tld = 'nl' AND is_default = true) n
-      LEFT JOIN sku_presence s ON s.sku = n.sku
+    target_skus AS (
+      SELECT DISTINCT
+        shop_id,
+        sku
+      FROM base
+      WHERE role = 'target'
+        AND is_default
+    ),
+    missing_per_target AS (
+      SELECT
+        t.shop_id,
+        COUNT(*) AS missing
+      FROM (
+        SELECT DISTINCT shop_id
+        FROM base
+        WHERE role = 'target'
+      ) t
+      CROSS JOIN source_skus s
+      LEFT JOIN target_skus ts
+        ON ts.shop_id = t.shop_id
+       AND ts.sku = s.sku
+      WHERE ts.sku IS NULL
+      GROUP BY t.shop_id
     )
     SELECT
-      a.total_nl AS total_nl_products,
-      a.total_de AS total_de_products,
-      a.total_be AS total_be_products,
-      a.unique_nl AS unique_nl_skus,
-      a.unique_de AS unique_de_skus,
-      a.unique_be AS unique_be_skus,
-      (SELECT COUNT(*) FROM nl_presence WHERE in_de IS NOT TRUE) AS missing_in_de,
-      (SELECT COUNT(*) FROM nl_presence WHERE in_be IS NOT TRUE) AS missing_in_be,
-      (SELECT COUNT(*) FROM nl_presence WHERE in_de IS TRUE AND in_be IS TRUE) AS exists_in_both,
-      COALESCE((SELECT cnt FROM dups WHERE tld = 'nl'), 0) AS nl_duplicate_skus,
-      COALESCE((SELECT cnt FROM dups WHERE tld = 'de'), 0) AS de_duplicate_skus,
-      COALESCE((SELECT cnt FROM dups WHERE tld = 'be'), 0) AS be_duplicate_skus
-    FROM agg a
-  ) stats;
+      ss.shop_name,
+      ss.tld,
+      ss.role,
+      ss.total_products,
+      ss.unique_skus,
+      COALESCE(d.duplicate_skus, 0) AS duplicate_skus,
+      CASE
+        WHEN ss.role = 'target'
+        THEN COALESCE(m.missing, 0)
+      END AS missing
+    FROM shop_stats ss
+    LEFT JOIN duplicates d ON d.shop_id = ss.shop_id
+    LEFT JOIN missing_per_target m ON m.shop_id = ss.shop_id
+    ORDER BY ss.role, ss.tld
+  ) t;
 $$;
 
 -- Grant access
-GRANT EXECUTE ON FUNCTION get_sync_stats() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_dashboard_kpis() TO authenticated;
+
+-- Example Response:
+-- [
+--   {
+--     "shop_name": "VerpakkingenXL",
+--     "tld": "nl",
+--     "role": "source",
+--     "total_products": 3289,
+--     "unique_skus": 3274,
+--     "duplicate_skus": 15,
+--     "missing": null
+--  },
+--   {
+--     "shop_name": "VerpakkingenXL - BE",
+--     "tld": "be",
+--     "role": "target",
+--     "total_products": 3188,
+--     "unique_skus": 3184,
+--     "duplicate_skus": 4,
+--     "missing": 199
+--   },
+--   {
+--     "shop_name": "VerpackungenXL",
+--     "tld": "de",
+--     "role": "target",
+--     "total_products": 3155,
+--     "unique_skus": 3141,
+--     "duplicate_skus": 14,
+--     "missing": 170
+--   }
+-- ]

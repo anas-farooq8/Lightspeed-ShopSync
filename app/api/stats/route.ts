@@ -7,8 +7,8 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Call the RPC function to get stats
-    const { data, error } = await supabase.rpc('get_sync_stats')
+    // Call the RPC function to get per-shop KPIs
+    const { data, error } = await supabase.rpc('get_dashboard_kpis')
 
     if (error) {
       console.error('Error fetching stats:', error)

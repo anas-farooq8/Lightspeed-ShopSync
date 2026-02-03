@@ -42,34 +42,20 @@ export interface ProductSyncStatus {
 }
 
 /**
- * Dashboard KPI Statistics
- * 
- * Provides overview counts for all shops:
- * - Total product counts (includes duplicate default SKUs)
- * - Unique SKU counts
- * - Missing product counts
- * - Duplicate SKU counts
+ * Per-shop Dashboard KPI
+ *
+ * Returned by get_dashboard_kpis() RPC.
+ * One object per shop with product counts, SKU stats, and missing count (targets only).
  */
-export interface SyncStats {
-  // Total product counts (includes duplicates)
-  total_nl_products: number
-  total_de_products: number
-  total_be_products: number
-  
-  // Unique SKU counts
-  unique_nl_skus: number
-  unique_de_skus: number
-  unique_be_skus: number
-  
-  // Missing products (based on distinct SKUs)
-  missing_in_de: number
-  missing_in_be: number
-  exists_in_both: number
-  
-  // Duplicate SKU counts (products with same default SKU)
-  nl_duplicate_skus: number
-  de_duplicate_skus: number
-  be_duplicate_skus: number
+export interface DashboardKpi {
+  shop_name: string
+  tld: string
+  role: 'source' | 'target'
+  total_products: number
+  unique_skus: number
+  duplicate_skus: number
+  /** Missing SKUs vs source; null for source shops */
+  missing: number | null
 }
 
 /**

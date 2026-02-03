@@ -19,6 +19,7 @@ create table shops (
 
 create unique index idx_shops_store_number on shops (store_number);
 create index idx_shops_tld on shops (tld);
+create index idx_shops_role on shops (role);
 
 -- RLS: Shops
 alter table shops enable row level security;
@@ -166,14 +167,6 @@ CREATE INDEX idx_variants_sku ON variants (sku)
 
 create index idx_variants_product
   on variants (shop_id, lightspeed_product_id);
-
--- Performance indexes for product_sync_status view and get_sync_stats()
-CREATE INDEX idx_variants_default_sku_shop 
-  ON variants(shop_id, is_default, sku) 
-  WHERE is_default = true AND sku IS NOT NULL AND sku != '';
-
-CREATE INDEX idx_variants_created_at 
-  ON variants(created_at DESC);
 
 -- RLS: Variants
 -- Note: All authenticated users are manually-created admins with full access

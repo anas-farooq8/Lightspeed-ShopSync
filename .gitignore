@@ -9,6 +9,9 @@ scripts/02-data-insertion.sql
 # Documentation
 docs/
 
+# Sample Data
+sample_data
+
 # Build output
 .next/
 out/
