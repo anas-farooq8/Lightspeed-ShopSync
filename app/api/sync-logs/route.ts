@@ -13,11 +13,12 @@ export async function GET() {
         *,
         shops (
           name,
-          tld
+          tld,
+          role
         )
       `)
       .order('started_at', { ascending: false })
-      .limit(50)
+      .limit(100)
 
     if (error) {
       console.error('Error fetching sync logs:', error)
@@ -33,6 +34,7 @@ export async function GET() {
       shop_id: log.shop_id,
       shop_name: log.shops?.name || 'Unknown',
       shop_tld: log.shops?.tld || 'unknown',
+      shop_role: log.shops?.role || 'unknown',
       started_at: log.started_at,
       completed_at: log.completed_at,
       duration_seconds: log.duration_seconds,

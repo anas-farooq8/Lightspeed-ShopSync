@@ -45,15 +45,16 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
     }
   }
 
-  const getTldBadge = (tld: string) => {
+  const getTldBadge = (tld: string, role?: string) => {
     const colors = {
       nl: 'bg-orange-100 text-orange-800 hover:bg-orange-100',
       de: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100',
       be: 'bg-red-100 text-red-800 hover:bg-red-100',
     }
+    const roleLabel = role === 'source' ? 'Source' : role === 'target' ? 'Target' : ''
     return (
       <Badge variant="default" className={colors[tld as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
-        {tld.toUpperCase()}
+        {tld.toUpperCase()} {roleLabel && `- ${roleLabel}`}
       </Badge>
     )
   }
@@ -75,7 +76,7 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-sm">{log.shop_name}</h3>
-              {getTldBadge(log.shop_tld || 'unknown')}
+              {getTldBadge(log.shop_tld || 'unknown', log.shop_role)}
               {getStatusBadge()}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -99,45 +100,75 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
       )}
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {/* API Fetch Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+        {/* Products Fetched */}
         <div className="space-y-0.5">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Download className="h-3 w-3" />
             <span>Fetched</span>
           </div>
-          <div className="text-sm font-semibold">{log.products_fetched.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">products</div>
+          <div className="text-lg font-semibold">{log.products_fetched.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">products</div>
         </div>
 
-        {/* DB Sync Metrics */}
+        {/* Variants Fetched */}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Download className="h-3 w-3" />
+            <span>Fetched</span>
+          </div>
+          <div className="text-lg font-semibold">{log.variants_fetched.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">variants</div>
+        </div>
+
+        {/* Products Synced */}
         <div className="space-y-0.5">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Upload className="h-3 w-3" />
             <span>Synced</span>
           </div>
-          <div className="text-sm font-semibold">{log.variants_synced.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">variants</div>
+          <div className="text-lg font-semibold">{log.products_synced.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">products</div>
         </div>
 
-        {/* Delete Metrics */}
+        {/* Variants Synced */}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Upload className="h-3 w-3" />
+            <span>Synced</span>
+          </div>
+          <div className="text-lg font-semibold">{log.variants_synced.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">variants</div>
+        </div>
+
+        {/* Products Deleted */}
         <div className="space-y-0.5">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Trash2 className="h-3 w-3" />
             <span>Deleted</span>
           </div>
-          <div className="text-sm font-semibold">{log.variants_deleted.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">variants</div>
+          <div className="text-lg font-semibold">{log.products_deleted.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">products</div>
         </div>
 
-        {/* Filtered Metrics */}
+        {/* Variants Deleted */}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Trash2 className="h-3 w-3" />
+            <span>Deleted</span>
+          </div>
+          <div className="text-lg font-semibold">{log.variants_deleted.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">variants</div>
+        </div>
+
+        {/* Variants Filtered */}
         <div className="space-y-0.5">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Filter className="h-3 w-3" />
             <span>Filtered</span>
           </div>
-          <div className="text-sm font-semibold">{log.variants_filtered.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">orphaned</div>
+          <div className="text-lg font-semibold">{log.variants_filtered.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">orphaned</div>
         </div>
       </div>
     </Card>

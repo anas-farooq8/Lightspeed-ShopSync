@@ -97,7 +97,8 @@ export interface SyncLog {
   id: number
   shop_id: string
   shop_name?: string  // Joined from shops table
-  shop_tld?: string   // Joined from shops table
+  shop_tld?: string   // Joined from shops table (nl | de | be)
+  shop_role?: string  // Joined from shops table (source | target)
   
   // Timing
   started_at: string
