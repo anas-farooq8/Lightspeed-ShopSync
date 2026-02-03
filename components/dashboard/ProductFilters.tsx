@@ -23,7 +23,7 @@ export function ProductFilters({
   onSortChange
 }: ProductFiltersProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-3 mb-4">
+    <div className="flex flex-col sm:flex-row gap-4 mb-4">
       {/* Search */}
       <div className="flex-1">
         <Label htmlFor="search" className="text-xs mb-1.5 block font-medium">Search</Label>

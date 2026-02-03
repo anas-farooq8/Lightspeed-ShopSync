@@ -17,13 +17,13 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-32">SKU</TableHead>
-            <TableHead>Product</TableHead>
-            <TableHead className="w-24 text-center">Variants</TableHead>
-            <TableHead className="w-32 text-right">Price</TableHead>
-            <TableHead className="w-40">.de Status</TableHead>
-            <TableHead className="w-40">.be Status</TableHead>
-            <TableHead className="w-32 text-right">Updated</TableHead>
+            <TableHead className="w-[150px]">SKU</TableHead>
+            <TableHead className="min-w-[300px]">Product</TableHead>
+            <TableHead className="w-[100px] text-center">Variants</TableHead>
+            <TableHead className="w-[120px] text-right">Price</TableHead>
+            <TableHead className="w-[150px]">.de Status</TableHead>
+            <TableHead className="w-[150px]">.be Status</TableHead>
+            <TableHead className="w-[150px] text-right">Updated</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

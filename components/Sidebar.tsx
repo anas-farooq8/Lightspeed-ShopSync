@@ -159,7 +159,10 @@ export function Sidebar() {
       {/* Desktop Toggle Button - positioned absolutely on the right side */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="hidden md:flex absolute top-1/2 -right-3.5 z-50 h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-card shadow-md transition-colors hover:bg-primary hover:text-primary-foreground cursor-pointer"
+        className="hidden md:flex fixed top-1/2 -translate-y-1/2 z-[100] h-7 w-7 items-center justify-center rounded-full border bg-card shadow-md transition-all duration-300 hover:bg-primary hover:text-primary-foreground cursor-pointer"
+        style={{
+          left: isCollapsed ? 'calc(60px - 14px)' : 'calc(250px - 14px)'
+        }}
         aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {isCollapsed ? (

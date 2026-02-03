@@ -1,7 +1,6 @@
 import { SyncLog } from '@/types/variant'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { formatDistanceToNow } from 'date-fns'
 import { 
   CheckCircle2, 
   XCircle, 
@@ -59,12 +58,17 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
     )
   }
 
-  const formatDuration = (seconds: number | null) => {
-    if (seconds === null) return 'N/A'
-    if (seconds < 60) return `${seconds.toFixed(1)}s`
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = Math.floor(seconds % 60)
-    return `${minutes}m ${remainingSeconds}s`
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
   }
 
   return (
@@ -79,12 +83,18 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
               {getTldBadge(log.shop_tld || 'unknown', log.shop_role)}
               {getStatusBadge()}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {formatDistanceToNow(new Date(log.started_at), { addSuffix: true })}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+              <span>{formatDateTime(log.created_at)}</span>
               {log.duration_seconds !== null && (
-                <span className="ml-2">• {formatDuration(log.duration_seconds)}</span>
+                <>
+                  <span>•</span>
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    <span>{log.duration_seconds.toFixed(1)}s</span>
+                  </div>
+                </>
               )}
-            </p>
+            </div>
           </div>
         </div>
       </div>
