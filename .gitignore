@@ -7,6 +7,9 @@ node_modules/
 scripts/02-data-insertion.sql
 scripts/03-variant-sync-view.sql
 
+# Documentation
+docs/
+
 # Build output
 .next/
 out/
