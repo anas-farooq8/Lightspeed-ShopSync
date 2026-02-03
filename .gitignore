@@ -3,6 +3,10 @@ node_modules/
 .pnp/
 .pnp.js
 
+# Database Scripts
+scripts/02-data-insertion.sql
+scripts/03-variant-sync-view.sql
+
 # Build output
 .next/
 out/
