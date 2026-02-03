@@ -86,3 +86,40 @@ export interface SyncStats {
   de_duplicate_skus: number
   be_duplicate_skus: number
 }
+
+/**
+ * Sync Log Entry
+ * 
+ * Represents a single sync operation from the sync_logs table.
+ * Tracks API fetch counts, DB operation counts, timing, and status.
+ */
+export interface SyncLog {
+  id: number
+  shop_id: string
+  shop_name?: string  // Joined from shops table
+  shop_tld?: string   // Joined from shops table
+  
+  // Timing
+  started_at: string
+  completed_at: string | null
+  duration_seconds: number | null
+  
+  // Status
+  status: 'running' | 'success' | 'error'
+  error_message: string | null
+  
+  // Metrics: API fetch counts
+  products_fetched: number
+  variants_fetched: number
+  
+  // Metrics: DB operation counts
+  products_synced: number
+  variants_synced: number
+  products_deleted: number
+  variants_deleted: number
+  variants_filtered: number  // Orphaned variants filtered out
+  
+  // Standard timestamps
+  created_at: string
+  updated_at: string
+}

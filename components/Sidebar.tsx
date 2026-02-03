@@ -1,13 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, Package } from 'lucide-react'
+import { ChevronLeft, LayoutDashboard, RefreshCw, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [userEmail, setUserEmail] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
 
   useEffect(() => {
     setMounted(true)
@@ -15,6 +23,13 @@ export function Sidebar() {
       const saved = localStorage.getItem('sidebarCollapsed')
       setIsCollapsed(saved === 'true')
     }
+
+    // Get user email
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUserEmail(session?.user?.email || '')
+    }
+    getUser()
   }, [])
 
   useEffect(() => {
@@ -23,54 +38,105 @@ export function Sidebar() {
     }
   }, [isCollapsed, mounted])
 
+  async function handleLogout() {
+    setLoading(true)
+    const { error } = await supabase.auth.signOut()
+    if (!error) {
+      router.push('/login')
+    }
+    setLoading(false)
+  }
+
   if (!mounted) return null
+
+  const navItems = [
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { href: '/sync', icon: RefreshCw, label: 'Sync Status' },
+  ]
 
   return (
     <aside
       className={cn(
-        'bg-slate-900 text-white transition-all duration-300 ease-in-out flex flex-col border-r border-slate-800',
+        'bg-card border-r border-border transition-all duration-300 ease-in-out flex flex-col h-screen sticky top-0',
         isCollapsed ? 'w-[60px]' : 'w-[250px]'
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-800">
-        {!isCollapsed && <h1 className="font-semibold text-sm">Navigation</h1>}
+      {/* Header with Logo */}
+      <div className="flex items-center gap-2 p-4 border-b border-border">
+        {!isCollapsed && (
+          <div className="flex items-center gap-2 flex-1">
+            <img 
+              src="https://www.google.com/s2/favicons?domain=lightspeedhq.com&sz=32" 
+              alt="Lightspeed Logo" 
+              className="h-6 w-6"
+            />
+            <div className="flex-1">
+              <h1 className="text-sm font-bold text-foreground">ShopSync</h1>
+              <p className="text-[10px] text-muted-foreground">Product Sync</p>
+            </div>
+          </div>
+        )}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="h-8 w-8 p-0 hover:bg-slate-800"
+          className="h-8 w-8 p-0 cursor-pointer hover:bg-accent"
         >
           <ChevronLeft className={cn('h-4 w-4 transition-transform', isCollapsed && 'rotate-180')} />
         </Button>
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 p-3 space-y-2">
-        <div
-          className="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 text-white transition-colors cursor-pointer"
-          title={isCollapsed ? 'Variants' : ''}
-        >
-          <Package className="h-5 w-5 flex-shrink-0" />
-          {!isCollapsed && <span className="text-sm font-medium">Variants</span>}
-        </div>
+      <nav className="flex-1 p-3 space-y-1">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href
+          const Icon = item.icon
+          
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer',
+                isActive 
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                  : 'text-foreground hover:bg-accent hover:text-accent-foreground'
+              )}
+              title={isCollapsed ? item.label : ''}
+            >
+              <Icon className="h-5 w-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+            </Link>
+          )
+        })}
       </nav>
 
-      {/* Future items (disabled) */}
-      <div className="p-3 space-y-2 border-t border-slate-800 pb-4">
-        <div className="text-xs text-slate-400 px-3 py-1">
-          {!isCollapsed && <span>Coming Soon</span>}
-        </div>
-        {['Dashboard', 'Sync Logs', 'Settings'].map((item) => (
-          <div
-            key={item}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 text-sm opacity-50 cursor-not-allowed"
-            title={isCollapsed ? item : ''}
-          >
-            <div className="h-5 w-5 flex-shrink-0" />
-            {!isCollapsed && <span>{item}</span>}
+      {/* User Info & Logout */}
+      <div className="p-3 border-t border-border space-y-2">
+        {!isCollapsed && userEmail && (
+          <div className="px-3 py-2 mb-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+              <User className="h-3 w-3" />
+              <span>Signed in as</span>
+            </div>
+            <div className="text-sm font-medium text-foreground truncate">{userEmail}</div>
           </div>
-        ))}
+        )}
+        
+        <Button
+          variant="outline"
+          size={isCollapsed ? 'icon' : 'sm'}
+          onClick={handleLogout}
+          disabled={loading}
+          className={cn(
+            'cursor-pointer w-full',
+            isCollapsed ? 'h-9 w-9 p-0' : 'justify-start gap-2'
+          )}
+          title={isCollapsed ? 'Logout' : ''}
+        >
+          <LogOut className="h-4 w-4" />
+          {!isCollapsed && <span>{loading ? 'Logging out...' : 'Logout'}</span>}
+        </Button>
       </div>
     </aside>
   )

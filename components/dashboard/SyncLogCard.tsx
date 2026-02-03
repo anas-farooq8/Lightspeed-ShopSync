@@ -1,0 +1,165 @@
+import { SyncLog } from '@/types/variant'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { formatDistanceToNow } from 'date-fns'
+import { 
+  CheckCircle2, 
+  XCircle, 
+  Loader2, 
+  Download, 
+  Upload, 
+  Trash2, 
+  Filter,
+  Clock,
+  AlertCircle
+} from 'lucide-react'
+
+interface SyncLogCardProps {
+  log: SyncLog
+}
+
+export function SyncLogCard({ log }: SyncLogCardProps) {
+  const getStatusIcon = () => {
+    switch (log.status) {
+      case 'success':
+        return <CheckCircle2 className="h-5 w-5 text-green-600" />
+      case 'error':
+        return <XCircle className="h-5 w-5 text-red-600" />
+      case 'running':
+        return <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+      default:
+        return <AlertCircle className="h-5 w-5 text-gray-400" />
+    }
+  }
+
+  const getStatusBadge = () => {
+    switch (log.status) {
+      case 'success':
+        return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">Success</Badge>
+      case 'error':
+        return <Badge variant="destructive">Error</Badge>
+      case 'running':
+        return <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Running</Badge>
+      default:
+        return <Badge variant="outline">Unknown</Badge>
+    }
+  }
+
+  const getTldBadge = (tld: string) => {
+    const colors = {
+      nl: 'bg-orange-100 text-orange-800 hover:bg-orange-100',
+      de: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100',
+      be: 'bg-red-100 text-red-800 hover:bg-red-100',
+    }
+    return (
+      <Badge variant="default" className={colors[tld as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
+        {tld.toUpperCase()}
+      </Badge>
+    )
+  }
+
+  const formatDuration = (seconds: number | null) => {
+    if (seconds === null) return 'N/A'
+    if (seconds < 60) return `${seconds.toFixed(1)}s`
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes}m ${remainingSeconds}s`
+  }
+
+  return (
+    <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+      {/* Header: Shop, Status, Time */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          {getStatusIcon()}
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sm">{log.shop_name}</h3>
+              {getTldBadge(log.shop_tld || 'unknown')}
+              {getStatusBadge()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {formatDistanceToNow(new Date(log.started_at), { addSuffix: true })}
+            </p>
+          </div>
+        </div>
+        
+        {log.duration_seconds !== null && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>{formatDuration(log.duration_seconds)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Error Message */}
+      {log.error_message && (
+        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+            <span>{log.error_message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* API Fetch Metrics */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Download className="h-3 w-3" />
+            <span>Fetched</span>
+          </div>
+          <div className="text-sm font-medium">
+            <div>{log.products_fetched.toLocaleString()} products</div>
+            <div className="text-xs text-muted-foreground">{log.variants_fetched.toLocaleString()} variants</div>
+          </div>
+        </div>
+
+        {/* DB Sync Metrics */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Upload className="h-3 w-3" />
+            <span>Synced</span>
+          </div>
+          <div className="text-sm font-medium">
+            <div>{log.products_synced.toLocaleString()} products</div>
+            <div className="text-xs text-muted-foreground">{log.variants_synced.toLocaleString()} variants</div>
+          </div>
+        </div>
+
+        {/* Delete Metrics */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Trash2 className="h-3 w-3" />
+            <span>Deleted</span>
+          </div>
+          <div className="text-sm font-medium">
+            <div>{log.products_deleted.toLocaleString()} products</div>
+            <div className="text-xs text-muted-foreground">{log.variants_deleted.toLocaleString()} variants</div>
+          </div>
+        </div>
+
+        {/* Filtered Metrics */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Filter className="h-3 w-3" />
+            <span>Filtered</span>
+          </div>
+          <div className="text-sm font-medium">
+            <div>{log.variants_filtered.toLocaleString()} variants</div>
+            <div className="text-xs text-muted-foreground">Orphaned</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Timestamp Details */}
+      <div className="mt-3 pt-3 border-t text-xs text-muted-foreground space-y-0.5">
+        <div>Started: {new Date(log.started_at).toLocaleString()}</div>
+        {log.completed_at && (
+          <div>Completed: {new Date(log.completed_at).toLocaleString()}</div>
+        )}
+      </div>
+    </Card>
+  )
+}
