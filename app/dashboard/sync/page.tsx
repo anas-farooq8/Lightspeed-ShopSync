@@ -184,7 +184,7 @@ export default function SyncPage() {
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={shopFilter} onValueChange={setShopFilter}>
+            <Select value={shopFilter} onValueChange={setShopFilter} disabled={loading}>
               <SelectTrigger className="w-[180px] cursor-pointer">
                 <SelectValue placeholder="All Shops" />
               </SelectTrigger>
@@ -197,9 +197,12 @@ export default function SyncPage() {
                 ))}
               </SelectContent>
             </Select>
+            {loading && !initialLoading && (
+              <RefreshCw className="h-4 w-4 text-muted-foreground animate-spin" />
+            )}
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={setStatusFilter} disabled={loading}>
             <SelectTrigger className="w-[140px] cursor-pointer">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
@@ -221,7 +224,7 @@ export default function SyncPage() {
         )}
 
         {/* Empty State - Centered in viewport */}
-        {!error && syncLogs.length === 0 && totalDates === 0 && (
+        {!error && syncLogs.length === 0 && totalDates === 0 && shopFilter === 'all' && statusFilter === 'all' && (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
             <div className="text-center">
               <RefreshCw className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
@@ -234,7 +237,7 @@ export default function SyncPage() {
         )}
 
         {/* No Results After Filter - Centered in viewport */}
-        {!error && syncLogs.length === 0 && (shopFilter !== 'all' || statusFilter !== 'all') && (
+        {!error && syncLogs.length === 0 && totalDates === 0 && (shopFilter !== 'all' || statusFilter !== 'all') && (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
             <div className="text-center">
               <Filter className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
