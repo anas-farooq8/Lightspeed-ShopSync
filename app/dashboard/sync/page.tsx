@@ -101,17 +101,25 @@ export default function SyncPage() {
     fetchSyncLogs(1)
   }, [])
 
-  // Apply filters - refetch from API
+  // Apply shop filter - refetch from API
   useEffect(() => {
     if (!initialLoading) {
       setShopFilterLoading(true)
-      setStatusFilterLoading(true)
       fetchSyncLogs(1).finally(() => {
         setShopFilterLoading(false)
+      })
+    }
+  }, [shopFilter])
+
+  // Apply status filter - refetch from API
+  useEffect(() => {
+    if (!initialLoading) {
+      setStatusFilterLoading(true)
+      fetchSyncLogs(1).finally(() => {
         setStatusFilterLoading(false)
       })
     }
-  }, [shopFilter, statusFilter])
+  }, [statusFilter])
 
   // Group logs by date
   const groupedByDate: DateGroup[] = []
@@ -194,9 +202,12 @@ export default function SyncPage() {
             <Select 
               value={shopFilter} 
               onValueChange={setShopFilter} 
-              disabled={shopFilterLoading || statusFilterLoading}
+              disabled={shopFilterLoading}
             >
-              <SelectTrigger className="w-[180px] cursor-pointer">
+              <SelectTrigger 
+                className="w-[200px] cursor-pointer"
+                icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+              >
                 <SelectValue placeholder="All Shops" />
               </SelectTrigger>
               <SelectContent>
@@ -208,31 +219,26 @@ export default function SyncPage() {
                 ))}
               </SelectContent>
             </Select>
-            {shopFilterLoading && (
-              <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
-            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Select 
-              value={statusFilter} 
-              onValueChange={setStatusFilter} 
-              disabled={shopFilterLoading || statusFilterLoading}
+          <Select 
+            value={statusFilter} 
+            onValueChange={setStatusFilter} 
+            disabled={statusFilterLoading}
+          >
+            <SelectTrigger 
+              className="w-[160px] cursor-pointer"
+              icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
             >
-              <SelectTrigger className="w-[140px] cursor-pointer">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
-                <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
-                <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
-                <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
-              </SelectContent>
-            </Select>
-            {statusFilterLoading && (
-              <RefreshCw className="h-4 w-4 text-green-500 animate-spin" />
-            )}
-          </div>
+              <SelectValue placeholder="All Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
+              <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
+              <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
+              <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Error Alert */}
