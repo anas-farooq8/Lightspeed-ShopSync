@@ -23,9 +23,9 @@ export function ProductFilters({
   onSortChange
 }: ProductFiltersProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 mb-4">
-      {/* Search */}
-      <div className="flex-1">
+    <div className="flex flex-col md:flex-row md:items-end gap-4 mb-4">
+      {/* Search - occupies full space */}
+      <div className="flex-1 min-w-0 w-full">
         <Label htmlFor="search" className="text-xs mb-1.5 block font-medium">Search</Label>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -35,13 +35,13 @@ export function ProductFilters({
             placeholder="Search by SKU or product title..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9"
+            className="pl-10 h-9 w-full"
           />
         </div>
       </div>
 
       {/* Filter */}
-      <div className="sm:w-52">
+      <div className="w-full md:w-52 shrink-0">
         <Label htmlFor="filter" className="text-xs mb-1.5 block font-medium">Filter</Label>
         <Select value={filter} onValueChange={onFilterChange}>
           <SelectTrigger id="filter" className="cursor-pointer h-9">
@@ -63,7 +63,7 @@ export function ProductFilters({
       </div>
 
       {/* Sort */}
-      <div className="sm:w-44">
+      <div className="w-full md:w-44 shrink-0">
         <Label htmlFor="sort" className="text-xs mb-1.5 block font-medium">Sort By</Label>
         <Select value={sort} onValueChange={onSortChange}>
           <SelectTrigger id="sort" className="cursor-pointer h-9">

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from './StatusBadge'
 import type { ProductSyncStatus } from '@/types/variant'
 import { formatDistance } from 'date-fns'
+import { ImageOff } from 'lucide-react'
 
 type ProductCardProps = {
   product: ProductSyncStatus
@@ -28,8 +29,9 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
                 className="w-24 h-24 object-cover rounded border"
               />
             ) : (
-              <div className="w-24 h-24 bg-muted rounded border flex items-center justify-center text-muted-foreground text-xs">
-                No image
+              <div className="w-24 h-24 bg-muted/80 rounded border flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                <ImageOff className="h-8 w-8" strokeWidth={1.5} />
+                <span className="text-[10px]">No image</span>
               </div>
             )}
           </div>

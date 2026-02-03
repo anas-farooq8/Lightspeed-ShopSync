@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from './StatusBadge'
 import type { ProductSyncStatus } from '@/types/variant'
 import { formatDistance } from 'date-fns'
+import { ImageOff } from 'lucide-react'
 
 type ProductTableProps = {
   products: ProductSyncStatus[]
@@ -17,13 +18,13 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[150px]">SKU</TableHead>
-            <TableHead className="min-w-[300px]">Product</TableHead>
-            <TableHead className="w-[100px] text-center">Variants</TableHead>
-            <TableHead className="w-[120px] text-right">Price</TableHead>
-            <TableHead className="w-[150px]">.de Status</TableHead>
-            <TableHead className="w-[150px]">.be Status</TableHead>
-            <TableHead className="w-[150px] text-right">Updated</TableHead>
+            <TableHead className="w-[140px] shrink-0">SKU</TableHead>
+            <TableHead className="min-w-[280px]">Product</TableHead>
+            <TableHead className="w-[90px] text-center shrink-0">Variants</TableHead>
+            <TableHead className="w-[100px] text-right shrink-0">Price</TableHead>
+            <TableHead className="w-[140px] shrink-0">.de Status</TableHead>
+            <TableHead className="w-[140px] shrink-0">.be Status</TableHead>
+            <TableHead className="w-[120px] text-right shrink-0">Updated</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -50,12 +51,16 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    {product.product_image?.thumb && (
+                    {product.product_image?.thumb ? (
                       <img
                         src={product.product_image.thumb}
                         alt={product.product_title ?? product.default_sku ?? 'Product'}
-                        className="w-12 h-12 object-cover rounded border"
+                        className="w-12 h-12 object-cover rounded border shrink-0"
                       />
+                    ) : (
+                      <div className="w-12 h-12 bg-muted/80 rounded border flex flex-col items-center justify-center shrink-0 text-muted-foreground">
+                        <ImageOff className="h-5 w-5" strokeWidth={1.5} />
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">

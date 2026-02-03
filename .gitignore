@@ -5,7 +5,6 @@ node_modules/
 
 # Database Scripts
 scripts/02-data-insertion.sql
-scripts/03-variant-sync-view.sql
 
 # Documentation
 docs/
