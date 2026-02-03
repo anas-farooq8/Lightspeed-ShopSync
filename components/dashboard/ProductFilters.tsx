@@ -23,9 +23,9 @@ export function ProductFilters({
   onSortChange
 }: ProductFiltersProps) {
   return (
-    <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4">
-      {/* Search */}
-      <div className="w-full md:flex-1 md:max-w-md">
+    <div className="flex flex-col md:flex-row md:items-end gap-3 mb-4 w-full">
+      {/* Search - takes remaining space */}
+      <div className="flex-1 min-w-0 w-full">
         <Label htmlFor="search" className="text-xs mb-1.5 block font-medium">Search</Label>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -40,13 +40,12 @@ export function ProductFilters({
         </div>
       </div>
 
-      {/* Filter and Sort group */}
-      <div className="flex gap-3 w-full md:w-auto">
-        {/* Filter */}
-        <div className="flex-1 md:w-48 md:flex-none">
+      {/* Filter and Sort - grouped together, minimal gap */}
+      <div className="flex gap-3 shrink-0 w-full md:w-auto">
+        <div className="flex-1 md:flex-none md:w-48 min-w-0">
           <Label htmlFor="filter" className="text-xs mb-1.5 block font-medium">Filter</Label>
           <Select value={filter} onValueChange={onFilterChange}>
-            <SelectTrigger id="filter" className="cursor-pointer h-9">
+            <SelectTrigger id="filter" className="cursor-pointer h-9 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="cursor-pointer">
@@ -64,11 +63,10 @@ export function ProductFilters({
           </Select>
         </div>
 
-        {/* Sort */}
-        <div className="flex-1 md:w-40 md:flex-none">
+        <div className="flex-1 md:flex-none md:w-40 min-w-0">
           <Label htmlFor="sort" className="text-xs mb-1.5 block font-medium">Sort By</Label>
           <Select value={sort} onValueChange={onSortChange}>
-            <SelectTrigger id="sort" className="cursor-pointer h-9">
+            <SelectTrigger id="sort" className="cursor-pointer h-9 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="cursor-pointer">
