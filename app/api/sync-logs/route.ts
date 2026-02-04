@@ -25,17 +25,18 @@ export async function GET(request: Request) {
       role: shop.role
     }))
 
-    // Get shop_id for filtering if needed
-    let shopId: number | null = null
+    // Resolve shop_id for filtering (shops.id is UUID)
+    let shopId: string | null = null
     if (shopFilter !== 'all') {
       const shop = shopsData?.find((s: any) => s.tld === shopFilter)
-      shopId = shop?.id || null
+      shopId = shop?.id ?? null
     }
 
-    // Build base query for filtering
+    // Pagination is by calendar day (unique dates), not by log row count.
+    // Fetch only started_at to derive unique dates for the current filters.
     let baseQuery = supabase
       .from('sync_logs')
-      .select('started_at', { count: 'exact', head: false })
+      .select('started_at')
 
     // Apply filters to base query
     if (shopId) {

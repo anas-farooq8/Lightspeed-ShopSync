@@ -28,6 +28,7 @@ AS $$
       SELECT
         s.id     AS shop_id,
         s.name   AS shop_name,
+        s.base_url AS shop_base_url,
         s.tld,
         s.role,
         v.sku,
@@ -41,12 +42,13 @@ AS $$
       SELECT
         shop_id,
         shop_name,
+        shop_base_url,
         tld,
         role,
         COUNT(*) FILTER (WHERE is_default)             AS total_products,
         COUNT(DISTINCT sku) FILTER (WHERE is_default)  AS unique_skus
       FROM base
-      GROUP BY shop_id, shop_name, tld, role
+      GROUP BY shop_id, shop_name, shop_base_url, tld, role
     ),
     duplicates AS (
       SELECT
@@ -93,6 +95,7 @@ AS $$
     )
     SELECT
       ss.shop_name,
+      ss.shop_base_url AS base_url,
       ss.tld,
       ss.role,
       ss.total_products,

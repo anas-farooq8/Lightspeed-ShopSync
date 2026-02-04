@@ -49,6 +49,8 @@ export interface ProductSyncStatus {
  */
 export interface DashboardKpi {
   shop_name: string
+  /** Shop base URL, e.g. "https://www.example.com" */
+  base_url: string
   tld: string
   role: 'source' | 'target'
   total_products: number

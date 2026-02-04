@@ -10,6 +10,13 @@ export function StatsCards() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const toSafeExternalHref = (baseUrl: string | null | undefined) => {
+    const raw = (baseUrl ?? '').trim()
+    if (!raw) return null
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+    return `https://${raw}`
+  }
+
   useEffect(() => {
     async function fetchStats() {
       try {
@@ -80,7 +87,21 @@ export function StatsCards() {
               <Store className="h-5 w-5 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <CardTitle className="text-sm font-medium truncate">
-                  {kpi.shop_name}
+                  {(() => {
+                    const href = toSafeExternalHref(kpi.base_url)
+                    if (!href) return kpi.shop_name
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline underline-offset-2"
+                        title={kpi.base_url}
+                      >
+                        {kpi.shop_name}
+                      </a>
+                    )
+                  })()}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
                   {kpi.role} · .{kpi.tld}
