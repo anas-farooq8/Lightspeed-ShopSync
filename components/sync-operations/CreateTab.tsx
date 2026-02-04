@@ -49,7 +49,11 @@ interface Shop {
   role: string
 }
 
-export function CreateTab() {
+interface CreateTabProps {
+  operation?: 'create' | 'null_sku'
+}
+
+export function CreateTab({ operation = 'create' }: CreateTabProps) {
   const [products, setProducts] = useState<SyncProduct[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,8 +62,9 @@ export function CreateTab() {
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('') // Separate state for input
+  const [searchInput, setSearchInput] = useState('')
   const [missingIn, setMissingIn] = useState<string>('all')
+  const [shopFilter, setShopFilter] = useState<string>('all')
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
   const [sortBy, setSortBy] = useState<'title' | 'sku' | 'variants' | 'price' | 'created'>('created')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -67,6 +72,8 @@ export function CreateTab() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 100
+  
+  const isNullSku = operation === 'null_sku'
 
   // Fetch shops once on mount (independent of products)
   useEffect(() => {
@@ -75,7 +82,7 @@ export function CreateTab() {
 
   useEffect(() => {
     fetchProducts()
-  }, [page, missingIn, onlyDuplicates, sortBy, sortOrder])
+  }, [page, missingIn, shopFilter, onlyDuplicates, sortBy, sortOrder])
 
   // Separate useEffect for search (only triggers when search state changes, not searchInput)
   useEffect(() => {
@@ -110,14 +117,19 @@ export function CreateTab() {
     try {
       setLoading(true)
       const params = new URLSearchParams({
-        operation: 'create',
+        operation: operation,
         page: page.toString(),
         pageSize: pageSize.toString(),
-        missingIn: missingIn,
-        onlyDuplicates: onlyDuplicates.toString(),
         sortBy: sortBy,
         sortOrder: sortOrder,
       })
+      
+      if (isNullSku) {
+        if (shopFilter !== 'all') params.append('shopTld', shopFilter)
+      } else {
+        params.append('missingIn', missingIn)
+        params.append('onlyDuplicates', onlyDuplicates.toString())
+      }
       
       if (search) params.append('search', search)
 
@@ -159,14 +171,19 @@ export function CreateTab() {
     
     try {
       const params = new URLSearchParams({
-        operation: 'create',
+        operation: operation,
         page: '1',
         pageSize: pageSize.toString(),
-        missingIn: missingIn,
-        onlyDuplicates: onlyDuplicates.toString(),
         sortBy: sortBy,
         sortOrder: sortOrder,
       })
+      
+      if (isNullSku) {
+        if (shopFilter !== 'all') params.append('shopTld', shopFilter)
+      } else {
+        params.append('missingIn', missingIn)
+        params.append('onlyDuplicates', onlyDuplicates.toString())
+      }
       
       if (searchInput) params.append('search', searchInput)
 
@@ -190,21 +207,30 @@ export function CreateTab() {
     }
   }
 
-  const handleMissingInChange = async (value: string) => {
-    setMissingIn(value)
-    setPage(1) // Reset to first page on filter change
+  const handleFilterChange = async (value: string) => {
+    if (isNullSku) {
+      setShopFilter(value)
+    } else {
+      setMissingIn(value)
+    }
+    setPage(1)
     setFilterLoading(true)
     
     try {
       const params = new URLSearchParams({
-        operation: 'create',
+        operation: operation,
         page: '1',
         pageSize: pageSize.toString(),
-        missingIn: value,
-        onlyDuplicates: onlyDuplicates.toString(),
         sortBy: sortBy,
         sortOrder: sortOrder,
       })
+      
+      if (isNullSku) {
+        if (value !== 'all') params.append('shopTld', value)
+      } else {
+        params.append('missingIn', value)
+        params.append('onlyDuplicates', onlyDuplicates.toString())
+      }
       
       if (search) params.append('search', search)
 
@@ -252,7 +278,7 @@ export function CreateTab() {
             <div className="flex items-center gap-2">
               <div className="flex-1 flex items-center border border-input rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                 <Input
-                  placeholder="Search by SKU, product title, or variant title..."
+                  placeholder={isNullSku ? "Search by product title or variant title..." : "Search by SKU, product title, or variant title..."}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyPress={handleSearchKeyPress}
@@ -281,51 +307,90 @@ export function CreateTab() {
             {/* Second Row: Filters and View Toggle */}
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
               <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-1">
-                {/* Missing In Filter */}
-                <Select value={missingIn} onValueChange={handleMissingInChange} disabled={filterLoading}>
+                {/* Filter - Missing In or Shop Filter based on operation */}
+                <Select 
+                  value={isNullSku ? shopFilter : missingIn} 
+                  onValueChange={handleFilterChange} 
+                  disabled={filterLoading}
+                >
                   <SelectTrigger 
                     className="w-full sm:w-[280px] cursor-pointer"
                     icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
                   >
-                    <SelectValue placeholder="Missing in..." />
+                    <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all" className="cursor-pointer">
-                      Missing in all shops
-                    </SelectItem>
-                    {shops
-                      .filter(shop => shop.role === 'target')
-                      .map((shop) => (
-                        <SelectItem 
-                          key={shop.shop_id} 
-                          value={shop.tld} 
-                          className="cursor-pointer"
-                        >
-                          Missing in {shop.shop_name} (.{shop.tld})
+                    {isNullSku ? (
+                      <>
+                        <SelectItem value="all" className="cursor-pointer">
+                          All shops
                         </SelectItem>
-                      ))
-                    }
+                        {shops.map((shop) => (
+                          <SelectItem 
+                            key={shop.shop_id} 
+                            value={shop.tld} 
+                            className="cursor-pointer"
+                          >
+                            {shop.shop_name} (.{shop.tld})
+                          </SelectItem>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="all" className="cursor-pointer">
+                          Missing in all shops
+                        </SelectItem>
+                        {shops
+                          .filter(shop => shop.role === 'target')
+                          .map((shop) => (
+                            <SelectItem 
+                              key={shop.shop_id} 
+                              value={shop.tld} 
+                              className="cursor-pointer"
+                            >
+                              Missing in {shop.shop_name} (.{shop.tld})
+                            </SelectItem>
+                          ))
+                        }
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
 
-                {/* Duplicate Filter Checkbox */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="only-duplicates"
-                    checked={onlyDuplicates}
-                    onCheckedChange={(checked: boolean) => {
-                      setOnlyDuplicates(checked === true)
-                      setPage(1)
-                    }}
-                    className="cursor-pointer"
-                  />
-                  <Label
-                    htmlFor="only-duplicates"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer whitespace-nowrap"
-                  >
-                    Show only duplicates
-                  </Label>
-                </div>
+                {/* Duplicate Filter Checkbox - Only for CREATE operation */}
+                {!isNullSku && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="only-duplicates"
+                      checked={onlyDuplicates}
+                      onCheckedChange={(checked: boolean) => {
+                        setOnlyDuplicates(checked === true)
+                        setPage(1)
+                      }}
+                      className="cursor-pointer"
+                    />
+                    <Label
+                      htmlFor="only-duplicates"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer whitespace-nowrap"
+                    >
+                      Show only duplicates
+                    </Label>
+                  </div>
+                )}
+                
+                {/* Warning Badge for NULL SKU */}
+                {isNullSku && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-400 dark:border-amber-700 rounded-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                      <line x1="12" y1="9" x2="12" y2="13"></line>
+                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Products without SKU cannot be synced
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* View Mode Toggle */}
@@ -384,6 +449,10 @@ export function CreateTab() {
           loading={loading}
           onSort={handleSort}
           onProductClick={() => {}}
+          hideSkuColumn={isNullSku}
+          hideDuplicateBadges={isNullSku}
+          hideShopIndicators={isNullSku}
+          showShopBadge={isNullSku}
         />
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -392,6 +461,9 @@ export function CreateTab() {
               key={`${product.source_product_id}-${product.default_sku}`}
               product={product}
               onClick={() => {}}
+              hideShopIndicators={isNullSku}
+              showShopBadge={isNullSku}
+              hideDuplicateBadges={isNullSku}
             />
           ))}
         </div>

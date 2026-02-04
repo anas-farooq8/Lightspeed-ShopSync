@@ -8,9 +8,12 @@ import type { SyncProduct } from './CreateTab'
 interface ProductSyncCardProps {
   product: SyncProduct
   onClick: () => void
+  hideShopIndicators?: boolean
+  showShopBadge?: boolean
+  hideDuplicateBadges?: boolean
 }
 
-export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
+export function ProductSyncCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false }: ProductSyncCardProps) {
   // Use src image for better quality in card view (as requested)
   const imageUrl = product.product_image?.src || product.product_image?.thumb || null
   
@@ -48,15 +51,28 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
           )}
         </div>
 
-        {/* SKU with Duplicate Badge */}
-        <div className="mb-2 flex items-center gap-2">
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-            {product.default_sku}
-          </code>
-          {product.source_has_duplicates && (
-            <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
-              x{product.source_duplicate_count}
-            </Badge>
+        {/* SKU/Shop Badge with Duplicate Badge */}
+        <div className="mb-2 flex items-center gap-2 flex-wrap">
+          {showShopBadge ? (
+            <>
+              <Badge variant="secondary" className="text-xs">
+                {product.source_shop_name} (.{product.source_shop_tld})
+              </Badge>
+              <Badge variant="outline" className="text-xs border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300">
+                No SKU
+              </Badge>
+            </>
+          ) : (
+            <>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                {product.default_sku}
+              </code>
+              {!hideDuplicateBadges && product.source_has_duplicates && (
+                <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                  x{product.source_duplicate_count}
+                </Badge>
+              )}
+            </>
           )}
         </div>
 
@@ -87,24 +103,26 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
           )}
         </div>
 
-        {/* Shop Status Indicators (like table view) */}
-        <div className="flex flex-wrap items-center justify-start gap-3 pt-2 border-t border-border/50">
-          {Object.entries(product.targets || {})
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([tld, targetInfo]) => {
-              const exists = targetInfo.status === 'exists_single' || targetInfo.status === 'exists_multiple'
-              return (
-                <div key={tld} className="flex flex-col items-center gap-1">
-                  <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
-                  {exists ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-red-600" />
-                  )}
-                </div>
-              )
-            })}
-        </div>
+        {/* Shop Status Indicators (like table view) - Hidden for NULL SKU mode */}
+        {!hideShopIndicators && (
+          <div className="flex flex-wrap items-center justify-start gap-3 pt-2 border-t border-border/50">
+            {Object.entries(product.targets || {})
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([tld, targetInfo]) => {
+                const exists = targetInfo.status === 'exists_single' || targetInfo.status === 'exists_multiple'
+                return (
+                  <div key={tld} className="flex flex-col items-center gap-1">
+                    <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
+                    {exists ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

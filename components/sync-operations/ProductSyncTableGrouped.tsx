@@ -22,6 +22,10 @@ interface ProductSyncTableGroupedProps {
   loading?: boolean
   onSort?: (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => void
   onProductClick: (product: SyncProduct) => void
+  hideSkuColumn?: boolean
+  hideDuplicateBadges?: boolean
+  hideShopIndicators?: boolean
+  showShopBadge?: boolean
 }
 
 interface TargetShop {
@@ -41,7 +45,11 @@ export function ProductSyncTableGrouped({
   sortOrder = 'desc',
   loading = false,
   onSort,
-  onProductClick 
+  onProductClick,
+  hideSkuColumn = false,
+  hideDuplicateBadges = false,
+  hideShopIndicators = false,
+  showShopBadge = false
 }: ProductSyncTableGroupedProps) {
   const [targetShops, setTargetShops] = useState<TargetShop[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -146,21 +154,23 @@ export function ProductSyncTableGrouped({
         className={`cursor-pointer hover:bg-muted/50 ${isGrouped ? 'bg-muted/20' : ''} ${isLast ? '' : 'border-b-0'}`}
         onClick={() => onProductClick(product)}
       >
-        {/* SKU */}
-        <TableCell className={isGrouped ? 'pl-12' : ''}>
-          {!isGrouped && (
-            <div className="flex items-center gap-2">
-              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                {product.default_sku}
-              </code>
-              {product.source_has_duplicates && (
-                <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                  x{product.source_duplicate_count}
-                </Badge>
-              )}
-            </div>
-          )}
-        </TableCell>
+        {/* SKU - Hidden for NULL SKU mode */}
+        {!hideSkuColumn && (
+          <TableCell className={isGrouped ? 'pl-12' : ''}>
+            {!isGrouped && (
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                  {product.default_sku}
+                </code>
+                {!hideDuplicateBadges && product.source_has_duplicates && (
+                  <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    x{product.source_duplicate_count}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </TableCell>
+        )}
 
         {/* Product (Image + Title + Variant Title) */}
         <TableCell>
@@ -178,8 +188,13 @@ export function ProductSyncTableGrouped({
               )}
             </div>
             
-            {/* Titles */}
+            {/* Titles + Shop Badge */}
             <div className="flex-1 min-w-0">
+              {showShopBadge && (
+                <Badge variant="secondary" className="text-xs mb-1">
+                  {product.source_shop_name} (.{product.source_shop_tld})
+                </Badge>
+              )}
               <div className="font-medium line-clamp-2 text-sm leading-snug mb-1">
                 {product.product_title || 'Untitled Product'}
               </div>
@@ -219,8 +234,8 @@ export function ProductSyncTableGrouped({
           </span>
         </TableCell>
 
-        {/* Dynamic Target Shop Columns */}
-        {targetShops.map(shop => {
+        {/* Dynamic Target Shop Columns - Hidden for NULL SKU mode */}
+        {!hideShopIndicators && targetShops.map(shop => {
           const targetInfo = product.targets?.[shop.tld]
           const status = targetInfo?.status || 'not_exists'
           const exists = status === 'exists_single' || status === 'exists_multiple'
@@ -246,9 +261,11 @@ export function ProductSyncTableGrouped({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableHeader column="sku" className="w-[200px]">
-                  SKU
-                </SortableHeader>
+                {!hideSkuColumn && (
+                  <SortableHeader column="sku" className="w-[200px]">
+                    SKU
+                  </SortableHeader>
+                )}
                 <SortableHeader column="title" className="w-[300px]">
                   Product
                 </SortableHeader>
@@ -261,7 +278,7 @@ export function ProductSyncTableGrouped({
                 <SortableHeader column="created" className="w-[130px]">
                   Created
                 </SortableHeader>
-                {targetShops.map(shop => (
+                {!hideShopIndicators && targetShops.map(shop => (
                   <TableHead key={shop.tld} className="text-center w-[80px]">
                     .{shop.tld}
                   </TableHead>
@@ -286,33 +303,37 @@ export function ProductSyncTableGrouped({
                 // Duplicate group - render with expand/collapse
                 return (
                   <React.Fragment key={`group-fragment-${group.sku}-${groupIdx}`}>
-                    {/* Group Header Row */}
-                    <TableRow
-                      className="bg-amber-50/50 dark:bg-amber-950/20 border-l-4 border-l-amber-500 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30"
-                      onClick={() => toggleGroup(group.sku)}
-                    >
-                      <TableCell className="font-semibold">
-                        <div className="flex items-center gap-2">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-amber-700" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-amber-700" />
-                          )}
-                          <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                            {group.sku}
-                          </code>
-                          <Badge variant="outline" className="text-xs border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                            x{group.products.length}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell colSpan={4 + targetShops.length} className="text-sm text-muted-foreground">
-                        {isExpanded 
-                          ? `Click to collapse (showing ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'})`
-                          : `Click to expand and view ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'} with this SKU`
-                        }
-                      </TableCell>
-                    </TableRow>
+                    {/* Group Header Row - Only show if not hiding duplicates */}
+                    {!hideDuplicateBadges && (
+                      <TableRow
+                        className="bg-amber-50/50 dark:bg-amber-950/20 border-l-4 border-l-amber-500 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30"
+                        onClick={() => toggleGroup(group.sku)}
+                      >
+                        <TableCell className="font-semibold" colSpan={hideSkuColumn ? 1 : 1}>
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-amber-700" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-amber-700" />
+                            )}
+                            {!hideSkuColumn && (
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+                                {group.sku}
+                              </code>
+                            )}
+                            <Badge variant="outline" className="text-xs border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                              x{group.products.length}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell colSpan={(hideSkuColumn ? 4 : 4) + (hideShopIndicators ? 0 : targetShops.length)} className="text-sm text-muted-foreground">
+                          {isExpanded 
+                            ? `Click to collapse (showing ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'})`
+                            : `Click to expand and view ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'} with this SKU`
+                          }
+                        </TableCell>
+                      </TableRow>
+                    )}
                     
                     {/* Expanded Products */}
                     {isExpanded && group.products.map((product, idx) => (

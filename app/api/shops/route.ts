@@ -7,11 +7,11 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Fetch all target shops, ordered by TLD
+    // Fetch all shops, ordered by role (source first) then TLD
     const { data: shops, error } = await supabase
       .from('shops')
       .select('id, name, tld, role')
-      .eq('role', 'target')
+      .order('role', { ascending: false }) // 'target' > 'source' alphabetically, so desc gives source first
       .order('tld', { ascending: true })
 
     if (error) {

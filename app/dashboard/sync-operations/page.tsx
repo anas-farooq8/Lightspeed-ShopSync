@@ -27,13 +27,13 @@ export default function SyncOperationsPage() {
             <TabsTrigger value="edit" className="cursor-pointer" disabled>
               Edit
             </TabsTrigger>
-            <TabsTrigger value="null_sku" className="cursor-pointer" disabled>
+            <TabsTrigger value="null_sku" className="cursor-pointer">
               Null SKU
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="create" className="mt-0">
-            <CreateTab />
+            <CreateTab operation="create" />
           </TabsContent>
 
           <TabsContent value="edit" className="mt-0">
@@ -43,9 +43,7 @@ export default function SyncOperationsPage() {
           </TabsContent>
 
           <TabsContent value="null_sku" className="mt-0">
-            <div className="text-center py-12 text-muted-foreground">
-              Null SKU tab - Coming soon
-            </div>
+            <CreateTab operation="null_sku" />
           </TabsContent>
         </Tabs>
       </div>
