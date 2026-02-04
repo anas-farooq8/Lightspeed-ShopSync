@@ -13,9 +13,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
-import type { SyncProduct } from './CreateTab'
+import type { SyncProduct } from './ProductListTab'
 
-interface ProductSyncTableGroupedProps {
+interface ProductListTableProps {
   products: SyncProduct[]
   sortBy?: 'title' | 'sku' | 'variants' | 'price' | 'created'
   sortOrder?: 'asc' | 'desc'
@@ -39,7 +39,7 @@ interface ProductGroup {
   isDuplicate: boolean
 }
 
-export function ProductSyncTableGrouped({ 
+export function ProductListTable({ 
   products, 
   sortBy = 'created', 
   sortOrder = 'desc',
@@ -50,7 +50,7 @@ export function ProductSyncTableGrouped({
   hideDuplicateBadges = false,
   hideShopIndicators = false,
   showShopBadge = false
-}: ProductSyncTableGroupedProps) {
+}: ProductListTableProps) {
   const [targetShops, setTargetShops] = useState<TargetShop[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 

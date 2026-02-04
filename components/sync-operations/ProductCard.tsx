@@ -3,9 +3,9 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, Layers, CheckCircle2, XCircle } from 'lucide-react'
-import type { SyncProduct } from './CreateTab'
+import type { SyncProduct } from './ProductListTab'
 
-interface ProductSyncCardProps {
+interface ProductCardProps {
   product: SyncProduct
   onClick: () => void
   hideShopIndicators?: boolean
@@ -13,7 +13,7 @@ interface ProductSyncCardProps {
   hideDuplicateBadges?: boolean
 }
 
-export function ProductSyncCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false }: ProductSyncCardProps) {
+export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false }: ProductCardProps) {
   // Use src image for better quality in card view (as requested)
   const imageUrl = product.product_image?.src || product.product_image?.thumb || null
   

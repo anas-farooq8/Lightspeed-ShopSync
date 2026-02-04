@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CreateTab } from '@/components/sync-operations/CreateTab'
+import { ProductListTab } from '@/components/sync-operations/ProductListTab'
 
 export default function SyncOperationsPage() {
   const [activeTab, setActiveTab] = useState('create')
@@ -33,7 +33,7 @@ export default function SyncOperationsPage() {
           </TabsList>
 
           <TabsContent value="create" className="mt-0">
-            <CreateTab operation="create" />
+            <ProductListTab operation="create" />
           </TabsContent>
 
           <TabsContent value="edit" className="mt-0">
@@ -43,7 +43,7 @@ export default function SyncOperationsPage() {
           </TabsContent>
 
           <TabsContent value="null_sku" className="mt-0">
-            <CreateTab operation="null_sku" />
+            <ProductListTab operation="null_sku" />
           </TabsContent>
         </Tabs>
       </div>
