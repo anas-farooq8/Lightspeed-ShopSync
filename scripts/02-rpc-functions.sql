@@ -77,9 +77,14 @@ AS $$
       WHERE role = 'source'
     ),
     target_skus AS (
-      SELECT DISTINCT shop_id, sku
-      FROM valid_defaults
-      WHERE role = 'target'
+      -- Check against ALL variants in target (default + non-default)
+      -- to match sync_operations view behavior
+      SELECT DISTINCT v.shop_id, TRIM(v.sku) AS sku
+      FROM variants v
+      JOIN shops s ON s.id = v.shop_id
+      WHERE s.role = 'target'
+        AND v.sku IS NOT NULL
+        AND TRIM(v.sku) <> ''
     ),
     missing_per_target AS (
       SELECT t.shop_id, COUNT(*) AS missing
