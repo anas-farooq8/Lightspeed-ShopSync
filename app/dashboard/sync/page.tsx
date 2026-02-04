@@ -190,41 +190,40 @@ export default function SyncPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={statusFilterLoading}>
-                  <SelectTrigger
-                    className="w-[180px] cursor-pointer"
-                    icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-                  >
-                <SelectValue placeholder="All Shops" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="cursor-pointer">All Shops</SelectItem>
-                {shops.map(shop => (
-                  <SelectItem key={shop.tld} value={shop.tld} className="cursor-pointer">
-                    {shop.tld.toUpperCase()} - {shop.role === 'source' ? 'Source' : 'Target'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <Filter className="h-4 w-4 text-muted-foreground" />
 
-          <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={shopFilterLoading}>
-            <SelectTrigger
-              className="w-[180px] cursor-pointer"
-              icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-            >
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
-              <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
-              <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
-              <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+              <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={statusFilterLoading}>
+                <SelectTrigger
+                  className="w-[180px] h-10 cursor-pointer"
+                  icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                >
+                  <SelectValue placeholder="All Shops" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="cursor-pointer">All Shops</SelectItem>
+                  {shops.map(shop => (
+                    <SelectItem key={shop.tld} value={shop.tld} className="cursor-pointer">
+                      {shop.tld.toUpperCase()} - {shop.role === 'source' ? 'Source' : 'Target'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={shopFilterLoading}>
+                <SelectTrigger
+                  className="w-[180px] h-10 cursor-pointer"
+                  icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                >
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
+                  <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
+                  <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
+                  <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
         {/* Error Alert */}
         {error && (

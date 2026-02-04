@@ -268,10 +268,14 @@ create table sync_logs (
 );
 
 -- Indexes
-create index idx_sync_logs_shop on sync_logs(shop_id);
-create index idx_sync_logs_status on sync_logs(status);
-create index idx_sync_logs_started_at on sync_logs(started_at desc);
-create index idx_sync_logs_shop_started on sync_logs(shop_id, started_at desc);
+-- For general date-based queries
+CREATE INDEX idx_sync_logs_started_at ON sync_logs(started_at DESC);
+-- For shop-specific queries
+CREATE INDEX idx_sync_logs_shop_started ON sync_logs(shop_id, started_at DESC);
+-- For the GROUP BY DATE query (critical for performance)
+CREATE INDEX idx_sync_logs_started_date ON sync_logs(DATE(started_at) DESC);
+-- For combined shop + status filters
+CREATE INDEX idx_sync_logs_shop_status_started ON sync_logs(shop_id, status, started_at DESC);
 
 -- Auto-calculate duration when completed_at is set
 create or replace function calculate_sync_duration()

@@ -7,13 +7,13 @@ const DATES_PER_PAGE = 20
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const shopFilter = searchParams.get('shop') || 'all'
     const statusFilter = searchParams.get('status') || 'all'
     
     const supabase = await createClient()
 
-    // Fetch all shops once (lightweight query - only 2-5 rows)
+    // Fetch all shops (small dataset - 2-5 rows)
     const { data: shopsData } = await supabase
       .from('shops')
       .select('id, tld, role')
@@ -25,33 +25,52 @@ export async function GET(request: Request) {
       role: shop.role
     }))
 
-    // Resolve shop_id for filtering (shops.id is UUID)
+    // Resolve shop_id for filtering
     let shopId: string | null = null
     if (shopFilter !== 'all') {
       const shop = shopsData?.find((s: any) => s.tld === shopFilter)
-      shopId = shop?.id ?? null
+      if (!shop) {
+        return NextResponse.json({ 
+          syncLogs: [], 
+          totalDates: 0,
+          totalPages: 0,
+          currentPage: page,
+          shops
+        })
+      }
+      shopId = shop.id
     }
 
-    // Pagination is by calendar day (unique dates), not by log row count.
-    // Fetch only started_at to derive unique dates for the current filters.
-    let baseQuery = supabase
-      .from('sync_logs')
-      .select('started_at')
-
-    // Apply filters to base query
-    if (shopId) {
-      baseQuery = baseQuery.eq('shop_id', shopId)
-    }
-
-    if (statusFilter !== 'all') {
-      baseQuery = baseQuery.eq('status', statusFilter)
+    // Calculate offset
+    const offset = (page - 1) * DATES_PER_PAGE
+    
+    // Build filter conditions for the RPC call
+    const filters: any = {
+      p_limit: DATES_PER_PAGE,
+      p_offset: offset
     }
     
-    // Get all unique dates (we need this for pagination metadata)
-    const { data: allDatesData } = await baseQuery
-      .order('started_at', { ascending: false })
+    if (shopId) {
+      filters.p_shop_id = shopId
+    }
+    
+    if (statusFilter !== 'all') {
+      filters.p_status = statusFilter
+    }
 
-    if (!allDatesData || allDatesData.length === 0) {
+    // Call the database function to get paginated dates and total count
+    const { data: paginationData, error: paginationError } = await supabase
+      .rpc('get_sync_log_dates_paginated', filters)
+
+    if (paginationError) {
+      console.error('Error fetching pagination data:', paginationError)
+      return NextResponse.json(
+        { error: 'Failed to fetch sync logs' },
+        { status: 500 }
+      )
+    }
+
+    if (!paginationData || paginationData.length === 0) {
       return NextResponse.json({ 
         syncLogs: [], 
         totalDates: 0,
@@ -61,33 +80,12 @@ export async function GET(request: Request) {
       })
     }
 
-    // Extract unique dates
-    const uniqueDates = Array.from(
-      new Set(
-        allDatesData.map(log => 
-          new Date(log.started_at).toISOString().split('T')[0]
-        )
-      )
-    )
-
-    const totalDates = uniqueDates.length
+    // Extract pagination metadata and dates
+    const totalDates = paginationData[0]?.total_count || 0
     const totalPages = Math.ceil(totalDates / DATES_PER_PAGE)
-    const offset = (page - 1) * DATES_PER_PAGE
-    
-    // Get dates for current page
-    const pageDates = uniqueDates.slice(offset, offset + DATES_PER_PAGE)
+    const pageDates = paginationData.map((row: any) => row.log_date)
 
-    if (pageDates.length === 0) {
-      return NextResponse.json({ 
-        syncLogs: [], 
-        totalDates,
-        totalPages,
-        currentPage: page,
-        shops
-      })
-    }
-
-    // Fetch full logs for these dates
+    // Fetch full logs for these dates with timezone safety
     let logsQuery = supabase
       .from('sync_logs')
       .select(`
@@ -98,8 +96,8 @@ export async function GET(request: Request) {
           role
         )
       `)
-      .gte('started_at', pageDates[pageDates.length - 1] + 'T00:00:00')
-      .lte('started_at', pageDates[0] + 'T23:59:59')
+      .gte('started_at', `${pageDates[pageDates.length - 1]}T00:00:00Z`)
+      .lte('started_at', `${pageDates[0]}T23:59:59.999Z`)
 
     // Apply filters to logs query
     if (shopId) {
