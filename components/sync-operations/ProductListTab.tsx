@@ -349,6 +349,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                         </SelectItem>
                         {shops
                           .filter(shop => shop.role === 'target')
+                          .sort((a, b) => a.tld.localeCompare(b.tld))
                           .map((shop) => (
                             <SelectItem 
                               key={shop.shop_id} 

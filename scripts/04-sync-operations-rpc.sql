@@ -1,4 +1,9 @@
 -- =====================================================
+-- Drop existing function first (signature changed)
+-- =====================================================
+DROP FUNCTION IF EXISTS get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEXT, INTEGER, INTEGER);
+
+-- =====================================================
 -- SYNC OPERATIONS RPC FUNCTION (Highly Optimized)
 --
 -- PERFORMANCE OPTIMIZATIONS:

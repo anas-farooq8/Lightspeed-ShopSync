@@ -379,6 +379,9 @@ GRANT EXECUTE ON FUNCTION get_last_sync_info() TO authenticated;
 -- Returns data in same format as product_sync_status for UI reuse
 -- =====================================================
 
+-- Drop existing function first (signature changed)
+DROP FUNCTION IF EXISTS get_null_sku_products(TEXT, TEXT, TEXT, TEXT, INTEGER, INTEGER);
+
 CREATE OR REPLACE FUNCTION get_null_sku_products(
   p_shop_tld TEXT DEFAULT NULL,    -- Filter by shop TLD (nl, be, de) or NULL for all
   p_search TEXT DEFAULT NULL,       -- Search in product title or variant title
