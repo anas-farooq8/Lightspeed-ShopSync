@@ -68,31 +68,10 @@ export function CreateTab() {
   const [total, setTotal] = useState(0)
   const pageSize = 100
 
-  // Extract shops from products (no need for separate API call)
+  // Fetch shops once on mount (independent of products)
   useEffect(() => {
-    if (products.length > 0) {
-      const shopsSet = new Map<string, Shop>()
-      
-      products.forEach(product => {
-        Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
-          if (!shopsSet.has(tld)) {
-            shopsSet.set(tld, {
-              shop_id: tld,
-              shop_name: targetInfo.shop_name,
-              tld: tld,
-              role: 'target'
-            })
-          }
-        })
-      })
-      
-      const sorted = Array.from(shopsSet.values()).sort((a, b) => 
-        a.tld.localeCompare(b.tld)
-      )
-      
-      setShops(sorted)
-    }
-  }, [products])
+    fetchShops()
+  }, [])
 
   useEffect(() => {
     fetchProducts()
@@ -104,6 +83,28 @@ export function CreateTab() {
       fetchProducts()
     }
   }, [search])
+
+  // Scroll to top of the scrollable container (main element)
+  const scrollToTop = () => {
+    // The main element is the scrollable container in the dashboard layout
+    const mainElement = document.querySelector('main')
+    if (mainElement) {
+      mainElement.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  async function fetchShops() {
+    try {
+      const response = await fetch('/api/shops')
+      if (!response.ok) throw new Error('Failed to fetch shops')
+      
+      const data = await response.json()
+      setShops(data.shops || [])
+    } catch (err) {
+      console.error('Failed to load shops:', err)
+      // Don't set error state, just log it - shops are non-critical for initial load
+    }
+  }
 
   async function fetchProducts() {
     try {
@@ -405,7 +406,10 @@ export function CreateTab() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(1)}
+                onClick={() => {
+                  setPage(1)
+                  scrollToTop()
+                }}
                 disabled={page === 1 || loading}
                 className="cursor-pointer"
                 title="First page"
@@ -417,7 +421,10 @@ export function CreateTab() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(page - 1)}
+                onClick={() => {
+                  setPage(page - 1)
+                  scrollToTop()
+                }}
                 disabled={page === 1 || loading}
                 className="cursor-pointer"
               >
@@ -475,7 +482,10 @@ export function CreateTab() {
                         key={pageNum}
                         variant={isCurrentPage ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setPage(pageNum as number)}
+                        onClick={() => {
+                          setPage(pageNum as number)
+                          scrollToTop()
+                        }}
                         disabled={loading}
                         className={`cursor-pointer min-w-[40px] ${
                           isCurrentPage 
@@ -494,7 +504,10 @@ export function CreateTab() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(page + 1)}
+                onClick={() => {
+                  setPage(page + 1)
+                  scrollToTop()
+                }}
                 disabled={page === totalPages || loading}
                 className="cursor-pointer"
               >
@@ -506,7 +519,10 @@ export function CreateTab() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(totalPages)}
+                onClick={() => {
+                  setPage(totalPages)
+                  scrollToTop()
+                }}
                 disabled={page === totalPages || loading}
                 className="cursor-pointer"
                 title="Last page"
