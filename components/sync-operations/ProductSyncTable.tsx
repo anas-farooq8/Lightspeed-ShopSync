@@ -13,7 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { SyncProduct } from './CreateTab'
+import type { SyncProduct } from './ProductListTab'
 
 interface ProductSyncTableProps {
   products: SyncProduct[]

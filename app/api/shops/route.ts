@@ -7,12 +7,10 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Fetch all shops, ordered by role (source first) then TLD
+    // Fetch all shops (sorting done in UI)
     const { data: shops, error } = await supabase
       .from('shops')
       .select('id, name, tld, role')
-      .order('role', { ascending: false }) // 'target' > 'source' alphabetically, so desc gives source first
-      .order('tld', { ascending: true })
 
     if (error) {
       console.error('Error fetching shops:', error)

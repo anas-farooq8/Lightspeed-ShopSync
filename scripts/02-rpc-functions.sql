@@ -403,7 +403,6 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
-  ls_updated_at TIMESTAMP WITH TIME ZONE,
   
   -- Source duplicate info (always 1 for null SKU products)
   source_duplicate_count INTEGER,
@@ -433,8 +432,7 @@ AS $$
       vc.title AS variant_title,
       p.image AS product_image,
       v.price_excl,
-      p.ls_created_at,
-      p.ls_updated_at
+      p.ls_created_at
     FROM shops s
     INNER JOIN variants v ON v.shop_id = s.id
       AND v.is_default = true
@@ -524,7 +522,6 @@ AS $$
     sp.price_excl,
     sp.variant_count AS source_variant_count,
     sp.ls_created_at,
-    sp.ls_updated_at,
     1 AS source_duplicate_count,
     false AS source_has_duplicates,
     ARRAY[sp.product_id] AS source_duplicate_product_ids,

@@ -49,7 +49,6 @@ source_products AS (
         v.price_excl,
         p.image AS product_image,
         p.ls_created_at,
-        p.ls_updated_at,
         pc.title AS product_title,
         vc.title AS variant_title
     FROM source_shop ss
@@ -192,7 +191,6 @@ SELECT
     sp.price_excl,
     COALESCE(svc.variant_count, 1) AS source_variant_count,
     sp.ls_created_at,
-    sp.ls_updated_at,
     
     -- ========================================
     -- Source Duplicate Information
@@ -238,7 +236,7 @@ GROUP BY
     sp.shop_id, sp.shop_name, sp.shop_tld,
     sp.lightspeed_product_id, sp.lightspeed_variant_id, sp.sku,
     sp.product_title, sp.variant_title, sp.product_image, sp.price_excl,
-    svc.variant_count, sp.ls_created_at, sp.ls_updated_at,
+    svc.variant_count, sp.ls_created_at,
     sss.duplicate_count, sss.product_ids;
 
 -- =====================================================

@@ -40,7 +40,6 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
-  ls_updated_at TIMESTAMP WITH TIME ZONE,
   
   -- Source duplicate info
   source_duplicate_count INTEGER,
@@ -73,7 +72,6 @@ AS $$
       pss.price_excl,
       pss.source_variant_count,
       pss.ls_created_at,
-      pss.ls_updated_at,
       pss.source_duplicate_count,
       pss.source_has_duplicates,
       pss.source_duplicate_product_ids,
@@ -177,7 +175,6 @@ AS $$
     sp.price_excl,
     sp.source_variant_count::INTEGER,
     sp.ls_created_at,
-    sp.ls_updated_at,
     sp.source_duplicate_count::INTEGER,
     sp.source_has_duplicates,
     sp.source_duplicate_product_ids,

@@ -35,7 +35,6 @@ export interface SyncProduct {
   price_excl: number
   source_variant_count: number
   ls_created_at: string
-  ls_updated_at: string
   source_duplicate_count: number
   source_has_duplicates: boolean
   source_duplicate_product_ids: number[]
@@ -106,7 +105,15 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
       if (!response.ok) throw new Error('Failed to fetch shops')
       
       const data = await response.json()
-      setShops(data.shops || [])
+      
+      // Sort shops: source first, then targets alphabetically by tld
+      const sortedShops = (data.shops || []).sort((a: Shop, b: Shop) => {
+        if (a.role === 'source' && b.role !== 'source') return -1
+        if (a.role !== 'source' && b.role === 'source') return 1
+        return a.tld.localeCompare(b.tld)
+      })
+      
+      setShops(sortedShops)
     } catch (err) {
       console.error('Failed to load shops:', err)
       // Don't set error state, just log it - shops are non-critical for initial load
@@ -331,7 +338,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                             value={shop.tld} 
                             className="cursor-pointer"
                           >
-                            {shop.shop_name} (.{shop.tld})
+                            {shop.shop_name} (.{shop.tld}) - {shop.role === 'source' ? 'Source' : 'Target'}
                           </SelectItem>
                         ))}
                       </>
@@ -348,7 +355,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                               value={shop.tld} 
                               className="cursor-pointer"
                             >
-                              Missing in {shop.shop_name} (.{shop.tld})
+                              Missing in {shop.shop_name} (.{shop.tld}) - Target
                             </SelectItem>
                           ))
                         }
