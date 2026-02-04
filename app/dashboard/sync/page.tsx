@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { SyncLog } from '@/types/variant'
+import { SyncLog } from '@/types/database'
 import { SyncLogCard } from '@/components/dashboard/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RefreshCw, AlertCircle, Filter, ChevronDown, ChevronRight, Calendar } from 'lucide-react'

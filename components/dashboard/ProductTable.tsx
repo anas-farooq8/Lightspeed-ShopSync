@@ -3,7 +3,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from './StatusBadge'
-import type { ProductSyncStatus } from '@/types/variant'
+import type { ProductSyncStatus } from '@/types/database'
 import { formatDistance } from 'date-fns'
 import { ImageOff } from 'lucide-react'
 
@@ -107,7 +107,7 @@ export function ProductTable({ products, onProductClick }: ProductTableProps) {
                   </div>
                 </TableCell>
                 <TableCell className="text-right text-sm text-muted-foreground">
-                  {formatDistance(new Date(product.updated_at), new Date(), { addSuffix: true })}
+                  {formatDistance(new Date(product.ls_updated_at), new Date(), { addSuffix: true })}
                 </TableCell>
               </TableRow>
             ))

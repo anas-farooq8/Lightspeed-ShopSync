@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from './StatusBadge'
-import type { ProductSyncStatus } from '@/types/variant'
+import type { ProductSyncStatus } from '@/types/database'
 import { formatDistance } from 'date-fns'
 import { ImageOff } from 'lucide-react'
 
@@ -92,7 +92,7 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
 
             {/* Updated Time */}
             <div className="text-xs text-muted-foreground mt-2">
-              Updated {formatDistance(new Date(product.updated_at), new Date(), { addSuffix: true })}
+              Updated {formatDistance(new Date(product.ls_updated_at), new Date(), { addSuffix: true })}
             </div>
           </div>
         </div>

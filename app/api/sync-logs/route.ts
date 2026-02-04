@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import type { SyncLog } from '@/types/variant'
+import type { SyncLog } from '@/types/database'
 
 const DATES_PER_PAGE = 20
 

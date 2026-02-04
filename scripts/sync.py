@@ -18,7 +18,7 @@ LIMIT = 250
 API_TIMEOUT = 30
 MAX_RETRIES = 3
 
-PRODUCT_FIELDS = "id,visibility,url,title,fulltitle,description,content,image"
+PRODUCT_FIELDS = "id,visibility,url,title,fulltitle,description,content,image,createdAt,updatedAt"
 VARIANT_FIELDS = "id,isDefault,sku,priceExcl,title,image,product"
 
 # =====================================================
@@ -216,6 +216,8 @@ def sync_shop(shop):
                 "lightspeed_product_id": p["id"],
                 "visibility": p.get("visibility"),
                 "image": p.get("image"),
+                "ls_created_at": p.get("createdAt"),
+                "ls_updated_at": p.get("updatedAt"),
             })
 
             content_rows.append({

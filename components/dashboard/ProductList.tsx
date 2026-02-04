@@ -9,7 +9,7 @@ import { ProductFilters } from './ProductFilters'
 import { ProductTable } from './ProductTable'
 import { ProductCard } from './ProductCard'
 import { Pagination } from './Pagination'
-import type { ProductSyncStatus } from '@/types/variant'
+import type { ProductSyncStatus } from '@/types/database'
 
 type ViewMode = 'table' | 'cards'
 

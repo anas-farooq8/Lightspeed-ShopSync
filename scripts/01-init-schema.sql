@@ -64,7 +64,10 @@ create table products (
   visibility text,
   image jsonb, -- default variant image {src, thumb, title}
 
-  created_at timestamp with time zone default now(),
+  -- Lightspeed timestamps
+  ls_created_at timestamp with time zone not null,
+  ls_updated_at timestamp with time zone not null,
+
   updated_at timestamp with time zone default now(),
 
   primary key (shop_id, lightspeed_product_id)
@@ -151,7 +154,6 @@ create table variants (
   price_excl numeric,
   image jsonb, -- {src, thumb, title}
 
-  created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
 
   primary key (shop_id, lightspeed_variant_id),

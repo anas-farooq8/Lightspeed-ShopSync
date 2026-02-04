@@ -69,10 +69,10 @@ export async function GET(request: NextRequest) {
     // Apply sorting
     switch (sort) {
       case 'created_at_desc':
-        query = query.order('updated_at', { ascending: false })
+        query = query.order('ls_created_at', { ascending: false })
         break
       case 'created_at_asc':
-        query = query.order('updated_at', { ascending: true })
+        query = query.order('ls_created_at', { ascending: true })
         break
       case 'sku_asc':
         query = query.order('default_sku', { ascending: true })
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
         query = query.order('default_sku', { ascending: false })
         break
       default:
-        query = query.order('updated_at', { ascending: false })
+        query = query.order('ls_updated_at', { ascending: false })
     }
     
     // Apply pagination

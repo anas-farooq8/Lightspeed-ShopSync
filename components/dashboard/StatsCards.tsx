@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Store } from 'lucide-react'
-import type { DashboardKpi } from '@/types/variant'
+import type { DashboardKpi } from '@/types/database'
 
 export function StatsCards() {
   const [kpis, setKpis] = useState<DashboardKpi[]>([])

@@ -16,7 +16,9 @@ export interface ProductSyncStatus {
   default_sku: string  // 🔑 Matching key
   price_excl: number | null
   product_image: { title: string | null; thumb: string | null; src: string | null } | null
-  updated_at: string
+  /** Lightspeed product timestamps (from `products`) */
+  ls_created_at: string
+  ls_updated_at: string
   default_variant_title: string | null  // variant_content (default lang)
   product_title: string | null         // product_content (default lang)
   shop_id: string
