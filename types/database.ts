@@ -47,7 +47,7 @@ export interface ProductSyncStatus {
  * Per-shop Dashboard KPI
  *
  * Returned by get_dashboard_kpis() RPC.
- * One object per shop with product counts, SKU stats, and missing count (targets only).
+ * One object per shop with product counts, SKU stats, and missing counts.
  */
 export interface DashboardKpi {
   shop_name: string
@@ -55,11 +55,20 @@ export interface DashboardKpi {
   base_url: string
   tld: string
   role: 'source' | 'target'
+  /** All default variants */
   total_products: number
-  unique_skus: number
+  /** Default variants with non-empty SKU */
+  total_with_valid_sku: number
+  /** Products where SKU appears exactly once (no duplicate) */
+  unique_products: number
+  /** Count of distinct SKUs that appear more than once */
   duplicate_skus: number
-  /** Missing SKUs vs source; null for source shops */
-  missing: number | null
+  /** Total product rows that have duplicate SKUs */
+  duplicate_sku_counts: number
+  /** Products without valid SKU (all shops) */
+  missing_no_sku: number
+  /** Source SKUs not present in this target shop; null for source shops */
+  missing_from_source: number | null
 }
 
 /**

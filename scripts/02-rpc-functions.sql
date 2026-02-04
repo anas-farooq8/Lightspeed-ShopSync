@@ -3,16 +3,18 @@
 --
 -- Purpose:
 --   Returns per-shop product KPIs for dashboard display:
---     - total products (default variants)
---     - unique SKUs
---     - duplicate SKUs
---     - missing SKUs per target (relative to source)
+--     - total_products: all default variants
+--     - total_with_valid_sku: default variants with non-empty SKU
+--     - unique_products: products where SKU appears exactly once (no duplicate)
+--     - duplicate_skus: count of distinct SKUs that appear more than once
+--     - duplicate_sku_counts: total product rows that have duplicate SKUs
+--     - missing_no_sku: products without valid SKU (all shops)
+--     - missing_from_source: source SKUs not present in target shops
 --
 -- Characteristics:
 --   - Fully dynamic (no hardcoded shops or TLDs)
 --   - Supports any number of target shops
---   - Optimized using a single normalized base dataset
---   - SKU-based missing detection (correct logic)
+--   - Optimized: single scan of variants, minimal subqueries
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION get_dashboard_kpis()
@@ -24,7 +26,7 @@ SET search_path = public, pg_temp
 AS $$
   SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.tld), '[]'::json)
   FROM (
-    WITH base AS (
+    WITH all_defaults AS (
       SELECT
         s.id     AS shop_id,
         s.name   AS shop_name,
@@ -32,11 +34,23 @@ AS $$
         s.tld,
         s.role,
         v.sku,
-        v.is_default
+        (v.sku IS NOT NULL AND TRIM(v.sku) <> '') AS has_valid_sku
       FROM variants v
       JOIN shops s ON s.id = v.shop_id
-      WHERE v.sku IS NOT NULL
-        AND v.sku <> ''
+      WHERE v.is_default
+    ),
+    valid_defaults AS (
+      SELECT shop_id, shop_name, shop_base_url, tld, role, sku
+      FROM all_defaults
+      WHERE has_valid_sku
+    ),
+    sku_counts AS (
+      SELECT
+        shop_id,
+        sku,
+        COUNT(*) AS cnt
+      FROM valid_defaults
+      GROUP BY shop_id, sku
     ),
     shop_stats AS (
       SELECT
@@ -45,51 +59,35 @@ AS $$
         shop_base_url,
         tld,
         role,
-        COUNT(*) FILTER (WHERE is_default)             AS total_products,
-        COUNT(DISTINCT sku) FILTER (WHERE is_default)  AS unique_skus
-      FROM base
+        COUNT(*) AS total_products,
+        COUNT(*) FILTER (WHERE has_valid_sku) AS total_with_valid_sku
+      FROM all_defaults
       GROUP BY shop_id, shop_name, shop_base_url, tld, role
     ),
-    duplicates AS (
+    sku_agg AS (
       SELECT
         shop_id,
-        COUNT(*) AS duplicate_skus
-      FROM (
-        SELECT shop_id, sku
-        FROM base
-        WHERE is_default
-        GROUP BY shop_id, sku
-        HAVING COUNT(*) > 1
-      ) d
+        SUM(cnt) FILTER (WHERE cnt = 1)       AS unique_products,
+        COUNT(*) FILTER (WHERE cnt > 1)       AS duplicate_skus,
+        COALESCE(SUM(cnt) FILTER (WHERE cnt > 1), 0) AS duplicate_sku_counts
+      FROM sku_counts
       GROUP BY shop_id
     ),
     source_skus AS (
       SELECT DISTINCT sku
-      FROM base
+      FROM valid_defaults
       WHERE role = 'source'
-        AND is_default
     ),
     target_skus AS (
-      SELECT DISTINCT
-        shop_id,
-        sku
-      FROM base
+      SELECT DISTINCT shop_id, sku
+      FROM valid_defaults
       WHERE role = 'target'
-        AND is_default
     ),
     missing_per_target AS (
-      SELECT
-        t.shop_id,
-        COUNT(*) AS missing
-      FROM (
-        SELECT DISTINCT shop_id
-        FROM base
-        WHERE role = 'target'
-      ) t
+      SELECT t.shop_id, COUNT(*) AS missing
+      FROM (SELECT DISTINCT shop_id FROM valid_defaults WHERE role = 'target') t
       CROSS JOIN source_skus s
-      LEFT JOIN target_skus ts
-        ON ts.shop_id = t.shop_id
-       AND ts.sku = s.sku
+      LEFT JOIN target_skus ts ON ts.shop_id = t.shop_id AND ts.sku = s.sku
       WHERE ts.sku IS NULL
       GROUP BY t.shop_id
     )
@@ -99,14 +97,19 @@ AS $$
       ss.tld,
       ss.role,
       ss.total_products,
-      ss.unique_skus,
-      COALESCE(d.duplicate_skus, 0) AS duplicate_skus,
+      ss.total_with_valid_sku,
+      COALESCE(sa.unique_products, 0)        AS unique_products,
+      COALESCE(sa.duplicate_skus, 0)         AS duplicate_skus,
+      COALESCE(sa.duplicate_sku_counts, 0)   AS duplicate_sku_counts,
+      -- Products without valid SKU (all shops)
+      (ss.total_products - ss.total_with_valid_sku)   AS missing_no_sku,
+      -- Source SKUs that are missing in each target shop (targets only)
       CASE
-        WHEN ss.role = 'target'
-        THEN COALESCE(m.missing, 0)
-      END AS missing
+        WHEN ss.role = 'target' THEN COALESCE(m.missing, 0)
+        ELSE NULL
+      END AS missing_from_source
     FROM shop_stats ss
-    LEFT JOIN duplicates d ON d.shop_id = ss.shop_id
+    LEFT JOIN sku_agg sa ON sa.shop_id = ss.shop_id
     LEFT JOIN missing_per_target m ON m.shop_id = ss.shop_id
     ORDER BY ss.role, ss.tld
   ) t;
@@ -119,30 +122,29 @@ GRANT EXECUTE ON FUNCTION get_dashboard_kpis() TO authenticated;
 -- [
 --   {
 --     "shop_name": "VerpakkingenXL",
+--     "base_url": "https://www.example.nl",
 --     "tld": "nl",
 --     "role": "source",
 --     "total_products": 3289,
---     "unique_skus": 3274,
+--     "total_with_valid_sku": 3285,
+--     "unique_products": 3270,
 --     "duplicate_skus": 15,
---     "missing": null
---  },
+--     "duplicate_sku_counts": 31,
+--     "missing_no_sku": 4,
+--     "missing_from_source": null
+--   },
 --   {
 --     "shop_name": "VerpakkingenXL - BE",
+--     "base_url": "https://www.example.be",
 --     "tld": "be",
 --     "role": "target",
 --     "total_products": 3188,
---     "unique_skus": 3184,
+--     "total_with_valid_sku": 3184,
+--     "unique_products": 3180,
 --     "duplicate_skus": 4,
---     "missing": 199
---   },
---   {
---     "shop_name": "VerpackungenXL",
---     "tld": "de",
---     "role": "target",
---     "total_products": 3155,
---     "unique_skus": 3141,
---     "duplicate_skus": 14,
---     "missing": 170
+--     "duplicate_sku_counts": 8,
+--     "missing_no_sku": 4,
+--     "missing_from_source": 199
 --   }
 -- ]
 
