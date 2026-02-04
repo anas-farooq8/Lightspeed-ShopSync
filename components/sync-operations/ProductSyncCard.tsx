@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package, Tag, Layers } from 'lucide-react'
+import { Package, Layers, CheckCircle2, XCircle } from 'lucide-react'
 import type { SyncProduct } from './CreateTab'
 
 interface ProductSyncCardProps {
@@ -11,7 +11,7 @@ interface ProductSyncCardProps {
 }
 
 export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
-  // Use src image for better quality in card view
+  // Use src image for better quality in card view (as requested)
   const imageUrl = product.product_image?.src || product.product_image?.thumb || null
   
   // Get missing shops
@@ -19,8 +19,9 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
     .filter(([_, target]) => target.status === 'not_exists')
     .map(([tld]) => tld)
   
-  // If no targets at all, missing in all shops
-  const allMissing = !product.targets || Object.keys(product.targets).length === 0
+  // Missing in all shops when ALL targets have status 'not_exists'
+  const allTargetShops = Object.keys(product.targets || {})
+  const allMissing = missingShops.length === allTargetShops.length && missingShops.length > 0
 
   return (
     <Card
@@ -28,24 +29,35 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
       onClick={onClick}
     >
       <CardContent className="p-3">
-        {/* Image - Reduced size */}
-        <div className="w-full aspect-square mb-2 bg-muted rounded-md overflow-hidden flex items-center justify-center">
+        {/* Image - Fixed aspect ratio */}
+        <div className="w-full aspect-[4/3] mb-3 bg-muted rounded-md overflow-hidden flex items-center justify-center">
           {imageUrl ? (
             <img
               src={imageUrl}
               alt={product.product_title || 'Product'}
               className="w-full h-full object-contain"
+              loading="lazy"
+              onError={(e) => {
+                // Fallback if image fails to load
+                e.currentTarget.style.display = 'none'
+                e.currentTarget.parentElement!.innerHTML = '<div class="text-muted-foreground/50"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18v-6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6"/><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3"/></svg></div>'
+              }}
             />
           ) : (
-            <Package className="h-10 w-10 text-muted-foreground/50" />
+            <Package className="h-8 w-8 text-muted-foreground/50" />
           )}
         </div>
 
-        {/* SKU */}
-        <div className="mb-2">
+        {/* SKU with Duplicate Badge */}
+        <div className="mb-2 flex items-center gap-2">
           <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
             {product.default_sku}
           </code>
+          {product.source_has_duplicates && (
+            <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+              x{product.source_duplicate_count}
+            </Badge>
+          )}
         </div>
 
         {/* Product Title */}
@@ -61,7 +73,7 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
         )}
 
         {/* Variant Count & Price */}
-        <div className="flex items-center justify-between mb-2 text-xs">
+        <div className="flex items-center justify-between mb-3 text-xs">
           <div className="flex items-center gap-1.5">
             <Layers className="h-3 w-3 text-muted-foreground" />
             <span className="text-muted-foreground">
@@ -75,26 +87,23 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
           )}
         </div>
 
-        {/* Missing In Badges */}
-        <div className="flex flex-wrap gap-1">
-          {allMissing ? (
-            <Badge 
-              variant="outline" 
-              className="text-xs border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
-            >
-              All shops
-            </Badge>
-          ) : (
-            missingShops.map(tld => (
-              <Badge 
-                key={tld} 
-                variant="outline" 
-                className="text-xs border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300"
-              >
-                .{tld}
-              </Badge>
-            ))
-          )}
+        {/* Shop Status Indicators (like table view) */}
+        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+          {Object.entries(product.targets || {})
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([tld, targetInfo]) => {
+              const exists = targetInfo.status === 'exists_single' || targetInfo.status === 'exists_multiple'
+              return (
+                <div key={tld} className="flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
+                  {exists ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-red-600" />
+                  )}
+                </div>
+              )
+            })}
         </div>
       </CardContent>
     </Card>

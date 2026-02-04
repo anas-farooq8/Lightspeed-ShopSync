@@ -4,43 +4,82 @@
  * Represents a product from .nl (via its default variant)
  * and its sync status with .de and .be shops.
  * 
- * Matching logic: Products matched by variant SKU (default first, then non-default)
- * - .nl product ←→ .de/.be product
+ * Matching logic: Products matched by variant SKU
  * - First: match by DEFAULT variant SKU
- * - Fallback: match by NON-DEFAULT variant SKU (product exists but structured differently)
+ * - Fallback: match by NON-DEFAULT variant SKU (if not found in default)
+ * - Then: not_exists
+ * 
+ * View only includes products with VALID SKUs (excludes NULL/empty)
+ * 
+ * Data Source:
+ * - View: product_sync_status (direct view query)
+ * - RPC: get_sync_operations() (filtered with pagination)
  */
 export interface ProductSyncStatus {
-  // Source (.nl) - list display only; fetch full details on product/sync page
-  nl_default_variant_id: number
-  nl_product_id: number
-  default_sku: string  // 🔑 Matching key
-  price_excl: number | null
+  // Source identification
+  source_shop_id: string
+  source_shop_name: string
+  source_shop_tld: string
+  source_product_id: number
+  source_variant_id: number
+  default_sku: string  // 🔑 Matching key (always valid, never NULL)
+  
+  // Source display data
+  product_title: string | null
+  variant_title: string | null
   product_image: { title: string | null; thumb: string | null; src: string | null } | null
-  /** Lightspeed product timestamps (from `products`) */
+  price_excl: number | null
+  source_variant_count: number
   ls_created_at: string
   ls_updated_at: string
-  default_variant_title: string | null  // variant_content (default lang)
-  product_title: string | null         // product_content (default lang)
+  
+  // Source duplicate info
+  source_duplicate_count: number
+  source_has_duplicates: boolean
+  source_duplicate_product_ids: number[]
+  
+  // All target shops data (ALWAYS includes all target shops: be, de)
+  targets: {
+    [tld: string]: TargetShopStatus
+  }
+}
+
+/**
+ * Product Sync Status with Pagination Metadata
+ * 
+ * Extended version returned by get_sync_operations() RPC function.
+ * Includes pagination metadata that's the same for all rows in the result set.
+ */
+export interface ProductSyncStatusWithPagination extends ProductSyncStatus {
+  // Pagination metadata (same for all rows in result)
+  total_count: number
+  total_pages: number
+}
+
+/**
+ * Target shop sync status for a specific product
+ * Each target shop (be, de) will have this structure in the targets object
+ * 
+ * Matching logic:
+ * - First checks default variants
+ * - If not found, checks non-default variants (fallback)
+ * - If still not found, status is 'not_exists'
+ */
+export interface TargetShopStatus {
   shop_id: string
-  nl_variant_count: number
-
-  // Duplicate default SKU info
-  nl_duplicate_count: number
-  has_nl_duplicates: boolean
-
-  // .de match (default first, then non-default for structure mismatch)
-  de_match_count: number
-  de_product_ids: number[] | null
-  de_default_variant_ids: number[] | null
-  de_variant_counts: number[] | null
-  de_status: 'not_exists' | 'exists_single' | 'exists_multiple'
-
-  // .be match (default first, then non-default for structure mismatch)
-  be_match_count: number
-  be_product_ids: number[] | null
-  be_default_variant_ids: number[] | null
-  be_variant_counts: number[] | null
-  be_status: 'not_exists' | 'exists_single' | 'exists_multiple'
+  shop_name: string
+  shop_tld: string
+  
+  // Status based on matching
+  status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'unknown'
+  
+  // Match type (priority: default > non_default > no_match)
+  match_type: 'default_variant' | 'non_default_variant' | 'no_match'
+  
+  // Match counts
+  default_matches: number
+  non_default_matches: number
+  total_matches: number
 }
 
 /**

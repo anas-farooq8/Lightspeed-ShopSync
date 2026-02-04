@@ -4,7 +4,7 @@ node_modules/
 .pnp.js
 
 # Database Scripts
-scripts/04-data-insertion.sql
+scripts/05-data-insertion.sql
 
 # Documentation
 docs/

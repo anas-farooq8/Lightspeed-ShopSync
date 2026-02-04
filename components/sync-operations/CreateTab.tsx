@@ -5,27 +5,21 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, RefreshCw, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { ProductSyncCard } from '@/components/sync-operations/ProductSyncCard'
-import { ProductSyncTable } from '@/components/sync-operations/ProductSyncTable'
+import { ProductSyncTableGrouped } from '@/components/sync-operations/ProductSyncTableGrouped'
 
 export interface TargetShopInfo {
   shop_id: string
   shop_name: string
   shop_tld: string
+  status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'unknown'
+  match_type: 'default_variant' | 'non_default_variant' | 'no_match'
   default_matches: number
   non_default_matches: number
   total_matches: number
-  default_product_ids: number[]
-  default_variant_ids: number[]
-  non_default_product_ids: number[]
-  non_default_variant_ids: number[]
-  default_variant_counts: number[]
-  non_default_variant_counts: number[]
-  target_has_duplicates: boolean
-  target_sku_count: number
-  status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'null_sku' | 'unknown'
-  match_type: 'default_variant' | 'non_default_variant' | 'no_match'
 }
 
 export interface SyncProduct {
@@ -34,7 +28,7 @@ export interface SyncProduct {
   source_shop_tld: string
   source_product_id: number
   source_variant_id: number
-  default_sku: string | null
+  default_sku: string  // Always valid (never null)
   product_title: string
   variant_title: string
   product_image: any
@@ -42,11 +36,9 @@ export interface SyncProduct {
   source_variant_count: number
   ls_created_at: string
   ls_updated_at: string
-  source_sku_count: number
   source_duplicate_count: number
   source_has_duplicates: boolean
   source_duplicate_product_ids: number[]
-  is_null_sku: boolean
   targets: Record<string, TargetShopInfo>
 }
 
@@ -62,50 +54,56 @@ export function CreateTab() {
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
   const [filterLoading, setFilterLoading] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('') // Separate state for input
   const [missingIn, setMissingIn] = useState<string>('all')
+  const [onlyDuplicates, setOnlyDuplicates] = useState(false)
+  const [sortBy, setSortBy] = useState<'title' | 'sku' | 'variants' | 'price' | 'created'>('created')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const pageSize = 50
+  const pageSize = 100
 
-  // Fetch shops on mount
+  // Extract shops from products (no need for separate API call)
   useEffect(() => {
-    async function fetchShops() {
-      try {
-        const response = await fetch('/api/stats')
-        if (!response.ok) throw new Error('Failed to fetch shops')
-        const data = await response.json()
-        
-        // Sort: source first, then targets sorted by TLD
-        const sorted = Array.isArray(data) ? [...data].sort((a: any, b: any) => {
-          // Source shops come first
-          if (a.role === 'source' && b.role !== 'source') return -1
-          if (a.role !== 'source' && b.role === 'source') return 1
-          
-          // Both are targets, sort by TLD
-          return a.tld.localeCompare(b.tld)
-        }) : []
-        
-        setShops(sorted.map(s => ({
-          shop_id: s.shop_id || '',
-          shop_name: s.shop_name || '',
-          tld: s.tld || '',
-          role: s.role || ''
-        })))
-      } catch (err) {
-        console.error('Failed to fetch shops:', err)
-      }
+    if (products.length > 0) {
+      const shopsSet = new Map<string, Shop>()
+      
+      products.forEach(product => {
+        Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
+          if (!shopsSet.has(tld)) {
+            shopsSet.set(tld, {
+              shop_id: tld,
+              shop_name: targetInfo.shop_name,
+              tld: tld,
+              role: 'target'
+            })
+          }
+        })
+      })
+      
+      const sorted = Array.from(shopsSet.values()).sort((a, b) => 
+        a.tld.localeCompare(b.tld)
+      )
+      
+      setShops(sorted)
     }
-    
-    fetchShops()
-  }, [])
+  }, [products])
 
   useEffect(() => {
     fetchProducts()
-  }, [page, missingIn, search])
+  }, [page, missingIn, onlyDuplicates, sortBy, sortOrder])
+
+  // Separate useEffect for search (only triggers when search state changes, not searchInput)
+  useEffect(() => {
+    if (search !== '') {
+      fetchProducts()
+    }
+  }, [search])
 
   async function fetchProducts() {
     try {
@@ -115,6 +113,9 @@ export function CreateTab() {
         page: page.toString(),
         pageSize: pageSize.toString(),
         missingIn: missingIn,
+        onlyDuplicates: onlyDuplicates.toString(),
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       })
       
       if (search) params.append('search', search)
@@ -133,9 +134,59 @@ export function CreateTab() {
     }
   }
 
-  const handleSearchChange = (value: string) => {
-    setSearch(value)
+  const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
+    // Show loading state
+    setLoading(true)
+    
+    if (sortBy === column) {
+      // Toggle sort order
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      // New column, default to descending for created, ascending for others
+      setSortBy(column)
+      setSortOrder(column === 'created' ? 'desc' : 'asc')
+    }
+    setPage(1) // Reset to first page on sort change
+  }
+
+  const handleSearchSubmit = async () => {
+    if (searchInput === search) return // No change, don't refetch
+    
+    setSearchLoading(true)
+    setSearch(searchInput)
     setPage(1) // Reset to first page on search
+    
+    try {
+      const params = new URLSearchParams({
+        operation: 'create',
+        page: '1',
+        pageSize: pageSize.toString(),
+        missingIn: missingIn,
+        onlyDuplicates: onlyDuplicates.toString(),
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+      })
+      
+      if (searchInput) params.append('search', searchInput)
+
+      const response = await fetch(`/api/sync-operations?${params}`)
+      if (!response.ok) throw new Error('Failed to fetch products')
+      
+      const data = await response.json()
+      setProducts(data.products || [])
+      setTotalPages(data.pagination.totalPages)
+      setTotal(data.pagination.total)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load products')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit()
+    }
   }
 
   const handleMissingInChange = async (value: string) => {
@@ -192,69 +243,119 @@ export function CreateTab() {
       {/* Filters and Controls */}
       <Card className="border-border/50">
         <CardContent className="pt-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by product title or SKU..."
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-9 cursor-text"
-              />
+          <div className="flex flex-col gap-3">
+            {/* First Row: Search, Filter, View Toggle */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search with Button Inside */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by SKU, product title, or variant title..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
+                  className="pl-9 pr-24 cursor-text"
+                  disabled={searchLoading}
+                />
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSearchSubmit}
+                  disabled={searchLoading}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer bg-red-600 hover:bg-red-700 h-8"
+                >
+                  {searchLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Search'
+                  )}
+                </Button>
+              </div>
+
+              {/* Missing In Filter - Increased width */}
+              <Select value={missingIn} onValueChange={handleMissingInChange} disabled={filterLoading}>
+                <SelectTrigger 
+                  className="w-full sm:w-[280px] cursor-pointer"
+                  icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                >
+                  <SelectValue placeholder="Missing in..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="cursor-pointer">
+                    Missing in all shops
+                  </SelectItem>
+                  {shops
+                    .filter(shop => shop.role === 'target')
+                    .map((shop) => (
+                      <SelectItem 
+                        key={shop.shop_id} 
+                        value={shop.tld} 
+                        className="cursor-pointer"
+                      >
+                        Missing in {shop.shop_name} (.{shop.tld})
+                      </SelectItem>
+                    ))
+                  }
+                </SelectContent>
+              </Select>
+
+              {/* View Mode Toggle - Increased width */}
+              <div className="flex gap-1 border border-border rounded-md p-1">
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className={`cursor-pointer px-4 ${
+                    viewMode === 'table' 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : ''
+                  }`}
+                >
+                  <List className="h-4 w-4 mr-2" />
+                  Table
+                </Button>
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                  className={`cursor-pointer px-4 ${
+                    viewMode === 'grid' 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : ''
+                  }`}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-2" />
+                  Grid
+                </Button>
+              </div>
             </div>
 
-            {/* Missing In Filter */}
-            <Select value={missingIn} onValueChange={handleMissingInChange} disabled={filterLoading}>
-              <SelectTrigger 
-                className="w-full sm:w-[220px] cursor-pointer"
-                icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-              >
-                <SelectValue placeholder="Missing in..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="cursor-pointer">
-                  Missing in all shops
-                </SelectItem>
-                {shops
-                  .filter(shop => shop.role === 'target')
-                  .map((shop) => (
-                    <SelectItem 
-                      key={shop.shop_id} 
-                      value={shop.tld} 
-                      className="cursor-pointer"
-                    >
-                      Missing in {shop.shop_name} (.{shop.tld})
-                    </SelectItem>
-                  ))
-                }
-              </SelectContent>
-            </Select>
+            {/* Second Row: Duplicate Filter & Results Count */}
+            <div className="flex items-center justify-between">
+              {/* Duplicate Filter Checkbox */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="only-duplicates"
+                  checked={onlyDuplicates}
+                  onCheckedChange={(checked: boolean) => {
+                    setOnlyDuplicates(checked === true)
+                    setPage(1)
+                  }}
+                  className="cursor-pointer"
+                />
+                <Label
+                  htmlFor="only-duplicates"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Show only duplicates
+                </Label>
+              </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex gap-1 border border-border rounded-md p-1">
-              <Button
-                variant={viewMode === 'table' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('table')}
-                className="cursor-pointer"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('grid')}
-                className="cursor-pointer"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
+              {/* Results count */}
+              <div className="text-sm text-muted-foreground">
+                Showing {products.length > 0 ? ((page - 1) * pageSize) + 1 : 0} - {Math.min(page * pageSize, total)} of {total.toLocaleString()} products
+              </div>
             </div>
-          </div>
-
-          {/* Results count */}
-          <div className="mt-3 text-sm text-muted-foreground">
-            Showing {products.length > 0 ? ((page - 1) * pageSize) + 1 : 0} - {Math.min(page * pageSize, total)} of {total.toLocaleString()} products
           </div>
         </CardContent>
       </Card>
@@ -267,8 +368,12 @@ export function CreateTab() {
           </CardContent>
         </Card>
       ) : viewMode === 'table' ? (
-        <ProductSyncTable 
-          products={products} 
+        <ProductSyncTableGrouped 
+          products={products}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          loading={loading}
+          onSort={handleSort}
           onProductClick={() => {}}
         />
       ) : (
@@ -283,11 +388,24 @@ export function CreateTab() {
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Beautiful Pagination */}
       {totalPages > 1 && (
         <Card className="border-border/50">
-          <CardContent className="py-3">
-            <div className="flex items-center justify-between">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-center gap-1">
+              {/* First Page Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(1)}
+                disabled={page === 1 || loading}
+                className="cursor-pointer"
+                title="First page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+
+              {/* Previous Button */}
               <Button
                 variant="outline"
                 size="sm"
@@ -298,11 +416,73 @@ export function CreateTab() {
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
-              
-              <div className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-1 mx-2">
+                {(() => {
+                  const pages: (number | string)[] = []
+                  const showPages = 5 // Number of page buttons to show
+                  
+                  if (totalPages <= showPages + 2) {
+                    // Show all pages if total is small
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(i)
+                    }
+                  } else {
+                    // Always show first page
+                    pages.push(1)
+                    
+                    if (page > 3) {
+                      pages.push('...')
+                    }
+                    
+                    // Show pages around current page
+                    const start = Math.max(2, page - 1)
+                    const end = Math.min(totalPages - 1, page + 1)
+                    
+                    for (let i = start; i <= end; i++) {
+                      pages.push(i)
+                    }
+                    
+                    if (page < totalPages - 2) {
+                      pages.push('...')
+                    }
+                    
+                    // Always show last page
+                    pages.push(totalPages)
+                  }
+                  
+                  return pages.map((pageNum, idx) => {
+                    if (pageNum === '...') {
+                      return (
+                        <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                          ...
+                        </span>
+                      )
+                    }
+                    
+                    const isCurrentPage = pageNum === page
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={isCurrentPage ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPage(pageNum as number)}
+                        disabled={loading}
+                        className={`cursor-pointer min-w-[40px] ${
+                          isCurrentPage 
+                            ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' 
+                            : 'hover:bg-red-50 hover:border-red-300'
+                        }`}
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })
+                })()}
               </div>
-              
+
+              {/* Next Button */}
               <Button
                 variant="outline"
                 size="sm"
@@ -312,6 +492,18 @@ export function CreateTab() {
               >
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+
+              {/* Last Page Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(totalPages)}
+                disabled={page === totalPages || loading}
+                className="cursor-pointer"
+                title="Last page"
+              >
+                <ChevronsRight className="h-4 w-4" />
               </Button>
             </div>
           </CardContent>

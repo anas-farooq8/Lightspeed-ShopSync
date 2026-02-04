@@ -75,6 +75,9 @@ create table products (
 create index idx_products_shop
   on products (shop_id);
 
+-- For sorting by creation date (used in sync operations RPC)
+create index idx_products_created_at on products (ls_created_at DESC);
+
 -- RLS: Products
 -- Note: All authenticated users are manually-created admins with full access
 alter table products enable row level security;
@@ -159,13 +162,23 @@ create table variants (
   foreign key (shop_id, lightspeed_product_id) references products(shop_id, lightspeed_product_id) on delete cascade
 );
 
--- SKU index for searching (no uniqueness constraint due to duplicate SKUs in Lightspeed)
--- KPI-critical indexes
-create index idx_variants_default_shop_sku on variants (shop_id, sku) where is_default;
-create index idx_variants_default_sku on variants (sku) where is_default;
+-- =====================================================
+-- PERFORMANCE-CRITICAL INDEXES FOR VARIANTS
+-- =====================================================
+-- These indexes are essential for view and RPC performance
 
-create index idx_variants_product
-  on variants (shop_id, lightspeed_product_id);
+-- 1. Composite index for shop + default + SKU lookups
+create index idx_variants_shop_default_sku on variants (shop_id, is_default, sku);
+-- 2. Default variant SKU index (for source product filtering)
+create index idx_variants_default_sku on variants (sku) where is_default;
+-- 3. FUNCTIONAL INDEX on trimmed SKU (eliminates runtime TRIM())
+-- This is critical for matching performance as it allows index-only scans
+create index idx_variants_trimmed_sku on variants (TRIM(sku)) where sku is not null;
+-- 4. FUNCTIONAL INDEX on trimmed SKU for default variants only
+-- Most important for CREATE/EDIT operations
+create index idx_variants_trimmed_sku_default on variants (TRIM(sku)) where is_default = true and sku is not null;
+-- 5. Product-level index (for variant counting)
+create index idx_variants_product on variants (shop_id, lightspeed_product_id);
 
 -- RLS: Variants
 -- Note: All authenticated users are manually-created admins with full access
@@ -226,7 +239,6 @@ create policy "Authenticated users can update variant content"
   to authenticated
   using ((select auth.uid()) is not null)
   with check ((select auth.uid()) is not null);
-
 
 
 -- =========================

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import type { ProductSyncStatus } from '@/types/database'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,110 +9,63 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
 
-    // Pagination
+    // Pagination (updated to 100 per page)
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '50')
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
+    const pageSize = parseInt(searchParams.get('pageSize') || '100')
 
     // Filters
     const operation = searchParams.get('operation') || 'create' // create, edit, null_sku
-    const missingIn = searchParams.get('missingIn') || 'all' // be, de, all (for create)
+    const missingIn = searchParams.get('missingIn') || 'be' // be, de, all (for create)
     const search = searchParams.get('search') || ''
+    const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
+    
+    // Sorting
+    const sortBy = searchParams.get('sortBy') || 'title' // title, sku, variants, price
+    const sortOrder = searchParams.get('sortOrder') || 'asc' // asc, desc
 
-    // Build base query
-    let query = supabase
-      .from('product_sync_status')
-      .select('*', { count: 'exact' })
-
-    // Apply filters based on operation type
-    switch (operation) {
-      case 'create':
-        // For CREATE: only non-null source products
-        // Note: Include duplicates - they'll be grouped in UI
-        query = query.eq('is_null_sku', false)
-        break
-
-      case 'edit':
-        // For EDIT: only non-null, products that exist in at least one target
-        query = query.eq('is_null_sku', false)
-        break
-
-      case 'null_sku':
-        // For NULL SKU: only products with null default_sku
-        query = query.eq('is_null_sku', true)
-        break
+    // NULL SKU operation - view doesn't include NULL SKUs
+    // TODO: Implement separate handling for NULL SKU products
+    if (operation === 'null_sku') {
+      return NextResponse.json({
+        products: [],
+        pagination: { page, pageSize, total: 0, totalPages: 0 },
+      })
     }
 
-    // Search filter (product title or SKU)
-    if (search) {
-      if (operation === 'null_sku') {
-        // For NULL SKU, only search by product title
-        query = query.ilike('product_title', `%${search}%`)
-      } else {
-        query = query.or(`product_title.ilike.%${search}%,default_sku.ilike.%${search}%`)
-      }
-    }
-
-    // Ordering
-    query = query.order('product_title', { ascending: true, nullsFirst: false })
-
-    // Fetch data
-    const { data: allData, error } = await query
+    // Call optimized RPC function for CREATE and EDIT operations
+    const { data, error } = await supabase.rpc('get_sync_operations', {
+      p_operation: operation,
+      p_missing_in: operation === 'create' ? missingIn : null,
+      p_search: search || null,
+      p_only_duplicates: onlyDuplicates,
+      p_sort_by: sortBy,
+      p_sort_order: sortOrder,
+      p_page: page,
+      p_page_size: pageSize
+    })
 
     if (error) {
       console.error('Error fetching sync operations:', error)
       return NextResponse.json(
-        { error: 'Failed to fetch products' },
+        { error: 'Failed to fetch products', details: error.message },
         { status: 500 }
       )
     }
 
-    // Post-process filtering based on targets JSON and operation
-    let filteredData = allData || []
-    
-    if (operation === 'create') {
-      // Filter by missing in specific shops
-      filteredData = filteredData.filter(product => {
-        const targets = product.targets || {}
-        
-        if (Object.keys(targets).length === 0) {
-          // No targets at all means missing in all shops
-          return missingIn === 'all'
-        }
-        
-        if (missingIn === 'all') {
-          // Missing in ALL target shops
-          return Object.values(targets).every((t: any) => t.status === 'not_exists')
-        } else {
-          // Missing in specific shop
-          return !targets[missingIn] || targets[missingIn].status === 'not_exists'
-        }
-      })
-    } else if (operation === 'edit') {
-      // For EDIT: filter to show only products that exist in at least one target
-      filteredData = filteredData.filter(product => {
-        const targets = product.targets || {}
-        if (Object.keys(targets).length === 0) return false
-        
-        // Must have at least one target with status 'exists_single' or 'exists_multiple'
-        return Object.values(targets).some((t: any) => 
-          t.status === 'exists_single' || t.status === 'exists_multiple'
-        )
-      })
-    }
+    // Extract pagination metadata from first row (all rows have same values)
+    const totalCount = data && data.length > 0 ? data[0].total_count : 0
+    const totalPages = data && data.length > 0 ? data[0].total_pages : 0
 
-    // Apply pagination to filtered data
-    const total = filteredData.length
-    const paginatedData = filteredData.slice(from, to + 1)
+    // Transform data: remove pagination metadata from product objects
+    const products = (data || []).map(({ total_count, total_pages, ...product }: any) => product)
 
     return NextResponse.json({
-      products: paginatedData,
+      products,
       pagination: {
         page,
         pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
+        total: totalCount,
+        totalPages,
       },
     })
   } catch (error) {
