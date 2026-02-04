@@ -18,8 +18,6 @@ create table shops (
 );
 
 create unique index idx_shops_store_number on shops (store_number);
-create index idx_shops_tld on shops (tld);
-create index idx_shops_role on shops (role);
 
 -- RLS: Shops
 alter table shops enable row level security;
@@ -27,7 +25,7 @@ alter table shops enable row level security;
 create policy "Authenticated users can read shops"
   on shops for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 
 -- =========================
@@ -51,7 +49,7 @@ alter table shop_languages enable row level security;
 create policy "Authenticated users can read shop languages"
   on shop_languages for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 
 -- =========================
@@ -83,18 +81,18 @@ alter table products enable row level security;
 create policy "Authenticated users can read products"
   on products for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 create policy "Authenticated users can insert products"
   on products for insert
   to authenticated
-  with check (true);
+  with check ((select auth.uid()) is not null);
 
 create policy "Authenticated users can update products"
   on products for update
   to authenticated
-  using (true)
-  with check (true);
+  using ((select auth.uid()) is not null)
+  with check ((select auth.uid()) is not null);
 
 
 -- =========================
@@ -127,18 +125,18 @@ alter table product_content enable row level security;
 create policy "Authenticated users can read product content"
   on product_content for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 create policy "Authenticated users can insert product content"
   on product_content for insert
   to authenticated
-  with check (true);
+  with check ((select auth.uid()) is not null);
 
 create policy "Authenticated users can update product content"
   on product_content for update
   to authenticated
-  using (true)
-  with check (true);
+  using ((select auth.uid()) is not null)
+  with check ((select auth.uid()) is not null);
 
 
 -- =========================
@@ -177,18 +175,18 @@ alter table variants enable row level security;
 create policy "Authenticated users can read variants"
   on variants for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 create policy "Authenticated users can insert variants"
   on variants for insert
   to authenticated
-  with check (true);
+  with check ((select auth.uid()) is not null);
 
 create policy "Authenticated users can update variants"
   on variants for update
   to authenticated
-  using (true)
-  with check (true);
+  using ((select auth.uid()) is not null)
+  with check ((select auth.uid()) is not null);
 
 
 -- =========================
@@ -217,18 +215,18 @@ alter table variant_content enable row level security;
 create policy "Authenticated users can read variant content"
   on variant_content for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 create policy "Authenticated users can insert variant content"
   on variant_content for insert
   to authenticated
-  with check (true);
+  with check ((select auth.uid()) is not null);
 
 create policy "Authenticated users can update variant content"
   on variant_content for update
   to authenticated
-  using (true)
-  with check (true);
+  using ((select auth.uid()) is not null)
+  with check ((select auth.uid()) is not null);
 
 
 
@@ -304,7 +302,7 @@ alter table sync_logs enable row level security;
 create policy "Authenticated users can read sync logs"
   on sync_logs for select
   to authenticated
-  using (true);
+  using ((select auth.uid()) is not null);
 
 
 -- =========================
