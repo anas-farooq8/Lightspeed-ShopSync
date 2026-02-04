@@ -18,6 +18,7 @@ create table shops (
 );
 
 create unique index idx_shops_store_number on shops (store_number);
+CREATE INDEX IF NOT EXISTS idx_shops_role ON shops (role);
 
 -- RLS: Shops
 alter table shops enable row level security;
@@ -159,11 +160,9 @@ create table variants (
 );
 
 -- SKU index for searching (no uniqueness constraint due to duplicate SKUs in Lightspeed)
-CREATE INDEX idx_variants_shop_sku ON variants (shop_id, sku)
-  WHERE sku IS NOT NULL AND sku != '';
-
-CREATE INDEX idx_variants_sku ON variants (sku)
-  WHERE sku IS NOT NULL AND sku != '';
+-- KPI-critical indexes
+create index idx_variants_default_shop_sku on variants (shop_id, sku) where is_default;
+create index idx_variants_default_sku on variants (sku) where is_default;
 
 create index idx_variants_product
   on variants (shop_id, lightspeed_product_id);

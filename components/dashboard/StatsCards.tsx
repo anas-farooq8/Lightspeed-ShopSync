@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Store } from 'lucide-react'
+import { Loader2, Store, Activity } from 'lucide-react'
 import type { DashboardKpi } from '@/types/database'
 
 export function StatsCards() {
@@ -23,7 +23,18 @@ export function StatsCards() {
         const response = await fetch('/api/stats')
         if (!response.ok) throw new Error('Failed to fetch stats')
         const data = await response.json()
-        setKpis(Array.isArray(data) ? data : [])
+        
+        // Sort: source first, then targets sorted by TLD
+        const sorted = Array.isArray(data) ? [...data].sort((a, b) => {
+          // Source shops come first
+          if (a.role === 'source' && b.role !== 'source') return -1
+          if (a.role !== 'source' && b.role === 'source') return 1
+          
+          // Both are targets, sort by TLD
+          return a.tld.localeCompare(b.tld)
+        }) : []
+        
+        setKpis(sorted)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load statistics')
       } finally {
@@ -34,125 +45,121 @@ export function StatsCards() {
     fetchStats()
   }, [])
 
-  if (loading) {
-    return (
-      <div className="grid gap-4 mb-8">
+  return (
+    <div className="mb-6">
+      {/* KPI Section Heading - always visible */}
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Activity className="h-5 w-5 text-muted-foreground" />
+          Shop Statistics
+        </h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Product inventory and SKU metrics across all shops
+        </p>
+      </div>
+
+      {loading ? (
         <Card className="border-border/50">
           <CardContent className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="grid gap-4 mb-8">
+      ) : error ? (
         <Card className="border-destructive/50">
-          <CardContent className="flex items-center justify-center py-12 text-destructive">
+          <CardContent className="flex items-center justify-center py-12 text-destructive text-base">
             {error}
           </CardContent>
         </Card>
-      </div>
-    )
-  }
-
-  if (kpis.length === 0) {
-    return (
-      <div className="grid gap-4 mb-8">
+      ) : kpis.length === 0 ? (
         <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-12 text-muted-foreground">
+          <CardContent className="flex items-center justify-center py-12 text-muted-foreground text-base">
             No shop data available
           </CardContent>
         </Card>
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid gap-2 mb-2 w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-      {kpis.map((kpi) => (
-        <Card
-          key={`${kpi.shop_name}-${kpi.tld}`}
-          className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md"
-        >
-          <CardHeader className="py-2 px-4">
-            <div className="flex items-center gap-2">
-              <Store className="h-5 w-5 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <CardTitle className="text-base font-semibold truncate">
-                  {(() => {
-                    const href = toSafeExternalHref(kpi.base_url)
-                    if (!href) return kpi.shop_name
-                    return (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline underline-offset-2"
-                        title={kpi.base_url}
-                      >
-                        {kpi.shop_name}
-                      </a>
-                    )
-                  })()}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {kpi.role} · .{kpi.tld}
-                </p>
+      ) : (
+      <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        {kpis.map((kpi) => (
+          <Card
+            key={`${kpi.shop_name}-${kpi.tld}`}
+            className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md"
+          >
+            <CardHeader className="py-2 px-4">
+              <div className="flex items-center gap-2">
+                <Store className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-base font-semibold truncate">
+                    {(() => {
+                      const href = toSafeExternalHref(kpi.base_url)
+                      if (!href) return kpi.shop_name
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline underline-offset-2"
+                          title={kpi.base_url}
+                        >
+                          {kpi.shop_name}
+                        </a>
+                      )
+                    })()}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {kpi.role} · .{kpi.tld}
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-1 pb-2 px-4">
-            <div className="mb-2">
-              <div className="text-2xl font-bold">{kpi.total_products.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">Total Products</div>
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">With valid SKU:</span>
-                <span className="font-medium">{kpi.total_with_valid_sku.toLocaleString()}</span>
+            </CardHeader>
+            <CardContent className="pt-1 pb-2 px-4">
+              <div className="mb-2">
+                <div className="text-2xl font-bold">{kpi.total_products.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">Total Products</div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Unique (SKU count=1):</span>
-                <span className="font-medium">{kpi.unique_products.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Duplicate SKUs:</span>
-                <span
-                  className={`font-medium ${kpi.duplicate_skus > 0 ? 'text-yellow-600' : ''}`}
-                  title={`${kpi.duplicate_sku_counts} total duplicate rows`}
-                >
-                  {kpi.duplicate_skus} ({kpi.duplicate_sku_counts})
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Missing (no SKU):</span>
-                <span
-                  className={`font-medium ${
-                    kpi.missing_no_sku > 0 ? 'text-red-600' : 'text-green-600'
-                  }`}
-                >
-                  {kpi.missing_no_sku}
-                </span>
-              </div>
-              {kpi.role === 'target' && kpi.missing_from_source != null && (
+              <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Missing from source:</span>
+                  <span className="text-muted-foreground">Products with valid SKU:</span>
+                  <span className="font-medium">{kpi.total_with_valid_sku.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Unique Products:</span>
+                  <span className="font-medium">{kpi.unique_products.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Duplicate SKUs:</span>
                   <span
-                    className={`font-medium ${
-                      kpi.missing_from_source > 0 ? 'text-red-600' : 'text-green-600'
-                    }`}
+                    className={`font-medium ${kpi.duplicate_skus > 0 ? 'text-yellow-600' : ''}`}
                   >
-                    {kpi.missing_from_source}
+                    {kpi.duplicate_skus}
                   </span>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Missing (no SKU):</span>
+                  <span
+                    className={`font-medium ${
+                      kpi.missing_no_sku > 0 ? 'text-red-600' : 'text-green-600'
+                    }`}
+                  >
+                    {kpi.missing_no_sku}
+                  </span>
+                </div>
+                {kpi.role === 'target' && kpi.missing_from_source != null && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Missing from source:</span>
+                    <span
+                      className={`font-medium ${
+                        kpi.missing_from_source > 0 ? 'text-red-600' : 'text-green-600'
+                      }`}
+                    >
+                      {kpi.missing_from_source}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      )}
     </div>
   )
 }

@@ -5,9 +5,8 @@
 --   Returns per-shop product KPIs for dashboard display:
 --     - total_products: all default variants
 --     - total_with_valid_sku: default variants with non-empty SKU
---     - unique_products: products where SKU appears exactly once (no duplicate)
---     - duplicate_skus: count of distinct SKUs that appear more than once
---     - duplicate_sku_counts: total product rows that have duplicate SKUs
+--     - unique_products: count of distinct SKUs (unique products from valid ones)
+--     - duplicate_skus: number of distinct SKUs that are duplicated (not their total count)
 --     - missing_no_sku: products without valid SKU (all shops)
 --     - missing_from_source: source SKUs not present in target shops
 --
@@ -34,7 +33,7 @@ AS $$
         s.tld,
         s.role,
         v.sku,
-        (v.sku IS NOT NULL AND TRIM(v.sku) <> '') AS has_valid_sku
+        (btrim(v.sku) <> '') AS has_valid_sku
       FROM variants v
       JOIN shops s ON s.id = v.shop_id
       WHERE v.is_default
@@ -60,16 +59,15 @@ AS $$
         tld,
         role,
         COUNT(*) AS total_products,
-        COUNT(*) FILTER (WHERE has_valid_sku) AS total_with_valid_sku
+        COUNT(*) FILTER (WHERE has_valid_sku) AS total_with_valid_sku,
+        COUNT(DISTINCT sku) FILTER (WHERE has_valid_sku) AS unique_products
       FROM all_defaults
       GROUP BY shop_id, shop_name, shop_base_url, tld, role
     ),
     sku_agg AS (
       SELECT
         shop_id,
-        SUM(cnt) FILTER (WHERE cnt = 1)       AS unique_products,
-        COUNT(*) FILTER (WHERE cnt > 1)       AS duplicate_skus,
-        COALESCE(SUM(cnt) FILTER (WHERE cnt > 1), 0) AS duplicate_sku_counts
+        COUNT(*) FILTER (WHERE cnt > 1) AS duplicate_skus
       FROM sku_counts
       GROUP BY shop_id
     ),
@@ -98,9 +96,8 @@ AS $$
       ss.role,
       ss.total_products,
       ss.total_with_valid_sku,
-      COALESCE(sa.unique_products, 0)        AS unique_products,
+      COALESCE(ss.unique_products, 0)       AS unique_products,
       COALESCE(sa.duplicate_skus, 0)         AS duplicate_skus,
-      COALESCE(sa.duplicate_sku_counts, 0)   AS duplicate_sku_counts,
       -- Products without valid SKU (all shops)
       (ss.total_products - ss.total_with_valid_sku)   AS missing_no_sku,
       -- Source SKUs that are missing in each target shop (targets only)
@@ -127,9 +124,8 @@ GRANT EXECUTE ON FUNCTION get_dashboard_kpis() TO authenticated;
 --     "role": "source",
 --     "total_products": 3289,
 --     "total_with_valid_sku": 3285,
---     "unique_products": 3270,
+--     "unique_products": 3280,
 --     "duplicate_skus": 15,
---     "duplicate_sku_counts": 31,
 --     "missing_no_sku": 4,
 --     "missing_from_source": null
 --   },
@@ -140,9 +136,8 @@ GRANT EXECUTE ON FUNCTION get_dashboard_kpis() TO authenticated;
 --     "role": "target",
 --     "total_products": 3188,
 --     "total_with_valid_sku": 3184,
---     "unique_products": 3180,
+--     "unique_products": 3184,
 --     "duplicate_skus": 4,
---     "duplicate_sku_counts": 8,
 --     "missing_no_sku": 4,
 --     "missing_from_source": 199
 --   }
@@ -262,3 +257,111 @@ GRANT EXECUTE ON FUNCTION get_sync_log_dates_paginated(UUID, TEXT, INTEGER, INTE
 --     that match the filters, used for calculating total pages
 --   - The API layer uses: totalPages = Math.ceil(total_count / limit)
 -- =====================================================
+
+-- =====================================================
+-- GET LAST SYNC INFO FUNCTION
+--
+-- Purpose:
+--   Returns the most recent sync operation for each shop
+--   with detailed metrics for dashboard display.
+--
+-- Characteristics:
+--   - One row per shop
+--   - Shows last completed sync (not currently running ones)
+--   - Includes all metrics (products fetched/synced/deleted, duration, etc.)
+--   - Sorted by shop role and TLD
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION get_last_sync_info()
+RETURNS json
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.tld), '[]'::json)
+  FROM (
+    WITH ranked_syncs AS (
+      SELECT
+        sl.*,
+        s.name AS shop_name,
+        s.tld,
+        s.role,
+        s.base_url,
+        ROW_NUMBER() OVER (
+          PARTITION BY sl.shop_id 
+          ORDER BY sl.started_at DESC
+        ) AS rn
+      FROM sync_logs sl
+      JOIN shops s ON s.id = sl.shop_id
+      WHERE sl.status IN ('success', 'error')  -- Only completed syncs
+        AND sl.completed_at IS NOT NULL
+    )
+    SELECT
+      shop_id,
+      shop_name,
+      tld,
+      role,
+      base_url,
+      started_at,
+      completed_at,
+      duration_seconds,
+      status::text,
+      error_message,
+      products_fetched,
+      variants_fetched,
+      products_synced,
+      variants_synced,
+      products_deleted,
+      variants_deleted,
+      variants_filtered
+    FROM ranked_syncs
+    WHERE rn = 1
+    ORDER BY role, tld
+  ) t;
+$$;
+
+-- Grant access
+GRANT EXECUTE ON FUNCTION get_last_sync_info() TO authenticated;
+
+-- Example Response:
+-- [
+--   {
+--     "shop_id": "123e4567-e89b-12d3-a456-426614174000",
+--     "shop_name": "VerpakkingenXL",
+--     "tld": "nl",
+--     "role": "source",
+--     "base_url": "https://www.verpakkingenxl.nl",
+--     "started_at": "2026-02-04T10:30:00Z",
+--     "completed_at": "2026-02-04T10:32:15Z",
+--     "duration_seconds": 135.23,
+--     "status": "success",
+--     "error_message": null,
+--     "products_fetched": 3289,
+--     "variants_fetched": 4521,
+--     "products_synced": 3289,
+--     "variants_synced": 4521,
+--     "products_deleted": 5,
+--     "variants_deleted": 12,
+--     "variants_filtered": 3
+--   },
+--   {
+--     "shop_id": "234e5678-e89b-12d3-a456-426614174001",
+--     "shop_name": "VerpakkingenXL - BE",
+--     "tld": "be",
+--     "role": "target",
+--     "base_url": "https://www.verpakkingenxl.be",
+--     "started_at": "2026-02-04T10:35:00Z",
+--     "completed_at": "2026-02-04T10:36:45Z",
+--     "duration_seconds": 105.67,
+--     "status": "success",
+--     "error_message": null,
+--     "products_fetched": 3188,
+--     "variants_fetched": 4201,
+--     "products_synced": 3188,
+--     "variants_synced": 4201,
+--     "products_deleted": 2,
+--     "variants_deleted": 8,
+--     "variants_filtered": 1
+--   }
+-- ]

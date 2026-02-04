@@ -59,12 +59,10 @@ export interface DashboardKpi {
   total_products: number
   /** Default variants with non-empty SKU */
   total_with_valid_sku: number
-  /** Products where SKU appears exactly once (no duplicate) */
+  /** Count of distinct SKUs (unique products from valid ones) */
   unique_products: number
-  /** Count of distinct SKUs that appear more than once */
+  /** Number of distinct SKUs that are duplicated */
   duplicate_skus: number
-  /** Total product rows that have duplicate SKUs */
-  duplicate_sku_counts: number
   /** Products without valid SKU (all shops) */
   missing_no_sku: number
   /** Source SKUs not present in this target shop; null for source shops */

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, LayoutDashboard, RefreshCw, LogOut, User } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LayoutDashboard, RefreshCw, LogOut, User, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -69,6 +69,7 @@ export function Sidebar() {
 
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { href: '/dashboard/sync-operations', icon: ArrowLeftRight, label: 'Sync Operations' },
     { href: '/dashboard/sync', icon: RefreshCw, label: 'Sync Status' },
   ]
 
@@ -97,10 +98,8 @@ export function Sidebar() {
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 px-3 py-4 overflow-y-auto">
           {navItems.map((item) => {
-            // Exact match for /dashboard, prefix match for others
-            const isActive = item.href === '/dashboard' 
-              ? pathname === '/dashboard'
-              : pathname.startsWith(item.href)
+            // Exact match for all routes to prevent multiple active states
+            const isActive = pathname === item.href
             const Icon = item.icon
             
             return (

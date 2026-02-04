@@ -1,120 +1,381 @@
 -- =====================================================
 -- PRODUCT SYNC STATUS VIEW (Product-Level Sync)
 -- =====================================================
--- Minimal: only list-display data. Fetch full details on product/sync page.
--- Source: .nl, default language. Matching: default first, then non-default.
--- Structure mismatch: .nl 5 products (1 var each) → .be 1 product (5 vars):
---   all 5 match same .be product via tb_non (non-default variant fallback).
+-- Comprehensive view that handles all sync scenarios:
 --
--- MATCHING LOGIC (target_matches CTE + COALESCE in SELECT):
---   1. Match by DEFAULT variant SKU first (def_*)
---   2. Fallback: match by NON-DEFAULT variant SKU if no default match (non_def_*)
---   3. COALESCE(td.def_*, td.non_def_*) picks default first, then non-default
+-- CREATE SCENARIOS:
+--   a. Source unique SKU doesn't exist in target → simple create
+--   b. Source has duplicate SKUs → grouped, user selects source
+--
+-- EDIT SCENARIOS (with matching priority):
+--   Matching Logic: 1) Default variant, 2) Non-default variant, 3) Not exists
+--
+--   1-1: Source unique SKU matches target unique SKU (default OR non-default)
+--        → show with indicators
+--
+--   M-1: Source has multiple SKUs (duplicates), target has one match 
+--        (default OR non-default) → user selects source product
+--
+--   1-M: Source unique SKU, target has multiple matches 
+--        (default OR non-default) → user selects target product
+--
+--   M-M: Both source and target have multiple matches 
+--        → user selects both source and target products
+--
+-- NULL SKU SCENARIOS:
+--   - Products with NULL default_sku → separate handling (not for sync)
+--
+-- ROW STRUCTURE:
+--   One row per source product with all target match information
+--   Target matches include both default and non-default variant matches
 -- =====================================================
 
 DROP VIEW IF EXISTS product_sync_status;
 
--- Optimized: single base scan, conditional aggregation per (tld, sku), 2 joins instead of 4
 CREATE VIEW product_sync_status AS
-WITH variant_counts_de_be AS (
-    SELECT v.shop_id, v.lightspeed_product_id, count(*)::int AS cnt
-    FROM variants v
-    INNER JOIN shops s ON s.id = v.shop_id
-    WHERE s.tld IN ('de', 'be')
-    GROUP BY v.shop_id, v.lightspeed_product_id
+WITH 
+-- -----------------------------------------------------
+-- All shops info
+-- -----------------------------------------------------
+shops_info AS (
+    SELECT id, name, tld, role
+    FROM shops
 ),
-base AS (
-    SELECT v.shop_id, v.lightspeed_variant_id, v.lightspeed_product_id, v.sku,
-        v.price_excl, v.is_default, v.updated_at, s.tld,
-        vc.cnt AS product_variant_count
-    FROM variants v
-    INNER JOIN shops s ON s.id = v.shop_id
-    LEFT JOIN variant_counts_de_be vc ON vc.shop_id = v.shop_id AND vc.lightspeed_product_id = v.lightspeed_product_id
-    WHERE s.tld IN ('nl', 'de', 'be') AND v.sku IS NOT NULL AND v.sku != ''
-),
--- NL default products: driver set (smallest)
-nl_base AS (
-    SELECT 
-        b.lightspeed_variant_id AS nl_default_variant_id,
-        b.lightspeed_product_id AS nl_product_id,
-        b.sku AS default_sku,
-        b.price_excl,
-        -- Lightspeed timestamps (from products table)
+
+-- -----------------------------------------------------
+-- ALL source products (including those with NULL SKU)
+-- -----------------------------------------------------
+source_products AS (
+    SELECT
+        s.id                          AS shop_id,
+        s.name                        AS shop_name,
+        s.tld                         AS shop_tld,
+        v.lightspeed_product_id,
+        v.lightspeed_variant_id,
+        CASE 
+            WHEN v.sku IS NULL OR btrim(v.sku) = '' THEN NULL
+            ELSE btrim(v.sku)
+        END                           AS default_sku,
+        v.price_excl,
+        p.image                       AS product_image,
         p.ls_created_at,
         p.ls_updated_at,
-        vc.title AS default_variant_title,
-        pc.title AS product_title,
-        p.image AS product_image,
-        b.shop_id
-    FROM base b
-    LEFT JOIN variant_content vc ON vc.shop_id = b.shop_id 
-        AND vc.lightspeed_variant_id = b.lightspeed_variant_id AND vc.language_code = 'nl'
-    LEFT JOIN product_content pc ON pc.shop_id = b.shop_id 
-        AND pc.lightspeed_product_id = b.lightspeed_product_id AND pc.language_code = 'nl'
-    LEFT JOIN products p ON p.shop_id = b.shop_id AND p.lightspeed_product_id = b.lightspeed_product_id
-    WHERE b.tld = 'nl' AND b.is_default = true
+        pc.title                      AS product_title,
+        vc.title                      AS variant_title,
+        (SELECT COUNT(*) 
+         FROM variants v2 
+         WHERE v2.shop_id = v.shop_id 
+           AND v2.lightspeed_product_id = v.lightspeed_product_id
+        ) AS variant_count
+    FROM variants v
+    JOIN shops_info s ON s.id = v.shop_id AND s.role = 'source'
+    JOIN products p ON p.shop_id = v.shop_id 
+                   AND p.lightspeed_product_id = v.lightspeed_product_id
+    LEFT JOIN product_content pc ON pc.shop_id = v.shop_id 
+                                 AND pc.lightspeed_product_id = v.lightspeed_product_id
+                                 AND pc.language_code = s.tld
+    LEFT JOIN variant_content vc ON vc.shop_id = v.shop_id 
+                                 AND vc.lightspeed_variant_id = v.lightspeed_variant_id
+                                 AND vc.language_code = s.tld
+    WHERE v.is_default
 ),
-nl_variant_cnt AS (
-    SELECT shop_id, lightspeed_product_id, COUNT(*) AS cnt
-    FROM base WHERE tld = 'nl'
-    GROUP BY shop_id, lightspeed_product_id
+
+-- -----------------------------------------------------
+-- Source SKU counts (for detecting duplicates)
+-- -----------------------------------------------------
+source_sku_counts AS (
+    SELECT 
+        default_sku,
+        COUNT(*) AS sku_count,
+        ARRAY_AGG(lightspeed_product_id ORDER BY lightspeed_product_id) AS product_ids
+    FROM source_products
+    WHERE default_sku IS NOT NULL
+    GROUP BY default_sku
 ),
--- Consolidated: one row per (tld, sku) with def/non-def via FILTER (like get_sync_stats)
--- product_variant_count: real variant count per matched product (for de_variant_counts/be_variant_counts)
+
+-- -----------------------------------------------------
+-- Target matches for ALL SKUs (including duplicates)
+-- -----------------------------------------------------
+target_all_variants AS (
+    SELECT
+        t.id AS target_shop_id,
+        t.name AS target_shop_name,
+        t.tld AS target_shop_tld,
+        CASE 
+            WHEN v.sku IS NULL OR btrim(v.sku) = '' THEN NULL
+            ELSE btrim(v.sku)
+        END AS sku,
+        v.is_default,
+        v.lightspeed_product_id,
+        v.lightspeed_variant_id,
+        (SELECT COUNT(*) 
+         FROM variants v2 
+         WHERE v2.shop_id = v.shop_id 
+           AND v2.lightspeed_product_id = v.lightspeed_product_id
+        ) AS variant_count
+    FROM shops_info t
+    JOIN variants v ON v.shop_id = t.id
+    WHERE t.role = 'target'
+),
+
+-- -----------------------------------------------------
+-- Aggregate target matches per SKU per shop
+-- -----------------------------------------------------
 target_matches AS (
-    SELECT tld, sku,
-        COUNT(*) FILTER (WHERE is_default) AS def_match_count,
-        ARRAY_AGG(lightspeed_product_id ORDER BY lightspeed_product_id) FILTER (WHERE is_default) AS def_product_ids,
-        ARRAY_AGG(lightspeed_variant_id ORDER BY lightspeed_product_id) FILTER (WHERE is_default) AS def_variant_ids,
-        ARRAY_AGG(COALESCE(product_variant_count, 1) ORDER BY lightspeed_product_id) FILTER (WHERE is_default) AS def_variant_counts,
-        COUNT(*) FILTER (WHERE NOT is_default) AS non_def_match_count,
-        ARRAY_AGG(lightspeed_product_id ORDER BY lightspeed_product_id) FILTER (WHERE NOT is_default) AS non_def_product_ids,
-        ARRAY_AGG(lightspeed_variant_id ORDER BY lightspeed_product_id) FILTER (WHERE NOT is_default) AS non_def_variant_ids,
-        ARRAY_AGG(COALESCE(product_variant_count, 1) ORDER BY lightspeed_product_id) FILTER (WHERE NOT is_default) AS non_def_variant_counts
-    FROM base
-    WHERE tld IN ('de', 'be')
-    GROUP BY tld, sku
+    SELECT
+        sp.default_sku,
+        t.target_shop_id,
+        t.target_shop_name,
+        t.target_shop_tld,
+        -- Count matches by type
+        COUNT(*) FILTER (WHERE t.is_default) AS default_match_count,
+        COUNT(*) FILTER (WHERE NOT t.is_default) AS non_default_match_count,
+        -- Aggregate product/variant IDs
+        ARRAY_AGG(DISTINCT t.lightspeed_product_id ORDER BY t.lightspeed_product_id) 
+          FILTER (WHERE t.is_default) AS default_product_ids,
+        ARRAY_AGG(t.lightspeed_variant_id ORDER BY t.lightspeed_variant_id) 
+          FILTER (WHERE t.is_default) AS default_variant_ids,
+        ARRAY_AGG(DISTINCT t.lightspeed_product_id ORDER BY t.lightspeed_product_id) 
+          FILTER (WHERE NOT t.is_default) AS non_default_product_ids,
+        ARRAY_AGG(t.lightspeed_variant_id ORDER BY t.lightspeed_variant_id) 
+          FILTER (WHERE NOT t.is_default) AS non_default_variant_ids,
+        -- Get variant counts for matched products
+        ARRAY_AGG(DISTINCT t.variant_count) 
+          FILTER (WHERE t.is_default) AS default_variant_counts,
+        ARRAY_AGG(DISTINCT t.variant_count) 
+          FILTER (WHERE NOT t.is_default) AS non_default_variant_counts
+    FROM source_products sp
+    CROSS JOIN shops_info ts
+    LEFT JOIN target_all_variants t 
+        ON t.target_shop_id = ts.id 
+        AND t.sku = sp.default_sku
+    WHERE ts.role = 'target'
+      AND sp.default_sku IS NOT NULL
+    GROUP BY sp.default_sku, t.target_shop_id, t.target_shop_name, t.target_shop_tld
 ),
-nl_dups AS (
-    SELECT sku, COUNT(*) AS nl_duplicate_count
-    FROM base
-    WHERE tld = 'nl' AND is_default = true
-    GROUP BY sku
-    HAVING COUNT(*) > 1
+
+-- -----------------------------------------------------
+-- Target SKU duplicate detection
+-- -----------------------------------------------------
+target_sku_counts AS (
+    SELECT
+        target_shop_id,
+        sku,
+        COUNT(*) AS sku_count
+    FROM target_all_variants
+    WHERE sku IS NOT NULL
+      AND is_default
+    GROUP BY target_shop_id, sku
 )
-SELECT 
-    nb.*,
-    COALESCE(nvc.cnt, 1)::int AS nl_variant_count,
-    COALESCE(nd.nl_duplicate_count, 1) AS nl_duplicate_count,
-    (nd.nl_duplicate_count IS NOT NULL) AS has_nl_duplicates,
-    COALESCE(td.def_match_count, td.non_def_match_count, 0)::int AS de_match_count,
-    COALESCE(td.def_product_ids, td.non_def_product_ids) AS de_product_ids,
-    COALESCE(td.def_variant_ids, td.non_def_variant_ids) AS de_default_variant_ids,
-    COALESCE(td.def_variant_counts, td.non_def_variant_counts) AS de_variant_counts,
-    CASE WHEN COALESCE(td.def_match_count, td.non_def_match_count) IS NULL THEN 'not_exists'
-         WHEN COALESCE(td.def_match_count, td.non_def_match_count) = 1 THEN 'exists_single'
-         ELSE 'exists_multiple' END AS de_status,
-    COALESCE(tb.def_match_count, tb.non_def_match_count, 0)::int AS be_match_count,
-    COALESCE(tb.def_product_ids, tb.non_def_product_ids) AS be_product_ids,
-    COALESCE(tb.def_variant_ids, tb.non_def_variant_ids) AS be_default_variant_ids,
-    COALESCE(tb.def_variant_counts, tb.non_def_variant_counts) AS be_variant_counts,
-    CASE WHEN COALESCE(tb.def_match_count, tb.non_def_match_count) IS NULL THEN 'not_exists'
-         WHEN COALESCE(tb.def_match_count, tb.non_def_match_count) = 1 THEN 'exists_single'
-         ELSE 'exists_multiple' END AS be_status
-FROM nl_base nb
-LEFT JOIN nl_variant_cnt nvc ON nvc.shop_id = nb.shop_id AND nvc.lightspeed_product_id = nb.nl_product_id
-LEFT JOIN target_matches td ON td.tld = 'de' AND td.sku = nb.default_sku
-LEFT JOIN target_matches tb ON tb.tld = 'be' AND tb.sku = nb.default_sku
-LEFT JOIN nl_dups nd ON nd.sku = nb.default_sku;
-
 
 -- =====================================================
--- PERMISSIONS & RLS
+-- FINAL OUTPUT
 -- =====================================================
+SELECT
+    -- Source identification
+    sp.shop_id AS source_shop_id,
+    sp.shop_name AS source_shop_name,
+    sp.shop_tld AS source_shop_tld,
+    sp.lightspeed_product_id AS source_product_id,
+    sp.lightspeed_variant_id AS source_variant_id,
+    sp.default_sku,
+    
+    -- Source display data
+    sp.product_title,
+    sp.variant_title,
+    sp.product_image,
+    sp.price_excl,
+    sp.variant_count AS source_variant_count,
+    sp.ls_created_at,
+    sp.ls_updated_at,
+    
+    -- Source duplicate info
+    COALESCE(ssc.sku_count, 1) AS source_sku_count,
+    CASE 
+        WHEN sp.default_sku IS NULL THEN 0
+        WHEN ssc.sku_count > 1 THEN ssc.sku_count
+        ELSE 1
+    END AS source_duplicate_count,
+    (ssc.sku_count > 1) AS source_has_duplicates,
+    COALESCE(ssc.product_ids, ARRAY[sp.lightspeed_product_id]) AS source_duplicate_product_ids,
+    
+    -- Is NULL SKU product
+    (sp.default_sku IS NULL) AS is_null_sku,
+    
+    -- All target shops data as JSON
+    COALESCE(
+        json_object_agg(
+            tm.target_shop_tld,
+            json_build_object(
+                'shop_id', tm.target_shop_id,
+                'shop_name', tm.target_shop_name,
+                'shop_tld', tm.target_shop_tld,
+                -- Match counts
+                'default_matches', COALESCE(tm.default_match_count, 0),
+                'non_default_matches', COALESCE(tm.non_default_match_count, 0),
+                'total_matches', COALESCE(tm.default_match_count, 0) + COALESCE(tm.non_default_match_count, 0),
+                -- IDs for linking
+                'default_product_ids', COALESCE(tm.default_product_ids, ARRAY[]::bigint[]),
+                'default_variant_ids', COALESCE(tm.default_variant_ids, ARRAY[]::bigint[]),
+                'non_default_product_ids', COALESCE(tm.non_default_product_ids, ARRAY[]::bigint[]),
+                'non_default_variant_ids', COALESCE(tm.non_default_variant_ids, ARRAY[]::bigint[]),
+                -- Variant counts for indicators
+                'default_variant_counts', COALESCE(tm.default_variant_counts, ARRAY[]::bigint[]),
+                'non_default_variant_counts', COALESCE(tm.non_default_variant_counts, ARRAY[]::bigint[]),
+                -- Duplicate detection in target
+                'target_has_duplicates', COALESCE(tsc.sku_count, 0) > 1,
+                'target_sku_count', COALESCE(tsc.sku_count, 0),
+                -- Computed status
+                'status', CASE
+                    WHEN sp.default_sku IS NULL THEN 'null_sku'
+                    WHEN tm.target_shop_id IS NULL 
+                         OR (COALESCE(tm.default_match_count, 0) = 0 
+                             AND COALESCE(tm.non_default_match_count, 0) = 0) 
+                    THEN 'not_exists'
+                    WHEN (COALESCE(tm.default_match_count, 0) + COALESCE(tm.non_default_match_count, 0)) = 1 
+                    THEN 'exists_single'
+                    WHEN (COALESCE(tm.default_match_count, 0) + COALESCE(tm.non_default_match_count, 0)) > 1 
+                    THEN 'exists_multiple'
+                    ELSE 'unknown'
+                END,
+                -- Match type for understanding
+                'match_type', CASE
+                    WHEN tm.default_match_count > 0 THEN 'default_variant'
+                    WHEN tm.non_default_match_count > 0 THEN 'non_default_variant'
+                    ELSE 'no_match'
+                END
+            )
+        ) FILTER (WHERE tm.target_shop_id IS NOT NULL),
+        '{}'::json
+    ) AS targets
+
+FROM source_products sp
+LEFT JOIN source_sku_counts ssc ON ssc.default_sku = sp.default_sku
+LEFT JOIN target_matches tm ON tm.default_sku = sp.default_sku
+LEFT JOIN target_sku_counts tsc 
+    ON tsc.target_shop_id = tm.target_shop_id 
+    AND tsc.sku = sp.default_sku
+GROUP BY 
+    sp.shop_id,
+    sp.shop_name,
+    sp.shop_tld,
+    sp.lightspeed_product_id,
+    sp.lightspeed_variant_id,
+    sp.default_sku,
+    sp.product_title,
+    sp.variant_title,
+    sp.product_image,
+    sp.price_excl,
+    sp.variant_count,
+    sp.ls_created_at,
+    sp.ls_updated_at,
+    ssc.sku_count,
+    ssc.product_ids;
+
+-- =====================================================
+-- INDEXES & PERMISSIONS
+-- =====================================================
+
 -- Enable RLS on the view
 ALTER VIEW product_sync_status SET (security_invoker = true);
 
--- Grant SELECT to authenticated users (for UI access)
+-- Grant SELECT to authenticated users
 GRANT SELECT ON product_sync_status TO authenticated;
 
+-- =====================================================
+-- USAGE EXAMPLES BY SCENARIO
+-- =====================================================
+
+-- ===== CREATE TAB =====
+
+-- CREATE Scenario A: Simple create (unique SKU, doesn't exist in target)
+-- SELECT * FROM product_sync_status 
+-- WHERE source_duplicate_count = 1
+--   AND is_null_sku = false
+--   AND (targets->'be'->>'status') = 'not_exists'
+-- ORDER BY product_title;
+
+-- CREATE Scenario B: Source has duplicate SKUs (grouped display)
+-- SELECT 
+--   default_sku,
+--   source_duplicate_count,
+--   source_duplicate_product_ids,
+--   json_agg(json_build_object(
+--     'product_id', source_product_id,
+--     'title', product_title,
+--     'image', product_image
+--   )) as source_products
+-- FROM product_sync_status 
+-- WHERE source_has_duplicates = true
+--   AND is_null_sku = false
+-- GROUP BY default_sku, source_duplicate_count, source_duplicate_product_ids;
+
+-- CREATE: Missing in all target shops
+-- SELECT * FROM product_sync_status 
+-- WHERE is_null_sku = false
+--   AND source_duplicate_count = 1
+--   AND (SELECT bool_and((value->>'status')::text = 'not_exists') 
+--        FROM json_each(targets));
+
+-- ===== EDIT TAB =====
+
+-- EDIT Scenario 1-1: Unique source SKU matches unique target SKU 
+-- (can be default or non-default variant match)
+-- SELECT * FROM product_sync_status 
+-- WHERE source_duplicate_count = 1
+--   AND is_null_sku = false
+--   AND (targets->'be'->>'status') = 'exists_single'
+--   AND (targets->'be'->>'total_matches')::int = 1;
+
+-- EDIT Scenario M-1: Multiple source SKUs (duplicates), one target match
+-- User must select which source product to use
+-- SELECT * FROM product_sync_status 
+-- WHERE source_has_duplicates = true
+--   AND is_null_sku = false
+--   AND (targets->'be'->>'status') = 'exists_single'
+--   AND (targets->'be'->>'total_matches')::int = 1;
+
+-- EDIT Scenario 1-M: Unique source SKU, multiple target matches
+-- User must select which target product to update
+-- SELECT * FROM product_sync_status 
+-- WHERE source_duplicate_count = 1
+--   AND is_null_sku = false
+--   AND (targets->'be'->>'status') = 'exists_multiple'
+--   AND (targets->'be'->>'total_matches')::int > 1;
+
+-- EDIT Scenario M-M: Multiple source SKUs, multiple target matches
+-- User must select both source and target products
+-- SELECT * FROM product_sync_status 
+-- WHERE source_has_duplicates = true
+--   AND is_null_sku = false
+--   AND (targets->'be'->>'status') = 'exists_multiple'
+--   AND (targets->'be'->>'total_matches')::int > 1;
+
+-- Check match type (for understanding matching logic)
+-- SELECT 
+--   default_sku,
+--   product_title,
+--   targets->'be'->>'match_type' as be_match_type,
+--   targets->'be'->>'default_matches' as be_default_matches,
+--   targets->'be'->>'non_default_matches' as be_non_default_matches
+-- FROM product_sync_status 
+-- WHERE (targets->'be'->>'status') IN ('exists_single', 'exists_multiple');
+
+-- ===== NULL SKU TAB =====
+
+-- NULL SKU: All products with NULL default SKU
+-- SELECT * FROM product_sync_status 
+-- WHERE is_null_sku = true
+-- ORDER BY source_shop_tld, product_title;
+
+-- ===== UTILITY QUERIES =====
+
+-- Get variant count differences (for indicators in EDIT)
+-- SELECT 
+--   default_sku,
+--   product_title,
+--   source_variant_count,
+--   targets->'be'->'default_variant_counts' as be_variant_counts
+-- FROM product_sync_status 
+-- WHERE (targets->'be'->>'status') = 'exists_single';
 
