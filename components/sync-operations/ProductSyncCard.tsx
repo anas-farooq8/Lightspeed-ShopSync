@@ -35,7 +35,7 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
             <img
               src={imageUrl}
               alt={product.product_title || 'Product'}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-cover object-center"
               loading="lazy"
               onError={(e) => {
                 // Fallback if image fails to load
@@ -88,7 +88,7 @@ export function ProductSyncCard({ product, onClick }: ProductSyncCardProps) {
         </div>
 
         {/* Shop Status Indicators (like table view) */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+        <div className="flex flex-wrap items-center justify-start gap-3 pt-2 border-t border-border/50">
           {Object.entries(product.targets || {})
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([tld, targetInfo]) => {

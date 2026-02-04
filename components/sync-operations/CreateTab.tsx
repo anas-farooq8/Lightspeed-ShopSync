@@ -200,6 +200,9 @@ export function CreateTab() {
         page: '1',
         pageSize: pageSize.toString(),
         missingIn: value,
+        onlyDuplicates: onlyDuplicates.toString(),
+        sortBy: sortBy,
+        sortOrder: sortOrder,
       })
       
       if (search) params.append('search', search)
@@ -244,17 +247,15 @@ export function CreateTab() {
       <Card className="border-border/50">
         <CardContent className="pt-4">
           <div className="flex flex-col gap-3">
-            {/* First Row: Search, Filter, View Toggle */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Search with Button Inside */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            {/* First Row: Search Bar with integrated Search Button */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center border border-input rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                 <Input
                   placeholder="Search by SKU, product title, or variant title..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyPress={handleSearchKeyPress}
-                  className="pl-9 pr-24 cursor-text"
+                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-text flex-1"
                   disabled={searchLoading}
                 />
                 <Button
@@ -262,44 +263,71 @@ export function CreateTab() {
                   size="sm"
                   onClick={handleSearchSubmit}
                   disabled={searchLoading}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer bg-red-600 hover:bg-red-700 h-8"
+                  className="cursor-pointer bg-red-600 hover:bg-red-700 h-9 rounded-none border-l border-border px-4 m-0"
                 >
                   {searchLoading ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
                   ) : (
-                    'Search'
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Search
+                    </>
                   )}
                 </Button>
               </div>
+            </div>
 
-              {/* Missing In Filter - Increased width */}
-              <Select value={missingIn} onValueChange={handleMissingInChange} disabled={filterLoading}>
-                <SelectTrigger 
-                  className="w-full sm:w-[280px] cursor-pointer"
-                  icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-                >
-                  <SelectValue placeholder="Missing in..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="cursor-pointer">
-                    Missing in all shops
-                  </SelectItem>
-                  {shops
-                    .filter(shop => shop.role === 'target')
-                    .map((shop) => (
-                      <SelectItem 
-                        key={shop.shop_id} 
-                        value={shop.tld} 
-                        className="cursor-pointer"
-                      >
-                        Missing in {shop.shop_name} (.{shop.tld})
-                      </SelectItem>
-                    ))
-                  }
-                </SelectContent>
-              </Select>
+            {/* Second Row: Filters and View Toggle */}
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-1">
+                {/* Missing In Filter */}
+                <Select value={missingIn} onValueChange={handleMissingInChange} disabled={filterLoading}>
+                  <SelectTrigger 
+                    className="w-full sm:w-[280px] cursor-pointer"
+                    icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
+                  >
+                    <SelectValue placeholder="Missing in..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="cursor-pointer">
+                      Missing in all shops
+                    </SelectItem>
+                    {shops
+                      .filter(shop => shop.role === 'target')
+                      .map((shop) => (
+                        <SelectItem 
+                          key={shop.shop_id} 
+                          value={shop.tld} 
+                          className="cursor-pointer"
+                        >
+                          Missing in {shop.shop_name} (.{shop.tld})
+                        </SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
 
-              {/* View Mode Toggle - Increased width */}
+                {/* Duplicate Filter Checkbox */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="only-duplicates"
+                    checked={onlyDuplicates}
+                    onCheckedChange={(checked: boolean) => {
+                      setOnlyDuplicates(checked === true)
+                      setPage(1)
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <Label
+                    htmlFor="only-duplicates"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer whitespace-nowrap"
+                  >
+                    Show only duplicates
+                  </Label>
+                </div>
+              </div>
+
+              {/* View Mode Toggle */}
               <div className="flex gap-1 border border-border rounded-md p-1">
                 <Button
                   variant={viewMode === 'table' ? 'default' : 'ghost'}
@@ -330,28 +358,8 @@ export function CreateTab() {
               </div>
             </div>
 
-            {/* Second Row: Duplicate Filter & Results Count */}
-            <div className="flex items-center justify-between">
-              {/* Duplicate Filter Checkbox */}
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="only-duplicates"
-                  checked={onlyDuplicates}
-                  onCheckedChange={(checked: boolean) => {
-                    setOnlyDuplicates(checked === true)
-                    setPage(1)
-                  }}
-                  className="cursor-pointer"
-                />
-                <Label
-                  htmlFor="only-duplicates"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  Show only duplicates
-                </Label>
-              </div>
-
-              {/* Results count */}
+            {/* Third Row: Results Count */}
+            <div className="flex items-center justify-end">
               <div className="text-sm text-muted-foreground">
                 Showing {products.length > 0 ? ((page - 1) * pageSize) + 1 : 0} - {Math.min(page * pageSize, total)} of {total.toLocaleString()} products
               </div>

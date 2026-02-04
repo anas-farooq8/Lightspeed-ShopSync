@@ -210,7 +210,7 @@ export function ProductSyncTableGrouped({
 
         {/* Created At */}
         <TableCell>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {new Date(product.ls_created_at).toLocaleDateString('en-GB', {
               day: '2-digit',
               month: 'short',
