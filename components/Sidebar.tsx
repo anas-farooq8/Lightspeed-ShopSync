@@ -28,14 +28,18 @@ export function Sidebar() {
         setIsCollapsed(saved === 'true')
       }
     }
+  }, [])
 
-    // Get user email
+  // Get user email separately to avoid triggering re-renders during initial mount
+  useEffect(() => {
+    if (!mounted) return
+    
     const getUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       setUserEmail(session?.user?.email || '')
     }
     getUser()
-  }, [])
+  }, [mounted, supabase.auth])
 
   // Save sidebar state to localStorage when it changes
   useEffect(() => {
@@ -83,7 +87,7 @@ export function Sidebar() {
       >
         {/* Header with Logo */}
         <div className="flex h-16 items-center justify-center border-b border-border px-3">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+          <Link href="/dashboard" prefetch={false} className="flex items-center gap-2 font-semibold">
             <img 
               src="https://www.google.com/s2/favicons?domain=lightspeedhq.com&sz=32" 
               alt="Lightspeed Logo" 
@@ -106,6 +110,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-3 text-[15px] font-medium transition-colors cursor-pointer',
                   isActive 
