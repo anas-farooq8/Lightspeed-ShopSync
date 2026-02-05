@@ -12,7 +12,8 @@
 --   7. Reduced data shuffling with strategic GROUP BY placement
 --
 -- MATCHING LOGIC:
---   Priority: 1) Default variant → 2) Non-default variant → 3) Not exists
+--   Searches ALL variants (default + non-default) simultaneously
+--   Counts separately, then prioritizes match_type: default > non-default > no_match
 --
 -- ROW STRUCTURE:
 --   One row per source product with all target information in JSONB
@@ -111,9 +112,12 @@ target_shops AS (
 -- ==========================================
 -- STEP 6: Match-Driven SKU Matching (OPTIMIZED)
 -- ==========================================
--- Use UNION to only process actual matches + missing combinations
--- Part 1: Find actual matches (INNER JOIN - only matched rows)
--- Part 2: Find missing SKUs (LEFT JOIN with NULL check)
+-- Searches ALL variants (default + non-default) simultaneously
+-- Uses UNION to combine: actual matches + missing combinations
+-- Part 1: Find actual matches (INNER JOIN - searches ALL variants at once)
+--         Counts default_matches and non_default_matches separately
+--         Sets match_type with priority: default > non-default
+-- Part 2: Find missing SKUs (combinations with no matches)
 -- ==========================================
 -- Result: Minimal row generation, scalable to millions of SKUs
 -- ==========================================
@@ -122,7 +126,10 @@ normalized_source_skus AS (
     SELECT DISTINCT sku FROM source_products
 ),
 -- ==========================================
--- Part 1: ACTUAL MATCHES (INNER JOIN - only where match exists)
+-- Part 1: ACTUAL MATCHES
+-- ==========================================
+-- Searches ALL target variants (default + non-default) in single query
+-- Counts them separately using FILTER clauses for priority labeling
 -- ==========================================
 actual_matches AS (
     SELECT
@@ -132,6 +139,11 @@ actual_matches AS (
         ts.name AS target_name,
         COUNT(*) FILTER (WHERE v.is_default = true) AS default_matches,
         COUNT(*) FILTER (WHERE v.is_default = false) AS non_default_matches,
+        -- Store matched product IDs separately by match type
+        ARRAY_AGG(DISTINCT v.lightspeed_product_id ORDER BY v.lightspeed_product_id) 
+            FILTER (WHERE v.is_default = true) AS default_product_ids,
+        ARRAY_AGG(DISTINCT v.lightspeed_product_id ORDER BY v.lightspeed_product_id) 
+            FILTER (WHERE v.is_default = false) AS non_default_product_ids,
         CASE 
             WHEN COUNT(*) FILTER (WHERE v.is_default = true) > 0 THEN 'default_variant'
             ELSE 'non_default_variant'
@@ -151,6 +163,8 @@ missing_skus AS (
         ts.name AS target_name,
         0 AS default_matches,
         0 AS non_default_matches,
+        ARRAY[]::BIGINT[] AS default_product_ids,
+        ARRAY[]::BIGINT[] AS non_default_product_ids,
         'no_match' AS match_type
     FROM normalized_source_skus nss
     CROSS JOIN target_shops ts
@@ -205,7 +219,7 @@ SELECT
     -- ========================================
     -- Aggregates all target shop match info into single JSONB column
     -- Format: { "tld1": {...}, "tld2": {...}, ... } (dynamic based on target shops in database)
-    -- Each target contains: status, match_type, match counts
+    -- Each target contains: status, match_type, match counts, and product IDs separated by match type
     jsonb_object_agg(
         stm.target_tld,
         jsonb_build_object(
@@ -223,7 +237,10 @@ SELECT
             'match_type', stm.match_type,
             'default_matches', stm.default_matches,
             'non_default_matches', stm.non_default_matches,
-            'total_matches', stm.default_matches + stm.non_default_matches
+            'total_matches', stm.default_matches + stm.non_default_matches,
+            -- Separate arrays for default and non-default matched products
+            'default_product_ids', COALESCE(stm.default_product_ids, ARRAY[]::BIGINT[]),
+            'non_default_product_ids', COALESCE(stm.non_default_product_ids, ARRAY[]::BIGINT[])
         )
     ) AS targets
 

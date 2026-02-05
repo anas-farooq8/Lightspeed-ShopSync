@@ -67,16 +67,19 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   
-  // Initialize search from URL
+  // Initialize all state from URL parameters
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
-  
-  const [missingIn, setMissingIn] = useState<string>('all')
-  const [shopFilter, setShopFilter] = useState<string>('all')
-  const [onlyDuplicates, setOnlyDuplicates] = useState(false)
-  const [sortBy, setSortBy] = useState<'title' | 'sku' | 'variants' | 'price' | 'created'>('created')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [page, setPage] = useState(1)
+  const [missingIn, setMissingIn] = useState<string>(searchParams.get('missingIn') || 'all')
+  const [shopFilter, setShopFilter] = useState<string>(searchParams.get('shopFilter') || 'all')
+  const [onlyDuplicates, setOnlyDuplicates] = useState(searchParams.get('onlyDuplicates') === 'true')
+  const [sortBy, setSortBy] = useState<'title' | 'sku' | 'variants' | 'price' | 'created'>(
+    (searchParams.get('sortBy') as any) || 'created'
+  )
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
+    (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
+  )
+  const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   
@@ -91,14 +94,58 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     }
   }, [shops])
 
-  // Listen to URL changes (browser back/forward button)
+  // Sync URL with state changes
+  const updateURL = (newState: Partial<{
+    search: string
+    page: number
+    missingIn: string
+    shopFilter: string
+    onlyDuplicates: boolean
+    sortBy: string
+    sortOrder: string
+  }>) => {
+    const params = new URLSearchParams()
+    
+    const currentSearch = newState.search !== undefined ? newState.search : search
+    const currentPage = newState.page !== undefined ? newState.page : page
+    const currentMissingIn = newState.missingIn !== undefined ? newState.missingIn : missingIn
+    const currentShopFilter = newState.shopFilter !== undefined ? newState.shopFilter : shopFilter
+    const currentOnlyDuplicates = newState.onlyDuplicates !== undefined ? newState.onlyDuplicates : onlyDuplicates
+    const currentSortBy = newState.sortBy !== undefined ? newState.sortBy : sortBy
+    const currentSortOrder = newState.sortOrder !== undefined ? newState.sortOrder : sortOrder
+    
+    if (currentSearch) params.set('search', currentSearch)
+    if (currentPage > 1) params.set('page', currentPage.toString())
+    if (!isNullSku && currentMissingIn !== 'all') params.set('missingIn', currentMissingIn)
+    if (isNullSku && currentShopFilter !== 'all') params.set('shopFilter', currentShopFilter)
+    if (currentOnlyDuplicates) params.set('onlyDuplicates', 'true')
+    if (currentSortBy !== 'created') params.set('sortBy', currentSortBy)
+    if (currentSortOrder !== 'desc') params.set('sortOrder', currentSortOrder)
+    
+    const queryString = params.toString()
+    router.push(`${window.location.pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false })
+  }
+
+  // Listen to URL changes and refetch when navigating back
   useEffect(() => {
     const urlSearch = searchParams.get('search') || ''
-    if (urlSearch !== search) {
-      setSearch(urlSearch)
-      setSearchInput(urlSearch)
-    }
-  }, [searchParams, search])
+    const urlPage = parseInt(searchParams.get('page') || '1')
+    const urlMissingIn = searchParams.get('missingIn') || 'all'
+    const urlShopFilter = searchParams.get('shopFilter') || 'all'
+    const urlOnlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
+    const urlSortBy = (searchParams.get('sortBy') as any) || 'created'
+    const urlSortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
+    
+    // Update state from URL if different (for back navigation)
+    if (urlSearch !== search) setSearch(urlSearch)
+    if (urlSearch !== searchInput) setSearchInput(urlSearch)
+    if (urlPage !== page) setPage(urlPage)
+    if (urlMissingIn !== missingIn) setMissingIn(urlMissingIn)
+    if (urlShopFilter !== shopFilter) setShopFilter(urlShopFilter)
+    if (urlOnlyDuplicates !== onlyDuplicates) setOnlyDuplicates(urlOnlyDuplicates)
+    if (urlSortBy !== sortBy) setSortBy(urlSortBy)
+    if (urlSortOrder !== sortOrder) setSortOrder(urlSortOrder)
+  }, [searchParams])
 
   // Fetch products when filters or search changes
   useEffect(() => {
@@ -116,12 +163,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
 
   async function fetchProducts() {
     try {
-      // Use isRefreshing for subsequent loads to prevent flicker
-      if (initialLoading) {
-        setInitialLoading(true)
-      } else {
-        setIsRefreshing(true)
-      }
+      // Always show shimmer when fetching
+      setIsRefreshing(true)
       
       const params = new URLSearchParams({
         operation: operation,
@@ -155,15 +198,38 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   }
 
   const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
+    let newSortOrder: 'asc' | 'desc'
     if (sortBy === column) {
       // Toggle sort order
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+      newSortOrder = sortOrder === 'asc' ? 'desc' : 'asc'
+      setSortOrder(newSortOrder)
     } else {
       // New column, default to descending for created, ascending for others
+      newSortOrder = column === 'created' ? 'desc' : 'asc'
       setSortBy(column)
-      setSortOrder(column === 'created' ? 'desc' : 'asc')
+      setSortOrder(newSortOrder)
     }
-    setPage(1) // Reset to first page on sort change
+    setPage(1)
+    updateURL({ sortBy: column, sortOrder: newSortOrder, page: 1 })
+  }
+
+  const handleProductClick = (product: SyncProduct) => {
+    // Show loading shimmer during navigation
+    setIsRefreshing(true)
+    
+    // Navigate to product detail page, preserving ALL state
+    const params = new URLSearchParams()
+    params.set('sku', product.default_sku)
+    params.set('productId', product.source_product_id.toString())
+    if (search) params.set('search', search)
+    if (page > 1) params.set('page', page.toString())
+    if (!isNullSku && missingIn !== 'all') params.set('missingIn', missingIn)
+    if (isNullSku && shopFilter !== 'all') params.set('shopFilter', shopFilter)
+    if (onlyDuplicates) params.set('onlyDuplicates', 'true')
+    if (sortBy !== 'created') params.set('sortBy', sortBy)
+    if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
+    
+    router.push(`/dashboard/sync-operations/${product.default_sku}?${params.toString()}`)
   }
 
   const handleSearchSubmit = () => {
@@ -171,15 +237,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     
     setSearch(searchInput)
     setPage(1) // Reset to first page on search
-    
-    // Update URL with search parameter only
-    if (searchInput) {
-      router.push(`?search=${encodeURIComponent(searchInput)}`)
-    } else {
-      router.push(window.location.pathname)
-    }
-    
-    // useEffect will trigger fetchProducts() automatically when search changes
+    updateURL({ search: searchInput, page: 1 })
   }
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -191,12 +249,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const handleFilterChange = (value: string) => {
     if (isNullSku) {
       setShopFilter(value)
+      updateURL({ shopFilter: value, page: 1 })
     } else {
       setMissingIn(value)
+      updateURL({ missingIn: value, page: 1 })
     }
     setPage(1)
-    
-    // useEffect will trigger fetchProducts() automatically when filter changes
   }
 
   if (initialLoading && products.length === 0) {
@@ -310,8 +368,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                       id="only-duplicates"
                       checked={onlyDuplicates}
                       onCheckedChange={(checked: boolean) => {
-                        setOnlyDuplicates(checked === true)
+                        const newValue = checked === true
+                        setOnlyDuplicates(newValue)
                         setPage(1)
+                        updateURL({ onlyDuplicates: newValue, page: 1 })
                       }}
                       disabled={isRefreshing}
                       className="cursor-pointer"
@@ -395,7 +455,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           sortOrder={sortOrder}
           loading={isRefreshing}
           onSort={handleSort}
-          onProductClick={() => {}}
+          onProductClick={handleProductClick}
           hideSkuColumn={isNullSku}
           hideDuplicateBadges={isNullSku}
           hideShopIndicators={isNullSku}
@@ -407,7 +467,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
             <ProductCard
               key={`${product.source_product_id}-${product.default_sku}`}
               product={product}
-              onClick={() => {}}
+              onClick={() => handleProductClick(product)}
               hideShopIndicators={isNullSku}
               showShopBadge={isNullSku}
               hideDuplicateBadges={isNullSku}
@@ -427,6 +487,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 size="sm"
                 onClick={() => {
                   setPage(1)
+                  updateURL({ page: 1 })
                   scrollToTop()
                 }}
                 disabled={page === 1 || isRefreshing}
@@ -441,7 +502,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setPage(page - 1)
+                  const newPage = page - 1
+                  setPage(newPage)
+                  updateURL({ page: newPage })
                   scrollToTop()
                 }}
                 disabled={page === 1 || isRefreshing}
@@ -502,7 +565,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                         variant={isCurrentPage ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => {
-                          setPage(pageNum as number)
+                          const newPage = pageNum as number
+                          setPage(newPage)
+                          updateURL({ page: newPage })
                           scrollToTop()
                         }}
                         disabled={isRefreshing}
@@ -524,7 +589,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setPage(page + 1)
+                  const newPage = page + 1
+                  setPage(newPage)
+                  updateURL({ page: newPage })
                   scrollToTop()
                 }}
                 disabled={page === totalPages || isRefreshing}
@@ -540,6 +607,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 size="sm"
                 onClick={() => {
                   setPage(totalPages)
+                  updateURL({ page: totalPages })
                   scrollToTop()
                 }}
                 disabled={page === totalPages || isRefreshing}

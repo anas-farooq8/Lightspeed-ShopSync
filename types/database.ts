@@ -81,6 +81,10 @@ export interface TargetShopStatus {
   default_matches: number
   non_default_matches: number
   total_matches: number
+  
+  // Arrays of matched product IDs separated by match type (for handling target duplicates)
+  default_product_ids: number[]      // Products matched by default variant
+  non_default_product_ids: number[]  // Products matched by non-default variant
 }
 
 /**
@@ -141,4 +145,88 @@ export interface SyncLog {
   products_deleted: number
   variants_deleted: number
   variants_filtered: number  // Orphaned variants filtered out
+}
+
+/**
+ * Product Details Response
+ * 
+ * Comprehensive product data returned by get_product_details() RPC.
+ * Includes source product, all matching target products, and language configuration.
+ */
+export interface ProductDetails {
+  source: ProductData
+  targets: ProductData[]
+  shop_languages: Record<string, Language[]>
+}
+
+/**
+ * Shop Language Configuration
+ */
+export interface Language {
+  code: string
+  is_active: boolean
+  is_default: boolean
+}
+
+/**
+ * Product Data (Full Detail)
+ * 
+ * Complete product information including all languages and variants.
+ * Used for product detail page display.
+ */
+export interface ProductData {
+  shop_id: string
+  shop_name: string
+  shop_tld: string
+  shop_role: 'source' | 'target'
+  base_url: string
+  product_id: number
+  default_variant_id: number
+  sku: string
+  matched_by_default_variant?: boolean  // Only for target products
+  visibility: string
+  product_image: {
+    src?: string
+    thumb?: string
+    title?: string
+  } | null
+  content_by_language: Record<string, ProductContent>
+  variants: VariantData[]
+  variant_count: number
+}
+
+/**
+ * Product Content (Language-Specific)
+ */
+export interface ProductContent {
+  url?: string
+  title?: string
+  fulltitle?: string
+  description?: string
+  content?: string
+}
+
+/**
+ * Variant Data (Full Detail)
+ * 
+ * Complete variant information including multi-language content.
+ */
+export interface VariantData {
+  variant_id: number
+  sku: string
+  is_default: boolean
+  price_excl: number
+  image: {
+    src?: string
+    thumb?: string
+    title?: string
+  } | null
+  content_by_language: Record<string, VariantContent>
+}
+
+/**
+ * Variant Content (Language-Specific)
+ */
+export interface VariantContent {
+  title?: string
 }

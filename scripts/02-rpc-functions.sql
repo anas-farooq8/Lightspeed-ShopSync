@@ -180,6 +180,29 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
+  -- ========================================
+  -- INPUT VALIDATION
+  -- ========================================
+  
+  -- Validate limit
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'Invalid limit. Must be between 1 and 1000, got: %', COALESCE(p_limit::TEXT, 'NULL');
+  END IF;
+  
+  -- Validate offset
+  IF p_offset IS NULL OR p_offset < 0 THEN
+    RAISE EXCEPTION 'Invalid offset. Must be >= 0, got: %', COALESCE(p_offset::TEXT, 'NULL');
+  END IF;
+  
+  -- Validate status if provided
+  IF p_status IS NOT NULL AND p_status NOT IN ('running', 'success', 'error') THEN
+    RAISE EXCEPTION 'Invalid status. Must be ''running'', ''success'', or ''error'', got: %', p_status;
+  END IF;
+  
+  -- ========================================
+  -- QUERY EXECUTION
+  -- ========================================
+  
   RETURN QUERY
   SELECT 
     DATE(started_at) as log_date,
@@ -370,169 +393,3 @@ GRANT EXECUTE ON FUNCTION get_last_sync_info() TO authenticated;
 --     "variants_filtered": 1
 --   }
 -- ]
-
-
--- =====================================================
--- GET NULL SKU PRODUCTS (For NULL SKU Tab)
--- =====================================================
--- Purpose: Fetch products where default variant has NULL or empty SKU
--- Returns data in same format as product_sync_status for UI reuse
--- =====================================================
-
--- Drop existing function first (signature changed)
-DROP FUNCTION IF EXISTS get_null_sku_products(TEXT, TEXT, TEXT, TEXT, INTEGER, INTEGER);
-
-CREATE OR REPLACE FUNCTION get_null_sku_products(
-  p_shop_tld TEXT DEFAULT NULL,    -- Filter by shop TLD (nl, be, de) or NULL for all
-  p_search TEXT DEFAULT NULL,       -- Search in product title or variant title
-  p_sort_by TEXT DEFAULT 'created', -- 'title' | 'variants' | 'price' | 'created'
-  p_sort_order TEXT DEFAULT 'desc', -- 'asc' | 'desc'
-  p_page INTEGER DEFAULT 1,
-  p_page_size INTEGER DEFAULT 100
-)
-RETURNS TABLE(
-  -- Source product info (matching product_sync_status format)
-  source_shop_id UUID,
-  source_shop_name TEXT,
-  source_shop_tld TEXT,
-  source_product_id BIGINT,
-  source_variant_id BIGINT,
-  default_sku TEXT,
-  
-  -- Display data
-  product_title TEXT,
-  variant_title TEXT,
-  product_image JSONB,
-  price_excl NUMERIC,
-  source_variant_count INTEGER,
-  ls_created_at TIMESTAMP WITH TIME ZONE,
-  
-  -- Source duplicate info (always 1 for null SKU products)
-  source_duplicate_count INTEGER,
-  source_has_duplicates BOOLEAN,
-  source_duplicate_product_ids BIGINT[],
-  
-  -- Target shops data (empty for null SKU)
-  targets JSONB,
-  
-  -- Pagination metadata
-  total_count BIGINT,
-  total_pages INTEGER
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-  WITH filtered_products AS (
-    SELECT 
-      s.id AS shop_id,
-      s.name AS shop_name,
-      s.tld AS shop_tld,
-      v.lightspeed_product_id AS product_id,
-      v.lightspeed_variant_id AS variant_id,
-      pc.title AS product_title,
-      vc.title AS variant_title,
-      p.image AS product_image,
-      v.price_excl,
-      p.ls_created_at
-    FROM shops s
-    INNER JOIN variants v ON v.shop_id = s.id
-      AND v.is_default = true
-      AND (v.sku IS NULL OR TRIM(v.sku) = '')
-    INNER JOIN products p ON p.shop_id = s.id 
-      AND p.lightspeed_product_id = v.lightspeed_product_id
-    LEFT JOIN product_content pc ON pc.shop_id = s.id 
-      AND pc.lightspeed_product_id = v.lightspeed_product_id
-      AND pc.language_code = s.tld
-    LEFT JOIN variant_content vc ON vc.shop_id = s.id 
-      AND vc.lightspeed_variant_id = v.lightspeed_variant_id
-      AND vc.language_code = s.tld
-    WHERE 
-      (p_shop_tld IS NULL OR s.tld = p_shop_tld)
-      AND
-      (
-        p_search IS NULL 
-        OR p_search = ''
-        OR pc.title ILIKE '%' || p_search || '%'
-        OR vc.title ILIKE '%' || p_search || '%'
-      )
-  ),
-  variant_counts AS (
-    SELECT
-      v.shop_id,
-      v.lightspeed_product_id,
-      COUNT(*) AS variant_count
-    FROM variants v
-    WHERE v.shop_id IN (SELECT shop_id FROM filtered_products)
-      AND v.lightspeed_product_id IN (SELECT product_id FROM filtered_products)
-    GROUP BY v.shop_id, v.lightspeed_product_id
-  ),
-  counted_products AS (
-    SELECT 
-      fp.*,
-      COALESCE(vc.variant_count, 1)::INTEGER AS variant_count,
-      COUNT(*) OVER() AS total_count
-    FROM filtered_products fp
-    LEFT JOIN variant_counts vc ON vc.shop_id = fp.shop_id 
-      AND vc.lightspeed_product_id = fp.product_id
-  ),
-  sorted_products AS (
-    SELECT 
-      cp.*,
-      CEIL(cp.total_count::NUMERIC / p_page_size)::INTEGER AS total_pages
-    FROM counted_products cp
-    ORDER BY
-      CASE 
-        WHEN p_sort_by = 'title' AND p_sort_order = 'asc' THEN cp.product_title
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'title' AND p_sort_order = 'desc' THEN cp.product_title
-      END DESC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'variants' AND p_sort_order = 'asc' THEN cp.variant_count
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'variants' AND p_sort_order = 'desc' THEN cp.variant_count
-      END DESC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'price' AND p_sort_order = 'asc' THEN cp.price_excl
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'price' AND p_sort_order = 'desc' THEN cp.price_excl
-      END DESC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN cp.ls_created_at
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN cp.ls_created_at
-      END DESC NULLS LAST,
-      cp.ls_created_at DESC,
-      cp.product_title ASC
-    LIMIT p_page_size
-    OFFSET (p_page - 1) * p_page_size
-  )
-  SELECT 
-    sp.shop_id AS source_shop_id,
-    sp.shop_name AS source_shop_name,
-    sp.shop_tld AS source_shop_tld,
-    sp.product_id AS source_product_id,
-    sp.variant_id AS source_variant_id,
-    'NULL' AS default_sku,
-    sp.product_title,
-    sp.variant_title,
-    sp.product_image,
-    sp.price_excl,
-    sp.variant_count AS source_variant_count,
-    sp.ls_created_at,
-    1 AS source_duplicate_count,
-    false AS source_has_duplicates,
-    ARRAY[sp.product_id] AS source_duplicate_product_ids,
-    '{}'::JSONB AS targets,
-    sp.total_count,
-    sp.total_pages
-  FROM sorted_products sp;
-$$;
-
--- Grant access
-GRANT EXECUTE ON FUNCTION get_null_sku_products(TEXT, TEXT, TEXT, TEXT, INTEGER, INTEGER) TO authenticated;

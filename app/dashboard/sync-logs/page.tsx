@@ -41,10 +41,10 @@ interface SyncLogsResponse {
   shops: Shop[]
 }
 
-function SyncPageHeader() {
+function SyncLogsPageHeader() {
   return (
     <div className="mb-4">
-      <h1 className="text-2xl font-bold mb-1">Sync Status</h1>
+      <h1 className="text-2xl font-bold mb-1">Sync Logs</h1>
       <p className="text-sm text-muted-foreground">
         Monitor synchronization operations with Lightspeed API
       </p>
@@ -52,7 +52,7 @@ function SyncPageHeader() {
   )
 }
 
-export default function SyncPage() {
+export default function SyncLogsPage() {
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,7 +182,7 @@ export default function SyncPage() {
         {/* Global Loading Shimmer */}
         <LoadingShimmer show={isFilterLoading} position="top" />
         
-        <SyncPageHeader />
+        <SyncLogsPageHeader />
 
         {loading && syncLogs.length === 0 ? (
           <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>

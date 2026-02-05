@@ -102,13 +102,21 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([tld, targetInfo]) => {
                 const exists = targetInfo.status === 'exists_single' || targetInfo.status === 'exists_multiple'
+                const totalMatches = targetInfo.total_matches || 0
                 return (
                   <div key={tld} className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
                     {exists ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="relative">
+                        <CheckCircle2 className="h-6 w-6 text-green-600" />
+                        {totalMatches > 1 && (
+                          <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center leading-none">
+                            {totalMatches}
+                          </span>
+                        )}
+                      </div>
                     ) : (
-                      <XCircle className="h-4 w-4 text-red-600" />
+                      <XCircle className="h-6 w-6 text-red-600" />
                     )}
                   </div>
                 )

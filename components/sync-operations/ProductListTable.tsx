@@ -241,13 +241,21 @@ export function ProductListTable({
           const targetInfo = product.targets?.[shop.tld]
           const status = targetInfo?.status || 'not_exists'
           const exists = status === 'exists_single' || status === 'exists_multiple'
+          const totalMatches = targetInfo?.total_matches || 0
           
           return (
             <TableCell key={shop.tld} className="text-center">
               {exists ? (
-                <CheckCircle2 className="h-5 w-5 mx-auto text-green-600" />
+                <div className="relative inline-block">
+                  <CheckCircle2 className="h-6 w-6 mx-auto text-green-600" />
+                  {totalMatches > 1 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[11px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none">
+                      {totalMatches}
+                    </span>
+                  )}
+                </div>
               ) : (
-                <XCircle className="h-5 w-5 mx-auto text-red-600" />
+                <XCircle className="h-6 w-6 mx-auto text-red-600" />
               )}
             </TableCell>
           )

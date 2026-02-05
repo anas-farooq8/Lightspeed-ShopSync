@@ -70,7 +70,7 @@ export function Sidebar() {
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/dashboard/sync-operations', icon: ArrowLeftRight, label: 'Sync Operations' },
-    { href: '/dashboard/sync', icon: RefreshCw, label: 'Sync Status' },
+    { href: '/dashboard/sync-logs', icon: RefreshCw, label: 'Sync Logs' },
   ]
 
   return (
