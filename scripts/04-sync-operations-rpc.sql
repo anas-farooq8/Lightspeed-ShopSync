@@ -14,6 +14,14 @@ DROP FUNCTION IF EXISTS get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEX
 --   5. STABLE function (cacheable, can be inlined)
 --   6. Strategic use of LIMIT/OFFSET at SQL level
 --
+-- CRITICAL FIX FOR PAGINATION WITH DUPLICATE SKUs:
+--   Products are grouped by SKU at the SQL level BEFORE pagination.
+--   This ensures ALL products with the same SKU always appear on the
+--   same page, preventing split duplicates across pages.
+--   
+--   Example: If SKU "520147" has 3 products, all 3 will be on the
+--   same page, not split with 1 on page 1 and 2 on page 2.
+--
 -- Purpose:
 --   Efficiently fetches filtered and paginated sync operations
 --   for CREATE and EDIT tabs with proper SQL-based filtering.
@@ -167,49 +175,111 @@ BEGIN
           ))
       )
   ),
-  counted_products AS (
+  -- ========================================
+  -- CRITICAL FIX: Group by SKU and assign group numbers
+  -- This ensures all products with same SKU appear on same page
+  -- ========================================
+  sku_groups AS (
     SELECT 
       fp.*,
-      COUNT(*) OVER() AS total_count
+      -- For each unique SKU, pick a representative sort value
+      -- All products with same SKU will get same sort value
+      FIRST_VALUE(
+        CASE 
+          WHEN p_sort_by = 'title' THEN fp.product_title
+          WHEN p_sort_by = 'sku' THEN fp.default_sku
+          WHEN p_sort_by = 'variants' THEN fp.source_variant_count::TEXT
+          WHEN p_sort_by = 'price' THEN fp.price_excl::TEXT
+          WHEN p_sort_by = 'created' THEN fp.ls_created_at::TEXT
+          ELSE fp.ls_created_at::TEXT
+        END
+      ) OVER (
+        PARTITION BY fp.default_sku 
+        ORDER BY fp.ls_created_at DESC, fp.source_product_id ASC
+      ) AS group_sort_value,
+      -- Secondary sort value (created date as text for all SKU products)
+      FIRST_VALUE(fp.ls_created_at::TEXT) OVER (
+        PARTITION BY fp.default_sku 
+        ORDER BY fp.ls_created_at DESC, fp.source_product_id ASC
+      ) AS group_secondary_sort
     FROM filtered_products fp
   ),
+  -- Assign a dense rank to each unique SKU group (not to each product)
+  ranked_groups AS (
+    SELECT
+      sg.*,
+      DENSE_RANK() OVER (
+        ORDER BY
+          -- Sort groups by their representative value
+          CASE 
+            WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' 
+              THEN sg.group_sort_value
+          END ASC NULLS LAST,
+          CASE 
+            WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' 
+              THEN sg.group_sort_value
+          END DESC NULLS LAST,
+          CASE 
+            WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'asc' 
+              THEN sg.group_sort_value::NUMERIC
+          END ASC NULLS LAST,
+          CASE 
+            WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'desc' 
+              THEN sg.group_sort_value::NUMERIC
+          END DESC NULLS LAST,
+          -- Secondary sort by created date for consistency
+          sg.group_secondary_sort DESC,
+          sg.default_sku ASC
+      ) AS sku_group_rank,
+      -- Count total unique SKU groups for pagination
+      COUNT(DISTINCT sg.default_sku) OVER () AS total_sku_groups
+    FROM sku_groups sg
+  ),
+  -- Filter to get only the SKU groups that belong to current page
+  page_groups AS (
+    SELECT DISTINCT
+      rg.default_sku,
+      rg.total_sku_groups
+    FROM ranked_groups rg
+    WHERE rg.sku_group_rank > (p_page - 1) * p_page_size
+      AND rg.sku_group_rank <= p_page * p_page_size
+  ),
+  -- Get ALL products that belong to the SKU groups on this page
+  page_products AS (
+    SELECT 
+      rg.*,
+      pg.total_sku_groups
+    FROM ranked_groups rg
+    INNER JOIN page_groups pg ON pg.default_sku = rg.default_sku
+  ),
+  -- Apply final sorting within each page
   sorted_products AS (
     SELECT 
-      cp.*,
-      CEIL(cp.total_count::NUMERIC / p_page_size)::INTEGER AS total_pages
-    FROM counted_products cp
+      pp.*,
+      CEIL(pp.total_sku_groups::NUMERIC / p_page_size)::INTEGER AS total_pages
+    FROM page_products pp
     ORDER BY
+      -- Sort by the same criteria used for grouping
       CASE 
-        WHEN p_sort_by = 'title' AND p_sort_order = 'asc' THEN cp.product_title
-        WHEN p_sort_by = 'sku' AND p_sort_order = 'asc' THEN cp.default_sku
+        WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' 
+          THEN pp.group_sort_value
       END ASC NULLS LAST,
       CASE 
-        WHEN p_sort_by = 'title' AND p_sort_order = 'desc' THEN cp.product_title
-        WHEN p_sort_by = 'sku' AND p_sort_order = 'desc' THEN cp.default_sku
+        WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' 
+          THEN pp.group_sort_value
       END DESC NULLS LAST,
       CASE 
-        WHEN p_sort_by = 'variants' AND p_sort_order = 'asc' THEN cp.source_variant_count
+        WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'asc' 
+          THEN pp.group_sort_value::NUMERIC
       END ASC NULLS LAST,
       CASE 
-        WHEN p_sort_by = 'variants' AND p_sort_order = 'desc' THEN cp.source_variant_count
+        WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'desc' 
+          THEN pp.group_sort_value::NUMERIC
       END DESC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'price' AND p_sort_order = 'asc' THEN cp.price_excl
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'price' AND p_sort_order = 'desc' THEN cp.price_excl
-      END DESC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN cp.ls_created_at
-      END ASC NULLS LAST,
-      CASE 
-        WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN cp.ls_created_at
-      END DESC NULLS LAST,
-      -- Secondary sort by created date, then SKU for consistency
-      cp.ls_created_at DESC,
-      cp.default_sku ASC
-    LIMIT p_page_size
-    OFFSET (p_page - 1) * p_page_size
+      pp.group_secondary_sort DESC,
+      pp.default_sku ASC,
+      -- Within same SKU, sort by product_id for consistency
+      pp.source_product_id ASC
   )
   SELECT 
     sp.source_shop_id,
@@ -228,7 +298,7 @@ BEGIN
     sp.source_has_duplicates,
     sp.source_duplicate_product_ids,
     sp.targets,
-    sp.total_count,
+    sp.total_sku_groups AS total_count,
     sp.total_pages
   FROM sorted_products sp;
 END;
@@ -258,8 +328,13 @@ GRANT EXECUTE ON FUNCTION get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, T
 -- - Display data (title, image, price, etc.)
 -- - Duplicate information (if SKU appears multiple times in source)
 -- - All target shops status in JSONB format
--- - total_count: Total matching products (for pagination)
--- - total_pages: Calculated total pages
+-- - total_count: Total unique SKU groups (NOT individual products)
+-- - total_pages: Calculated based on SKU groups
+--
+-- IMPORTANT: Pagination is based on SKU groups, not individual products.
+-- If page_size = 100, each page shows up to 100 unique SKUs, but might
+-- return MORE than 100 rows if some SKUs have duplicates.
+-- All products with the same SKU will always be on the same page.
 --
 -- Example:
 -- {
