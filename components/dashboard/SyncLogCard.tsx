@@ -1,6 +1,7 @@
 import { SyncLog } from '@/types/database'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { formatDateTime, getShopRoleLabel } from '@/lib/utils'
 import { 
   CheckCircle2, 
   XCircle, 
@@ -45,25 +46,12 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
   }
 
   const getTldBadge = (tld: string, role?: string) => {
-    const roleLabel = role === 'source' ? 'Source' : role === 'target' ? 'Target' : ''
+    const roleLabel = getShopRoleLabel(role)
     return (
       <Badge variant="secondary" className="font-medium">
         .{tld.toLowerCase()} {roleLabel && `· ${roleLabel}`}
       </Badge>
     )
-  }
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
   }
 
   return (
@@ -78,16 +66,16 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
               {getTldBadge(log.shop_tld || 'unknown', log.shop_role)}
               {getStatusBadge()}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-              <span>{formatDateTime(log.created_at)}</span>
-              {log.duration_seconds !== null && (
-                <>
-                  <span>•</span>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    <span>{log.duration_seconds.toFixed(1)}s</span>
-                  </div>
-                </>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-0.5">
+              <span>Started: {formatDateTime(log.started_at)}</span>
+              {log.completed_at && (
+                <span>Completed: {formatDateTime(log.completed_at)}</span>
+              )}
+              {log.duration_seconds != null && (
+                <div className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  <span>{log.duration_seconds.toFixed(1)}s</span>
+                </div>
               )}
             </div>
           </div>

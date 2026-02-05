@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import type { SyncProduct } from './ProductListTab'
 import { getShopColorClasses } from '@/lib/constants/shop-colors'
+import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface ProductListTableProps {
   products: SyncProduct[]
@@ -78,9 +79,9 @@ export function ProductListTable({
       })
       
       setTargetShops(
-        Array.from(shopsSet)
-          .map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
-          .sort((a, b) => a.tld.localeCompare(b.tld))
+        sortShopsSourceFirstThenByTld(
+          Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
+        )
       )
     }
   }, [products])

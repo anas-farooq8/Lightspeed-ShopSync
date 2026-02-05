@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { SyncProduct } from './ProductListTab'
+import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface ProductSyncTableProps {
   products: SyncProduct[]
@@ -51,9 +52,9 @@ export function ProductSyncTable({
       })
       
       setTargetShops(
-        Array.from(shopsSet)
-          .map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
-          .sort((a, b) => a.tld.localeCompare(b.tld))
+        sortShopsSourceFirstThenByTld(
+          Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
+        )
       )
     }
   }, [products])

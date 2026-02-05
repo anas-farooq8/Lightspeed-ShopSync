@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProductListTab } from '@/components/sync-operations/ProductListTab'
+import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface Shop {
   shop_id: string
@@ -23,15 +24,7 @@ export default function SyncOperationsPage() {
         if (!response.ok) throw new Error('Failed to fetch shops')
         
         const data = await response.json()
-        
-        // Sort shops: source first, then targets alphabetically by tld
-        const sortedShops = (data.shops || []).sort((a: Shop, b: Shop) => {
-          if (a.role === 'source' && b.role !== 'source') return -1
-          if (a.role !== 'source' && b.role === 'source') return 1
-          return a.tld.localeCompare(b.tld)
-        })
-        
-        setShops(sortedShops)
+        setShops(sortShopsSourceFirstThenByTld(data.shops))
       } catch (err) {
         console.error('Failed to load shops:', err)
       }

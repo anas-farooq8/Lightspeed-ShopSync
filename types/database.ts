@@ -141,7 +141,4 @@ export interface SyncLog {
   products_deleted: number
   variants_deleted: number
   variants_filtered: number  // Orphaned variants filtered out
-  
-  // Standard timestamps
-  created_at: string
 }

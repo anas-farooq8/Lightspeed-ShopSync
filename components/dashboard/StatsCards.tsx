@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Store, Activity } from 'lucide-react'
+import { sortShopsSourceFirstThenByTld, toSafeExternalHref } from '@/lib/utils'
 import type { DashboardKpi } from '@/types/database'
 
 export function StatsCards() {
@@ -10,31 +11,13 @@ export function StatsCards() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const toSafeExternalHref = (baseUrl: string | null | undefined) => {
-    const raw = (baseUrl ?? '').trim()
-    if (!raw) return null
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
-    return `https://${raw}`
-  }
-
   useEffect(() => {
     async function fetchStats() {
       try {
         const response = await fetch('/api/stats')
         if (!response.ok) throw new Error('Failed to fetch stats')
         const data = await response.json()
-        
-        // Sort: source first, then targets sorted by TLD
-        const sorted = Array.isArray(data) ? [...data].sort((a, b) => {
-          // Source shops come first
-          if (a.role === 'source' && b.role !== 'source') return -1
-          if (a.role !== 'source' && b.role === 'source') return 1
-          
-          // Both are targets, sort by TLD
-          return a.tld.localeCompare(b.tld)
-        }) : []
-        
-        setKpis(sorted)
+        setKpis(sortShopsSourceFirstThenByTld(data))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load statistics')
       } finally {

@@ -12,6 +12,7 @@ import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsL
 import { ProductCard } from '@/components/sync-operations/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/ProductListTable'
 import { initializeShopColors } from '@/lib/constants/shop-colors'
+import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
 export interface TargetShopInfo {
@@ -277,7 +278,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                             value={shop.tld} 
                             className="cursor-pointer"
                           >
-                            {shop.shop_name} (.{shop.tld}) - {shop.role === 'source' ? 'Source' : 'Target'}
+                            {shop.shop_name} (.{shop.tld}) - {getShopRoleLabel(shop.role) || 'Target'}
                           </SelectItem>
                         ))}
                       </>
@@ -286,9 +287,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                         <SelectItem value="all" className="cursor-pointer">
                           Missing in all shops
                         </SelectItem>
-                        {shops
-                          .filter(shop => shop.role === 'target')
-                          .sort((a, b) => a.tld.localeCompare(b.tld))
+                        {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target'))
                           .map((shop) => (
                             <SelectItem 
                               key={shop.shop_id} 

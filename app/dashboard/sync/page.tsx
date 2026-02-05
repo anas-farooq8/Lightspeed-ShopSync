@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
+import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 
 const ITEMS_PER_DATE = 20
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
@@ -89,7 +90,7 @@ export default function SyncPage() {
       
       const data: SyncLogsResponse = await response.json()
       setSyncLogs(data.syncLogs || [])
-      setShops(data.shops || [])
+      setShops(sortShopsSourceFirstThenByTld(data.shops))
       setTotalPages(data.totalPages || 0)
       setTotalDates(data.totalDates || 0)
       setCurrentPage(data.currentPage || 1)
@@ -203,7 +204,7 @@ export default function SyncPage() {
                   <SelectItem value="all" className="cursor-pointer">All Shops</SelectItem>
                   {shops.map(shop => (
                     <SelectItem key={shop.tld} value={shop.tld} className="cursor-pointer">
-                      {shop.tld.toUpperCase()} - {shop.role === 'source' ? 'Source' : 'Target'}
+                      {shop.tld.toUpperCase()} - {getShopRoleLabel(shop.role) || 'Target'}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -217,7 +218,6 @@ export default function SyncPage() {
                   <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
                   <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
                   <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
-                  <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
                 </SelectContent>
               </Select>
             </div>

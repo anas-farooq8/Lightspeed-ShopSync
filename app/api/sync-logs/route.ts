@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 import type { SyncLog } from '@/types/database'
 
 const DATES_PER_PAGE = 20
@@ -17,13 +18,13 @@ export async function GET(request: Request) {
     const { data: shopsData } = await supabase
       .from('shops')
       .select('id, tld, role')
-      .order('role', { ascending: true })
-      .order('tld', { ascending: true })
 
-    const shops = (shopsData || []).map((shop: any) => ({
-      tld: shop.tld,
-      role: shop.role
-    }))
+    const shops = sortShopsSourceFirstThenByTld(
+      (shopsData || []).map((shop: any) => ({
+        tld: shop.tld,
+        role: shop.role
+      }))
+    )
 
     // Resolve shop_id for filtering
     let shopId: string | null = null
@@ -85,11 +86,24 @@ export async function GET(request: Request) {
     const totalPages = Math.ceil(totalDates / DATES_PER_PAGE)
     const pageDates = paginationData.map((row: any) => row.log_date)
 
-    // Fetch full logs for these dates with timezone safety
+    // Fetch full logs for these dates (exclude created_at)
     let logsQuery = supabase
       .from('sync_logs')
       .select(`
-        *,
+        id,
+        shop_id,
+        started_at,
+        completed_at,
+        duration_seconds,
+        status,
+        error_message,
+        products_fetched,
+        variants_fetched,
+        products_synced,
+        variants_synced,
+        products_deleted,
+        variants_deleted,
+        variants_filtered,
         shops (
           name,
           tld,
@@ -137,7 +151,6 @@ export async function GET(request: Request) {
       products_deleted: log.products_deleted || 0,
       variants_deleted: log.variants_deleted || 0,
       variants_filtered: log.variants_filtered || 0,
-      created_at: log.created_at,
     }))
 
     return NextResponse.json({ 

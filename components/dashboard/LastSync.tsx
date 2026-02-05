@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Clock, CheckCircle2, XCircle, Database, TrendingUp, TrendingDown, Store } from 'lucide-react'
+import { Loader2, Clock, CheckCircle2, XCircle, Store } from 'lucide-react'
+import { sortShopsSourceFirstThenByTld, formatDateTime, toSafeExternalHref } from '@/lib/utils'
 
 interface LastSyncInfo {
   shop_id: string
@@ -35,18 +36,7 @@ export function LastSync() {
         const response = await fetch('/api/last-sync')
         if (!response.ok) throw new Error('Failed to fetch last sync info')
         const data = await response.json()
-        
-        // Sort: source first, then targets sorted by TLD
-        const sorted = Array.isArray(data) ? [...data].sort((a, b) => {
-          // Source shops come first
-          if (a.role === 'source' && b.role !== 'source') return -1
-          if (a.role !== 'source' && b.role === 'source') return 1
-          
-          // Both are targets, sort by TLD
-          return a.tld.localeCompare(b.tld)
-        }) : []
-        
-        setSyncInfo(sorted)
+        setSyncInfo(sortShopsSourceFirstThenByTld(data))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load last sync information')
       } finally {
@@ -56,26 +46,6 @@ export function LastSync() {
 
     fetchLastSync()
   }, [])
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
-  }
-
-  const formatDuration = (seconds: number) => {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`
-    const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}m ${secs}s`
-  }
 
   return (
     <div>
@@ -119,7 +89,23 @@ export function LastSync() {
                   <div className="flex items-center gap-2">
                     <Store className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <h3 className="font-semibold text-base">{sync.shop_name}</h3>
+                      <h3 className="font-semibold text-base">
+                        {(() => {
+                          const href = toSafeExternalHref(sync.base_url)
+                          if (!href) return sync.shop_name
+                          return (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:underline underline-offset-2"
+                              title={sync.base_url}
+                            >
+                              {sync.shop_name}
+                            </a>
+                          )
+                        })()}
+                      </h3>
                       <p className="text-sm text-muted-foreground">
                         {sync.role} · .{sync.tld}
                       </p>
@@ -138,51 +124,51 @@ export function LastSync() {
                   )}
                 </div>
 
-                {/* Sync Details Grid */}
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {/* Started At */}
-                  <div>
-                    <span className="text-muted-foreground">Started:</span>
-                    <p className="font-medium mt-0.5">{formatDateTime(sync.started_at)}</p>
+                {/* Sync Details */}
+                <div className="space-y-3 text-sm">
+                  {/* Started & Completed */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-muted-foreground">Started:</span>
+                      <p className="font-medium mt-0.5">{formatDateTime(sync.started_at)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Completed:</span>
+                      <p className="font-medium mt-0.5">{formatDateTime(sync.completed_at)}</p>
+                    </div>
                   </div>
-                  
-                  {/* Completed At */}
-                  <div>
-                    <span className="text-muted-foreground">Completed:</span>
-                    <p className="font-medium mt-0.5">{formatDateTime(sync.completed_at)}</p>
+
+                  {/* Products & Variants side by side */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-muted-foreground">Products:</span>
+                      <p className="font-medium mt-0.5">
+                        <span className="text-blue-600">{sync.products_fetched.toLocaleString()}</span> fetched, 
+                        <span className="text-green-600"> {sync.products_synced.toLocaleString()}</span> synced
+                        {sync.products_deleted > 0 && (
+                          <>, <span className="text-red-600">{sync.products_deleted.toLocaleString()}</span> deleted</>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Variants:</span>
+                      <p className="font-medium mt-0.5">
+                        <span className="text-blue-600">{sync.variants_fetched.toLocaleString()}</span> fetched, 
+                        <span className="text-green-600"> {sync.variants_synced.toLocaleString()}</span> synced
+                        {sync.variants_deleted > 0 && (
+                          <>, <span className="text-red-600">{sync.variants_deleted.toLocaleString()}</span> deleted</>
+                        )}
+                        {sync.variants_filtered > 0 && (
+                          <>, <span className="text-yellow-600">{sync.variants_filtered.toLocaleString()}</span> filtered</>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                  
-                  {/* Duration */}
+
+                  {/* Duration below */}
                   <div>
                     <span className="text-muted-foreground">Duration:</span>
-                    <p className="font-medium mt-0.5">{formatDuration(sync.duration_seconds)}</p>
-                  </div>
-                  
-                  {/* Products */}
-                  <div>
-                    <span className="text-muted-foreground">Products:</span>
-                    <p className="font-medium mt-0.5">
-                      <span className="text-blue-600">{sync.products_fetched.toLocaleString()}</span> fetched, 
-                      <span className="text-green-600"> {sync.products_synced.toLocaleString()}</span> synced
-                      {sync.products_deleted > 0 && (
-                        <>, <span className="text-red-600">{sync.products_deleted.toLocaleString()}</span> deleted</>
-                      )}
-                    </p>
-                  </div>
-                  
-                  {/* Variants */}
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Variants:</span>
-                    <p className="font-medium mt-0.5">
-                      <span className="text-blue-600">{sync.variants_fetched.toLocaleString()}</span> fetched, 
-                      <span className="text-green-600"> {sync.variants_synced.toLocaleString()}</span> synced
-                      {sync.variants_deleted > 0 && (
-                        <>, <span className="text-red-600">{sync.variants_deleted.toLocaleString()}</span> deleted</>
-                      )}
-                      {sync.variants_filtered > 0 && (
-                        <>, <span className="text-yellow-600">{sync.variants_filtered.toLocaleString()}</span> filtered</>
-                      )}
-                    </p>
+                    <p className="font-medium mt-0.5">{sync.duration_seconds.toFixed(2)}s</p>
                   </div>
                 </div>
 
