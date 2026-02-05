@@ -1,11 +1,44 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProductListTab } from '@/components/sync-operations/ProductListTab'
 
+interface Shop {
+  shop_id: string
+  shop_name: string
+  tld: string
+  role: string
+}
+
 export default function SyncOperationsPage() {
   const [activeTab, setActiveTab] = useState('create')
+  const [shops, setShops] = useState<Shop[]>([])
+
+  // Fetch shops once on mount - shared across all tabs
+  useEffect(() => {
+    async function fetchShops() {
+      try {
+        const response = await fetch('/api/shops')
+        if (!response.ok) throw new Error('Failed to fetch shops')
+        
+        const data = await response.json()
+        
+        // Sort shops: source first, then targets alphabetically by tld
+        const sortedShops = (data.shops || []).sort((a: Shop, b: Shop) => {
+          if (a.role === 'source' && b.role !== 'source') return -1
+          if (a.role !== 'source' && b.role === 'source') return 1
+          return a.tld.localeCompare(b.tld)
+        })
+        
+        setShops(sortedShops)
+      } catch (err) {
+        console.error('Failed to load shops:', err)
+      }
+    }
+    
+    fetchShops()
+  }, [])
 
   return (
     <div className="w-full h-full p-6">
@@ -33,7 +66,7 @@ export default function SyncOperationsPage() {
           </TabsList>
 
           <TabsContent value="create" className="mt-0">
-            <ProductListTab operation="create" />
+            <ProductListTab operation="create" shops={shops} />
           </TabsContent>
 
           <TabsContent value="edit" className="mt-0">
@@ -43,7 +76,7 @@ export default function SyncOperationsPage() {
           </TabsContent>
 
           <TabsContent value="null_sku" className="mt-0">
-            <ProductListTab operation="null_sku" />
+            <ProductListTab operation="null_sku" shops={shops} />
           </TabsContent>
         </Tabs>
       </div>

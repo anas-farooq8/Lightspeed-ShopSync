@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, RefreshCw, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { ProductCard } from '@/components/sync-operations/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/ProductListTable'
 
@@ -50,18 +51,23 @@ interface Shop {
 
 interface ProductListTabProps {
   operation?: 'create' | 'null_sku'
+  shops: Shop[]
 }
 
-export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
+export function ProductListTab({ operation = 'create', shops }: ProductListTabProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
   const [products, setProducts] = useState<SyncProduct[]>([])
-  const [shops, setShops] = useState<Shop[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filterLoading, setFilterLoading] = useState(false)
-  const [searchLoading, setSearchLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true) // Only true on first load
+  const [isRefreshing, setIsRefreshing] = useState(false) // For filter changes, keeps products visible
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
+  
+  // Initialize search from URL
+  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
+  
   const [missingIn, setMissingIn] = useState<string>('all')
   const [shopFilter, setShopFilter] = useState<string>('all')
   const [onlyDuplicates, setOnlyDuplicates] = useState(false)
@@ -70,25 +76,22 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const pageSize = 100
   
   const isNullSku = operation === 'null_sku'
 
-  // Fetch shops once on mount (independent of products)
+  // Listen to URL changes (browser back/forward button)
   useEffect(() => {
-    fetchShops()
-  }, [])
+    const urlSearch = searchParams.get('search') || ''
+    if (urlSearch !== search) {
+      setSearch(urlSearch)
+      setSearchInput(urlSearch)
+    }
+  }, [searchParams, search])
 
+  // Fetch products when filters or search changes
   useEffect(() => {
     fetchProducts()
-  }, [page, missingIn, shopFilter, onlyDuplicates, sortBy, sortOrder])
-
-  // Separate useEffect for search (only triggers when search state changes, not searchInput)
-  useEffect(() => {
-    if (search !== '') {
-      fetchProducts()
-    }
-  }, [search])
+  }, [page, missingIn, shopFilter, onlyDuplicates, sortBy, sortOrder, search])
 
   // Scroll to top of the scrollable container (main element)
   const scrollToTop = () => {
@@ -99,34 +102,18 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
     }
   }
 
-  async function fetchShops() {
-    try {
-      const response = await fetch('/api/shops')
-      if (!response.ok) throw new Error('Failed to fetch shops')
-      
-      const data = await response.json()
-      
-      // Sort shops: source first, then targets alphabetically by tld
-      const sortedShops = (data.shops || []).sort((a: Shop, b: Shop) => {
-        if (a.role === 'source' && b.role !== 'source') return -1
-        if (a.role !== 'source' && b.role === 'source') return 1
-        return a.tld.localeCompare(b.tld)
-      })
-      
-      setShops(sortedShops)
-    } catch (err) {
-      console.error('Failed to load shops:', err)
-      // Don't set error state, just log it - shops are non-critical for initial load
-    }
-  }
-
   async function fetchProducts() {
     try {
-      setLoading(true)
+      // Use isRefreshing for subsequent loads to prevent flicker
+      if (initialLoading) {
+        setInitialLoading(true)
+      } else {
+        setIsRefreshing(true)
+      }
+      
       const params = new URLSearchParams({
         operation: operation,
         page: page.toString(),
-        pageSize: pageSize.toString(),
         sortBy: sortBy,
         sortOrder: sortOrder,
       })
@@ -150,14 +137,12 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products')
     } finally {
-      setLoading(false)
+      setInitialLoading(false)
+      setIsRefreshing(false)
     }
   }
 
   const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
-    // Show loading state
-    setLoading(true)
-    
     if (sortBy === column) {
       // Toggle sort order
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -169,43 +154,20 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
     setPage(1) // Reset to first page on sort change
   }
 
-  const handleSearchSubmit = async () => {
+  const handleSearchSubmit = () => {
     if (searchInput === search) return // No change, don't refetch
     
-    setSearchLoading(true)
     setSearch(searchInput)
     setPage(1) // Reset to first page on search
     
-    try {
-      const params = new URLSearchParams({
-        operation: operation,
-        page: '1',
-        pageSize: pageSize.toString(),
-        sortBy: sortBy,
-        sortOrder: sortOrder,
-      })
-      
-      if (isNullSku) {
-        if (shopFilter !== 'all') params.append('shopTld', shopFilter)
-      } else {
-        params.append('missingIn', missingIn)
-        params.append('onlyDuplicates', onlyDuplicates.toString())
-      }
-      
-      if (searchInput) params.append('search', searchInput)
-
-      const response = await fetch(`/api/sync-operations?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch products')
-      
-      const data = await response.json()
-      setProducts(data.products || [])
-      setTotalPages(data.pagination.totalPages)
-      setTotal(data.pagination.total)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products')
-    } finally {
-      setSearchLoading(false)
+    // Update URL with search parameter only
+    if (searchInput) {
+      router.push(`?search=${encodeURIComponent(searchInput)}`)
+    } else {
+      router.push(window.location.pathname)
     }
+    
+    // useEffect will trigger fetchProducts() automatically when search changes
   }
 
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -214,48 +176,18 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
     }
   }
 
-  const handleFilterChange = async (value: string) => {
+  const handleFilterChange = (value: string) => {
     if (isNullSku) {
       setShopFilter(value)
     } else {
       setMissingIn(value)
     }
     setPage(1)
-    setFilterLoading(true)
     
-    try {
-      const params = new URLSearchParams({
-        operation: operation,
-        page: '1',
-        pageSize: pageSize.toString(),
-        sortBy: sortBy,
-        sortOrder: sortOrder,
-      })
-      
-      if (isNullSku) {
-        if (value !== 'all') params.append('shopTld', value)
-      } else {
-        params.append('missingIn', value)
-        params.append('onlyDuplicates', onlyDuplicates.toString())
-      }
-      
-      if (search) params.append('search', search)
-
-      const response = await fetch(`/api/sync-operations?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch products')
-      
-      const data = await response.json()
-      setProducts(data.products || [])
-      setTotalPages(data.pagination.totalPages)
-      setTotal(data.pagination.total)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products')
-    } finally {
-      setFilterLoading(false)
-    }
+    // useEffect will trigger fetchProducts() automatically when filter changes
   }
 
-  if (loading && products.length === 0) {
+  if (initialLoading && products.length === 0) {
     return (
       <Card className="border-border/50">
         <CardContent className="flex items-center justify-center py-16">
@@ -277,6 +209,19 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
 
   return (
     <div className="space-y-4">
+      {/* Top Loading Bar */}
+      {isRefreshing && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-red-600 animate-pulse">
+          <div className="h-full bg-red-400 animate-[shimmer_1s_ease-in-out_infinite]" 
+               style={{
+                 background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
+                 backgroundSize: '200% 100%',
+                 animation: 'shimmer 1s ease-in-out infinite'
+               }}
+          />
+        </div>
+      )}
+      
       {/* Filters and Controls */}
       <Card className="border-border/50">
         <CardContent className="pt-4">
@@ -290,23 +235,17 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyPress={handleSearchKeyPress}
                   className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-text flex-1"
-                  disabled={searchLoading}
+                  disabled={isRefreshing}
                 />
                 <Button
                   variant="default"
                   size="sm"
                   onClick={handleSearchSubmit}
-                  disabled={searchLoading}
+                  disabled={isRefreshing}
                   className="cursor-pointer bg-red-600 hover:bg-red-700 h-9 rounded-none border-l border-border px-4 m-0"
                 >
-                  {searchLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Search
-                    </>
-                  )}
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
                 </Button>
               </div>
             </div>
@@ -318,11 +257,10 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                 <Select 
                   value={isNullSku ? shopFilter : missingIn} 
                   onValueChange={handleFilterChange} 
-                  disabled={filterLoading}
+                  disabled={isRefreshing}
                 >
                   <SelectTrigger 
                     className="w-full sm:w-[280px] cursor-pointer"
-                    icon={filterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
                   >
                     <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
                   </SelectTrigger>
@@ -435,7 +373,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
             {/* Third Row: Results Count */}
             <div className="flex items-center justify-end">
               <div className="text-sm text-muted-foreground">
-                Showing {products.length > 0 ? ((page - 1) * pageSize) + 1 : 0} - {Math.min(page * pageSize, total)} of {total.toLocaleString()} products
+                Showing {products.length > 0 ? ((page - 1) * 100) + 1 : 0} - {Math.min(page * 100, total)} of {total.toLocaleString()} products
               </div>
             </div>
           </div>
@@ -454,7 +392,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
           products={products}
           sortBy={sortBy}
           sortOrder={sortOrder}
-          loading={loading}
+          loading={isRefreshing}
           onSort={handleSort}
           onProductClick={() => {}}
           hideSkuColumn={isNullSku}
@@ -490,7 +428,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                   setPage(1)
                   scrollToTop()
                 }}
-                disabled={page === 1 || loading}
+                disabled={page === 1 || isRefreshing}
                 className="cursor-pointer"
                 title="First page"
               >
@@ -505,7 +443,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                   setPage(page - 1)
                   scrollToTop()
                 }}
-                disabled={page === 1 || loading}
+                disabled={page === 1 || isRefreshing}
                 className="cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
@@ -566,7 +504,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                           setPage(pageNum as number)
                           scrollToTop()
                         }}
-                        disabled={loading}
+                        disabled={isRefreshing}
                         className={`cursor-pointer min-w-[40px] ${
                           isCurrentPage 
                             ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' 
@@ -588,7 +526,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                   setPage(page + 1)
                   scrollToTop()
                 }}
-                disabled={page === totalPages || loading}
+                disabled={page === totalPages || isRefreshing}
                 className="cursor-pointer"
               >
                 Next
@@ -603,7 +541,7 @@ export function ProductListTab({ operation = 'create' }: ProductListTabProps) {
                   setPage(totalPages)
                   scrollToTop()
                 }}
-                disabled={page === totalPages || loading}
+                disabled={page === totalPages || isRefreshing}
                 className="cursor-pointer"
                 title="Last page"
               >

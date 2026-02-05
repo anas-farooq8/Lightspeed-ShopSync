@@ -15,17 +15,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false }: ProductCardProps) {
-  // Use src image for better quality in card view (as requested)
+  // Use src image for better quality in card view
   const imageUrl = product.product_image?.src || product.product_image?.thumb || null
-  
-  // Get missing shops
-  const missingShops = Object.entries(product.targets || {})
-    .filter(([_, target]) => target.status === 'not_exists')
-    .map(([tld]) => tld)
-  
-  // Missing in all shops when ALL targets have status 'not_exists'
-  const allTargetShops = Object.keys(product.targets || {})
-  const allMissing = missingShops.length === allTargetShops.length && missingShops.length > 0
 
   return (
     <Card
