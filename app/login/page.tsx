@@ -78,8 +78,8 @@ function LoginForm() {
 
       if (data.session) {
         // Success - user is authenticated AND authorized
+        // router.push already fetches fresh data, no need for refresh()
         router.push("/dashboard")
-        router.refresh()
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
