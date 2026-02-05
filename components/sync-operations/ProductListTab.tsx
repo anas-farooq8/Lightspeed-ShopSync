@@ -106,6 +106,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   }>) => {
     const params = new URLSearchParams()
     
+    // Always preserve the tab parameter
+    const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
+    params.set('tab', currentTab)
+    
     const currentSearch = newState.search !== undefined ? newState.search : search
     const currentPage = newState.page !== undefined ? newState.page : page
     const currentMissingIn = newState.missingIn !== undefined ? newState.missingIn : missingIn
@@ -118,12 +122,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     if (currentPage > 1) params.set('page', currentPage.toString())
     if (!isNullSku && currentMissingIn !== 'all') params.set('missingIn', currentMissingIn)
     if (isNullSku && currentShopFilter !== 'all') params.set('shopFilter', currentShopFilter)
-    if (currentOnlyDuplicates) params.set('onlyDuplicates', 'true')
+    if (!isNullSku && currentOnlyDuplicates) params.set('onlyDuplicates', 'true')
     if (currentSortBy !== 'created') params.set('sortBy', currentSortBy)
     if (currentSortOrder !== 'desc') params.set('sortOrder', currentSortOrder)
     
     const queryString = params.toString()
-    router.push(`${window.location.pathname}${queryString ? `?${queryString}` : ''}`, { scroll: false })
+    router.push(`/dashboard/sync-operations${queryString ? `?${queryString}` : ''}`, { scroll: false })
   }
 
   // Listen to URL changes and refetch when navigating back
@@ -217,19 +221,26 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     // Show loading shimmer during navigation
     setIsRefreshing(true)
     
-    // Navigate to product detail page, preserving ALL state
+    // Navigate to product detail page, preserving current state
     const params = new URLSearchParams()
-    params.set('sku', product.default_sku)
+    
+    // For null SKU products, use a special identifier
+    const identifier = product.default_sku || `product-${product.source_product_id}`
+    
+    // Always preserve the tab
+    const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
+    params.set('tab', currentTab)
+    
     params.set('productId', product.source_product_id.toString())
     if (search) params.set('search', search)
     if (page > 1) params.set('page', page.toString())
     if (!isNullSku && missingIn !== 'all') params.set('missingIn', missingIn)
     if (isNullSku && shopFilter !== 'all') params.set('shopFilter', shopFilter)
-    if (onlyDuplicates) params.set('onlyDuplicates', 'true')
+    if (!isNullSku && onlyDuplicates) params.set('onlyDuplicates', 'true')
     if (sortBy !== 'created') params.set('sortBy', sortBy)
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
     
-    router.push(`/dashboard/sync-operations/${product.default_sku}?${params.toString()}`)
+    router.push(`/dashboard/sync-operations/${identifier}?${params.toString()}`)
   }
 
   const handleSearchSubmit = () => {

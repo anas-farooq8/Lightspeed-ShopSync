@@ -32,9 +32,15 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard")) {
+  // Protect dashboard routes and API routes
+  if (request.nextUrl.pathname.startsWith("/dashboard") || 
+      request.nextUrl.pathname.startsWith("/api")) {
     if (!user) {
+      if (request.nextUrl.pathname.startsWith("/api")) {
+        // Return 401 for API routes
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
+      // Redirect to login for dashboard routes
       const url = request.nextUrl.clone()
       url.pathname = "/login"
       return NextResponse.redirect(url)

@@ -8,10 +8,11 @@ export const dynamic = 'force-dynamic'
  * 
  * Fetches comprehensive product data for ALL products matching a SKU (source + targets).
  * Handles duplicates in both source and target shops.
+ * Also supports product-ID-only requests for null SKU products.
  * 
  * Query Parameters:
- * - sku: SKU to search for (required)
- * - productId: Optional specific product ID to focus on (for source duplicates)
+ * - sku: SKU to search for (optional if productId is provided)
+ * - productId: Product ID to search for (optional if sku is provided, but one must be present)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,18 +22,31 @@ export async function GET(request: NextRequest) {
     const sku = searchParams.get('sku')
     const productId = searchParams.get('productId')
 
-    if (!sku) {
+    if (!sku && !productId) {
       return NextResponse.json(
-        { error: 'Missing sku parameter' },
+        { error: 'Missing sku or productId parameter' },
         { status: 400 }
       )
     }
 
-    // Call optimized RPC function for product details by SKU
-    const { data, error } = await supabase.rpc('get_product_details_by_sku', {
-      p_sku: sku,
-      p_preferred_product_id: productId ? parseInt(productId) : null
-    })
+    let data, error
+
+    // If productId is provided without SKU, use product-ID-based lookup
+    if (!sku && productId) {
+      const result = await supabase.rpc('get_product_details_by_product_id', {
+        p_product_id: parseInt(productId)
+      })
+      data = result.data
+      error = result.error
+    } else {
+      // Call optimized RPC function for product details by SKU
+      const result = await supabase.rpc('get_product_details_by_sku', {
+        p_sku: sku!,
+        p_preferred_product_id: productId ? parseInt(productId) : null
+      })
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('Error fetching product details:', error)

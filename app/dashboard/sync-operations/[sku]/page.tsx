@@ -60,6 +60,7 @@ interface ProductData {
     thumb?: string
     title?: string
   } | null
+  ls_created_at: string
   content_by_language: Record<string, ProductContent>
   variants: Variant[]
   variant_count: number
@@ -100,7 +101,17 @@ export default function ProductDetailPage() {
       try {
         setLoading(true)
         const productId = searchParams.get('productId')
-        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}`
+        
+        // Handle both SKU-based and product-ID-based routing
+        // For null SKU products, the sku param will be "product-{id}"
+        let url: string
+        if (sku.startsWith('product-') && productId) {
+          // Null SKU product - use only productId
+          url = `/api/product-details?productId=${productId}`
+        } else {
+          // Regular product with SKU
+          url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}`
+        }
         
         const response = await fetch(url)
         if (!response.ok) {
@@ -138,8 +149,9 @@ export default function ProductDetailPage() {
 
   const handleBack = () => {
     setNavigating(true)
-    // Preserve ALL navigation state
+    // Preserve navigation state from URL
     const params = new URLSearchParams()
+    const tab = searchParams.get('tab') || 'create'
     const search = searchParams.get('search')
     const page = searchParams.get('page')
     const missingIn = searchParams.get('missingIn')
@@ -148,11 +160,20 @@ export default function ProductDetailPage() {
     const sortBy = searchParams.get('sortBy')
     const sortOrder = searchParams.get('sortOrder')
     
+    // Always preserve tab
+    params.set('tab', tab)
     if (search) params.set('search', search)
     if (page) params.set('page', page)
-    if (missingIn) params.set('missingIn', missingIn)
-    if (shopFilter) params.set('shopFilter', shopFilter)
-    if (onlyDuplicates) params.set('onlyDuplicates', onlyDuplicates)
+    
+    // Add tab-specific parameters based on current tab
+    const isNullTab = tab === 'null_sku'
+    if (isNullTab) {
+      if (shopFilter) params.set('shopFilter', shopFilter)
+    } else {
+      if (missingIn) params.set('missingIn', missingIn)
+      if (onlyDuplicates) params.set('onlyDuplicates', onlyDuplicates)
+    }
+    
     if (sortBy) params.set('sortBy', sortBy)
     if (sortOrder) params.set('sortOrder', sortOrder)
     
@@ -194,6 +215,25 @@ export default function ProductDetailPage() {
   const targetCount = Object.keys(details.targets).filter(tld => details.targets[tld].length > 0).length
   const totalPanels = 1 + targetCount // source + targets
   const hasTargets = targetCount > 0
+  
+  // Safety check for shop_languages
+  if (!details.shop_languages || !sourceProduct?.shop_tld) {
+    return (
+      <div className="w-full h-full p-6">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <Button variant="outline" onClick={handleBack} className="cursor-pointer">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to List
+          </Button>
+          <Card className="border-destructive/50">
+            <CardContent className="flex items-center justify-center py-12 text-destructive">
+              Invalid product data structure
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-full h-full">
@@ -208,7 +248,11 @@ export default function ProductDetailPage() {
           </Button>
           
           <div className="text-sm text-muted-foreground">
-            SKU: <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{sku}</code>
+            {sku.startsWith('product-') ? (
+              <>Product ID: <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{sourceProduct.product_id}</code></>
+            ) : (
+              <>SKU: <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{sku}</code></>
+            )}
           </div>
         </div>
 
@@ -225,7 +269,7 @@ export default function ProductDetailPage() {
             <ProductPanel
               product={sourceProduct}
               isSource={true}
-              languages={details.shop_languages[sourceProduct.shop_tld] || []}
+              languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
               hasDuplicates={hasSourceDuplicates}
               allProducts={details.source}
               selectedProductId={selectedSourceProductId}
@@ -352,7 +396,7 @@ function ProductPanel({
                   href={productAdminUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium"
+                  className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 font-medium"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Product #{product.product_id}
@@ -402,8 +446,8 @@ function ProductPanel({
       </CardHeader>
 
       <CardContent className="space-y-4 pt-0">
-        {/* Product Image */}
-        <div className="w-full h-80 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+        {/* Product Image - Long */}
+        <div className="w-full h-96 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
           {imageUrl ? (
             <img
               src={imageUrl}
@@ -443,6 +487,16 @@ function ProductPanel({
           <div>
             <span className="text-muted-foreground block mb-1">Variants</span>
             <div className="font-medium">{product.variant_count}</div>
+          </div>
+          <div>
+            <span className="text-muted-foreground block mb-1">Created</span>
+            <div className="font-medium text-xs">
+              {new Date(product.ls_created_at).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+              })}
+            </div>
           </div>
         </div>
 
@@ -521,8 +575,11 @@ function ProductPanel({
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
                           Content
                         </label>
-                        <div className="text-sm break-words max-h-64 overflow-y-auto prose prose-sm max-w-none">
-                          <div dangerouslySetInnerHTML={{ __html: content.content }} />
+                        <div className="text-sm break-words max-h-96 overflow-y-auto border border-border/30 rounded-md p-3">
+                          <div 
+                            dangerouslySetInnerHTML={{ __html: content.content }} 
+                            className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground"
+                          />
                         </div>
                       </div>
                     )}

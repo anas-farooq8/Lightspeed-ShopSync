@@ -190,6 +190,7 @@ export interface ProductData {
     thumb?: string
     title?: string
   } | null
+  ls_created_at: string
   content_by_language: Record<string, ProductContent>
   variants: VariantData[]
   variant_count: number
