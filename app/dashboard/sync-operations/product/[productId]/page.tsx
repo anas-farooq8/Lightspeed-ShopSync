@@ -132,7 +132,7 @@ export default function ProductDetailPage() {
 
   if (error || !details) {
     return (
-      <div className="w-full p-6 sm:p-8 max-w-7xl mx-auto">
+      <div className="w-full p-6">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" onClick={handleBack} className="cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -149,10 +149,10 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="w-full h-full overflow-auto">
+    <div className="w-full h-full">
       <LoadingShimmer show={navigating} position="top" />
       
-      <div className="w-full max-w-7xl mx-auto p-6 sm:p-8">
+      <div className="w-full p-6">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" onClick={handleBack} className="cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -292,7 +292,7 @@ function ProductPanel({ product }: ProductPanelProps) {
                           <div className="text-base break-all font-mono">
                             {shopUrl ? (
                               <a
-                                href={`${shopUrl.replace(/\/$/, '')}/${content.url}.html`}
+                                href={`${shopUrl.replace(/\/$/, '')}${!lang.is_default ? `/${lang.code}` : ''}/${content.url}.html`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-700 hover:underline"
@@ -359,11 +359,11 @@ function ProductPanel({ product }: ProductPanelProps) {
                   
                   return (
                     <div key={variant.variant_id} className="flex items-center gap-4 py-3 px-4 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
-                      <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                         {variantImageUrl ? (
                           <img src={variantImageUrl} alt={variant.sku || 'Variant'} className="w-full h-full object-cover" />
                         ) : (
-                          <Package className="h-6 w-6 text-muted-foreground/50" />
+                          <Package className="h-7 w-7 text-muted-foreground/50" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -382,7 +382,7 @@ function ProductPanel({ product }: ProductPanelProps) {
                           )}
                           <span className="text-sm font-semibold ml-auto">€{variant.price_excl?.toFixed(2)}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground truncate mt-1">{variantTitle}</div>
+                        <div className="text-sm text-muted-foreground mt-1 break-words leading-relaxed">{variantTitle}</div>
                       </div>
                     </div>
                   )
