@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
 const ITEMS_PER_DATE = 20
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
@@ -54,8 +55,7 @@ export default function SyncPage() {
   const [syncLogs, setSyncLogs] = useState<SyncLog[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
-  const [shopFilterLoading, setShopFilterLoading] = useState(false)
-  const [statusFilterLoading, setStatusFilterLoading] = useState(false)
+  const [isFilterLoading, setIsFilterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -118,14 +118,14 @@ export default function SyncPage() {
 
   const handleShopFilterChange = useCallback((value: string) => {
     setShopFilter(value)
-    setShopFilterLoading(true)
-    fetchSyncLogs(1, { shop: value }).finally(() => setShopFilterLoading(false))
+    setIsFilterLoading(true)
+    fetchSyncLogs(1, { shop: value }).finally(() => setIsFilterLoading(false))
   }, [fetchSyncLogs])
 
   const handleStatusFilterChange = useCallback((value: string) => {
     setStatusFilter(value)
-    setStatusFilterLoading(true)
-    fetchSyncLogs(1, { status: value }).finally(() => setStatusFilterLoading(false))
+    setIsFilterLoading(true)
+    fetchSyncLogs(1, { status: value }).finally(() => setIsFilterLoading(false))
   }, [fetchSyncLogs])
 
   const groupedByDate = useMemo<DateGroup[]>(() => {
@@ -178,6 +178,9 @@ export default function SyncPage() {
   return (
     <div className="w-full h-full p-6">
       <div className="max-w-full mx-auto">
+        {/* Global Loading Shimmer */}
+        <LoadingShimmer show={isFilterLoading} position="top" />
+        
         <SyncPageHeader />
 
         {loading && syncLogs.length === 0 ? (
@@ -192,11 +195,8 @@ export default function SyncPage() {
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <Filter className="h-4 w-4 text-muted-foreground" />
 
-              <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={statusFilterLoading}>
-                <SelectTrigger
-                  className="w-[180px] h-10 cursor-pointer"
-                  icon={shopFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-                >
+              <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={isFilterLoading}>
+                <SelectTrigger className="w-[180px] h-10 cursor-pointer">
                   <SelectValue placeholder="All Shops" />
                 </SelectTrigger>
                 <SelectContent>
@@ -209,11 +209,8 @@ export default function SyncPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={shopFilterLoading}>
-                <SelectTrigger
-                  className="w-[180px] h-10 cursor-pointer"
-                  icon={statusFilterLoading ? <RefreshCw className="size-4 animate-spin opacity-50" /> : undefined}
-                >
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={isFilterLoading}>
+                <SelectTrigger className="w-[180px] h-10 cursor-pointer">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>

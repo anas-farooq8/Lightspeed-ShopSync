@@ -12,6 +12,7 @@ import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsL
 import { ProductCard } from '@/components/sync-operations/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/ProductListTable'
 import { initializeShopColors } from '@/lib/constants/shop-colors'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
 export interface TargetShopInfo {
   shop_id: string
@@ -219,18 +220,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
 
   return (
     <div className="space-y-4">
-      {/* Top Loading Bar */}
-      {isRefreshing && (
-        <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-red-600 animate-pulse">
-          <div className="h-full bg-red-400 animate-[shimmer_1s_ease-in-out_infinite]" 
-               style={{
-                 background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
-                 backgroundSize: '200% 100%',
-                 animation: 'shimmer 1s ease-in-out infinite'
-               }}
-          />
-        </div>
-      )}
+      {/* Global Loading Shimmer */}
+      <LoadingShimmer show={isRefreshing} position="top" />
       
       {/* Filters and Controls */}
       <Card className="border-border/50">
@@ -323,6 +314,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                         setOnlyDuplicates(checked === true)
                         setPage(1)
                       }}
+                      disabled={isRefreshing}
                       className="cursor-pointer"
                     />
                     <Label

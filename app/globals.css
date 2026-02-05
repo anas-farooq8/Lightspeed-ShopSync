@@ -169,4 +169,10 @@
       background-position: 200% 0;
     }
   }
+
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1s ease-in-out infinite;
+  }
 }
