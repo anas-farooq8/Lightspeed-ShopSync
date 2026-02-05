@@ -92,6 +92,15 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   // Fetch products when URL params or operation changes
   useEffect(() => {
     const fetchProducts = async () => {
+      // Get current tab from URL
+      const currentTab = searchParams.get('tab') || 'create'
+      const expectedTab = isNullSku ? 'null_sku' : 'create'
+      
+      // Only fetch if this component's operation matches the active tab
+      if (currentTab !== expectedTab) {
+        return
+      }
+      
       // Build params string for deduplication check
       const paramsString = `${operation}-${searchParams.toString()}`
       

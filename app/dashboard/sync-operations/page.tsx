@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProductListTab } from '@/components/sync-operations/ProductListTab'
@@ -16,9 +16,11 @@ interface Shop {
 export default function SyncOperationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [, startTransition] = useTransition()
   const shopsLoadedRef = useRef(false)
+  const navigationInProgressRef = useRef(false)
   
-  // Get activeTab directly from URL, default to 'create' without redirect
+  // Get activeTab directly from URL, default to 'create'
   const activeTab = searchParams.get('tab') || 'create'
   const [shops, setShops] = useState<Shop[]>([])
 
@@ -36,16 +38,27 @@ export default function SyncOperationsPage() {
         setShops(sortShopsSourceFirstThenByTld(data.shops))
       } catch (err) {
         console.error('Failed to load shops:', err)
-        shopsLoadedRef.current = false // Reset on error so it can retry
+        shopsLoadedRef.current = false
       }
     }
     
     fetchShops()
   }, [])
 
-  // Handle tab change - reset all filters when switching tabs
+  // Handle tab change with deduplication
   const handleTabChange = (newTab: string) => {
-    router.push(`/dashboard/sync-operations?tab=${newTab}`, { scroll: false })
+    // Prevent duplicate navigations
+    if (navigationInProgressRef.current || newTab === activeTab) return
+    
+    navigationInProgressRef.current = true
+    
+    startTransition(() => {
+      router.push(`/dashboard/sync-operations?tab=${newTab}`, { scroll: false })
+      // Reset flag after navigation completes
+      setTimeout(() => {
+        navigationInProgressRef.current = false
+      }, 100)
+    })
   }
 
   return (
@@ -59,7 +72,7 @@ export default function SyncOperationsPage() {
           </p>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Remove conditional rendering to prevent unmount/remount */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full max-w-[600px] grid-cols-3 mb-6">
             <TabsTrigger value="create" className="cursor-pointer">
@@ -73,25 +86,19 @@ export default function SyncOperationsPage() {
             </TabsTrigger>
           </TabsList>
 
-          {activeTab === 'create' && (
-            <TabsContent value="create" className="mt-0">
-              <ProductListTab operation="create" shops={shops} />
-            </TabsContent>
-          )}
+          <TabsContent value="create" className="mt-0">
+            <ProductListTab operation="create" shops={shops} />
+          </TabsContent>
 
-          {activeTab === 'edit' && (
-            <TabsContent value="edit" className="mt-0">
-              <div className="text-center py-12 text-muted-foreground">
-                Edit tab - Coming soon
-              </div>
-            </TabsContent>
-          )}
+          <TabsContent value="edit" className="mt-0">
+            <div className="text-center py-12 text-muted-foreground">
+              Edit tab - Coming soon
+            </div>
+          </TabsContent>
 
-          {activeTab === 'null_sku' && (
-            <TabsContent value="null_sku" className="mt-0">
-              <ProductListTab operation="null_sku" shops={shops} />
-            </TabsContent>
-          )}
+          <TabsContent value="null_sku" className="mt-0">
+            <ProductListTab operation="null_sku" shops={shops} />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
