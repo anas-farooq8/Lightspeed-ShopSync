@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -84,6 +84,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const [total, setTotal] = useState(0)
   
   const isNullSku = operation === 'null_sku'
+  
+  // Prevent concurrent fetches
+  const isFetchingRef = useRef(false)
 
   // Initialize shop colors when shops are loaded
   useEffect(() => {
@@ -130,7 +133,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     router.push(`/dashboard/sync-operations${queryString ? `?${queryString}` : ''}`, { scroll: false })
   }
 
-  // Listen to URL changes and refetch when navigating back
+  // Sync state with URL params and fetch products - combined to prevent duplicate calls
   useEffect(() => {
     const urlSearch = searchParams.get('search') || ''
     const urlPage = parseInt(searchParams.get('page') || '1')
@@ -140,21 +143,33 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     const urlSortBy = (searchParams.get('sortBy') as any) || 'created'
     const urlSortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
     
-    // Update state from URL if different (for back navigation)
-    if (urlSearch !== search) setSearch(urlSearch)
-    if (urlSearch !== searchInput) setSearchInput(urlSearch)
-    if (urlPage !== page) setPage(urlPage)
-    if (urlMissingIn !== missingIn) setMissingIn(urlMissingIn)
-    if (urlShopFilter !== shopFilter) setShopFilter(urlShopFilter)
-    if (urlOnlyDuplicates !== onlyDuplicates) setOnlyDuplicates(urlOnlyDuplicates)
-    if (urlSortBy !== sortBy) setSortBy(urlSortBy)
-    if (urlSortOrder !== sortOrder) setSortOrder(urlSortOrder)
-  }, [searchParams])
-
-  // Fetch products when filters or search changes
-  useEffect(() => {
-    fetchProducts()
-  }, [page, missingIn, shopFilter, onlyDuplicates, sortBy, sortOrder, search])
+    // Batch all state updates
+    setSearch(urlSearch)
+    setSearchInput(urlSearch)
+    setPage(urlPage)
+    setMissingIn(urlMissingIn)
+    setShopFilter(urlShopFilter)
+    setOnlyDuplicates(urlOnlyDuplicates)
+    setSortBy(urlSortBy)
+    setSortOrder(urlSortOrder)
+    
+    // Fetch products with URL params directly to avoid race conditions with state updates
+    fetchProducts({
+      search: urlSearch,
+      page: urlPage,
+      missingIn: urlMissingIn,
+      shopFilter: urlShopFilter,
+      onlyDuplicates: urlOnlyDuplicates,
+      sortBy: urlSortBy,
+      sortOrder: urlSortOrder,
+    })
+    
+    // Cleanup function to reset fetch guard when component unmounts
+    return () => {
+      isFetchingRef.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, operation])
 
   // Scroll to top of the scrollable container (main element)
   const scrollToTop = () => {
@@ -165,28 +180,51 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     }
   }
 
-  async function fetchProducts() {
+  async function fetchProducts(params?: {
+    search?: string
+    page?: number
+    missingIn?: string
+    shopFilter?: string
+    onlyDuplicates?: boolean
+    sortBy?: string
+    sortOrder?: string
+  }) {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      return
+    }
+    
     try {
+      isFetchingRef.current = true
       // Always show shimmer when fetching
       setIsRefreshing(true)
       
-      const params = new URLSearchParams({
+      // Use provided params or fall back to state
+      const searchValue = params?.search !== undefined ? params.search : search
+      const pageValue = params?.page !== undefined ? params.page : page
+      const sortByValue = params?.sortBy !== undefined ? params.sortBy : sortBy
+      const sortOrderValue = params?.sortOrder !== undefined ? params.sortOrder : sortOrder
+      const missingInValue = params?.missingIn !== undefined ? params.missingIn : missingIn
+      const shopFilterValue = params?.shopFilter !== undefined ? params.shopFilter : shopFilter
+      const onlyDuplicatesValue = params?.onlyDuplicates !== undefined ? params.onlyDuplicates : onlyDuplicates
+      
+      const apiParams = new URLSearchParams({
         operation: operation,
-        page: page.toString(),
-        sortBy: sortBy,
-        sortOrder: sortOrder,
+        page: pageValue.toString(),
+        sortBy: sortByValue,
+        sortOrder: sortOrderValue,
       })
       
       if (isNullSku) {
-        if (shopFilter !== 'all') params.append('shopTld', shopFilter)
+        if (shopFilterValue !== 'all') apiParams.append('shopTld', shopFilterValue)
       } else {
-        params.append('missingIn', missingIn)
-        params.append('onlyDuplicates', onlyDuplicates.toString())
+        apiParams.append('missingIn', missingInValue)
+        apiParams.append('onlyDuplicates', onlyDuplicatesValue.toString())
       }
       
-      if (search) params.append('search', search)
+      if (searchValue) apiParams.append('search', searchValue)
 
-      const response = await fetch(`/api/sync-operations?${params}`)
+      const response = await fetch(`/api/sync-operations?${apiParams}`)
       if (!response.ok) throw new Error('Failed to fetch products')
       
       const data = await response.json()
@@ -198,6 +236,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     } finally {
       setInitialLoading(false)
       setIsRefreshing(false)
+      isFetchingRef.current = false
     }
   }
 
@@ -224,14 +263,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     // Navigate to product detail page, preserving current state
     const params = new URLSearchParams()
     
-    // For null SKU products, use a special identifier
-    const identifier = product.default_sku || `product-${product.source_product_id}`
-    
     // Always preserve the tab
     const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
     params.set('tab', currentTab)
     
-    params.set('productId', product.source_product_id.toString())
     if (search) params.set('search', search)
     if (page > 1) params.set('page', page.toString())
     if (!isNullSku && missingIn !== 'all') params.set('missingIn', missingIn)
@@ -240,7 +275,15 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     if (sortBy !== 'created') params.set('sortBy', sortBy)
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
     
-    router.push(`/dashboard/sync-operations/${identifier}?${params.toString()}`)
+    // Route to different pages based on product type
+    if (isNullSku) {
+      // Null SKU products go to the product/[productId] page (singular)
+      router.push(`/dashboard/sync-operations/product/${product.source_product_id}?${params.toString()}`)
+    } else {
+      // Regular products go to the products/[sku] page (plural)
+      params.set('productId', product.source_product_id.toString())
+      router.push(`/dashboard/sync-operations/products/${product.default_sku}?${params.toString()}`)
+    }
   }
 
   const handleSearchSubmit = () => {

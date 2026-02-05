@@ -38,6 +38,24 @@ export async function GET(request: NextRequest) {
       })
       data = result.data
       error = result.error
+      
+      if (error) {
+        console.error('Error fetching product details:', error)
+        return NextResponse.json(
+          { error: 'Failed to fetch product details', details: error.message },
+          { status: 500 }
+        )
+      }
+
+      if (!data) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        )
+      }
+
+      // Return the simplified data directly
+      return NextResponse.json(data)
     } else {
       // Call optimized RPC function for product details by SKU
       const result = await supabase.rpc('get_product_details_by_sku', {
@@ -46,24 +64,24 @@ export async function GET(request: NextRequest) {
       })
       data = result.data
       error = result.error
-    }
+      
+      if (error) {
+        console.error('Error fetching product details:', error)
+        return NextResponse.json(
+          { error: 'Failed to fetch product details', details: error.message },
+          { status: 500 }
+        )
+      }
 
-    if (error) {
-      console.error('Error fetching product details:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch product details', details: error.message },
-        { status: 500 }
-      )
-    }
+      if (!data || data.length === 0) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        )
+      }
 
-    if (!data || data.length === 0) {
-      return NextResponse.json(
-        { error: 'Product not found' },
-        { status: 404 }
-      )
+      return NextResponse.json(data[0])
     }
-
-    return NextResponse.json(data[0])
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json(

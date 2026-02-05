@@ -17,23 +17,24 @@ export default function SyncOperationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  // Initialize activeTab from URL, default to 'create'
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'create')
+  // Get activeTab directly from URL
+  const activeTab = searchParams.get('tab') || 'create'
   const [shops, setShops] = useState<Shop[]>([])
+  const [shopsLoaded, setShopsLoaded] = useState(false)
 
-  // Redirect to default tab if no tab parameter
+  // Redirect to default tab if no tab parameter - only check URL, don't use activeTab in deps
   useEffect(() => {
     const urlTab = searchParams.get('tab')
     if (!urlTab) {
       // No tab in URL, redirect to create tab
       router.replace('/dashboard/sync-operations?tab=create')
-    } else if (urlTab !== activeTab) {
-      setActiveTab(urlTab)
     }
-  }, [searchParams, router, activeTab])
+  }, [searchParams, router])
 
   // Fetch shops once on mount - shared across all tabs
   useEffect(() => {
+    if (shopsLoaded) return // Prevent multiple fetches
+    
     async function fetchShops() {
       try {
         const response = await fetch('/api/shops')
@@ -41,17 +42,17 @@ export default function SyncOperationsPage() {
         
         const data = await response.json()
         setShops(sortShopsSourceFirstThenByTld(data.shops))
+        setShopsLoaded(true)
       } catch (err) {
         console.error('Failed to load shops:', err)
       }
     }
     
     fetchShops()
-  }, [])
+  }, [shopsLoaded])
 
   // Handle tab change - reset all filters when switching tabs
   const handleTabChange = (newTab: string) => {
-    setActiveTab(newTab)
     // Only preserve the tab parameter, reset all filters
     router.push(`/dashboard/sync-operations?tab=${newTab}`, { scroll: false })
   }
@@ -81,19 +82,25 @@ export default function SyncOperationsPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="create" className="mt-0">
-            <ProductListTab operation="create" shops={shops} />
-          </TabsContent>
+          {activeTab === 'create' && (
+            <TabsContent value="create" className="mt-0">
+              <ProductListTab operation="create" shops={shops} />
+            </TabsContent>
+          )}
 
-          <TabsContent value="edit" className="mt-0">
-            <div className="text-center py-12 text-muted-foreground">
-              Edit tab - Coming soon
-            </div>
-          </TabsContent>
+          {activeTab === 'edit' && (
+            <TabsContent value="edit" className="mt-0">
+              <div className="text-center py-12 text-muted-foreground">
+                Edit tab - Coming soon
+              </div>
+            </TabsContent>
+          )}
 
-          <TabsContent value="null_sku" className="mt-0">
-            <ProductListTab operation="null_sku" shops={shops} />
-          </TabsContent>
+          {activeTab === 'null_sku' && (
+            <TabsContent value="null_sku" className="mt-0">
+              <ProductListTab operation="null_sku" shops={shops} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
