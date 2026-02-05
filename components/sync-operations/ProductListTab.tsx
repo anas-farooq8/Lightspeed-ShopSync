@@ -32,7 +32,7 @@ export interface SyncProduct {
   source_shop_tld: string
   source_product_id: number
   source_variant_id: number
-  default_sku: string  // Always valid (never null)
+  default_sku: string
   product_title: string
   variant_title: string
   product_image: any
@@ -60,35 +60,27 @@ interface ProductListTabProps {
 export function ProductListTab({ operation = 'create', shops }: ProductListTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isNullSku = operation === 'null_sku'
   
+  // Products and loading states
   const [products, setProducts] = useState<SyncProduct[]>([])
-  const [initialLoading, setInitialLoading] = useState(true) // Only true on first load
-  const [isRefreshing, setIsRefreshing] = useState(false) // For filter changes, keeps products visible
+  const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   
-  // Initialize all state from URL parameters
-  const [search, setSearch] = useState(searchParams.get('search') || '')
-  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
-  const [missingIn, setMissingIn] = useState<string>(searchParams.get('missingIn') || 'all')
-  const [shopFilter, setShopFilter] = useState<string>(searchParams.get('shopFilter') || 'all')
-  const [onlyDuplicates, setOnlyDuplicates] = useState(searchParams.get('onlyDuplicates') === 'true')
-  const [sortBy, setSortBy] = useState<'title' | 'sku' | 'variants' | 'price' | 'created'>(
-    (searchParams.get('sortBy') as any) || 'created'
-  )
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
-  )
-  const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'))
+  // Pagination
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   
-  const isNullSku = operation === 'null_sku'
+  // UI states
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
+  const [searchInput, setSearchInput] = useState('')
   
-  // Prevent concurrent fetches
+  // Fetch guard
+  const lastFetchParamsRef = useRef<string>('')
   const isFetchingRef = useRef(false)
 
-  // Initialize shop colors when shops are loaded
+  // Initialize shop colors
   useEffect(() => {
     if (shops.length > 0) {
       const sourceShop = shops.find(shop => shop.role === 'source')
@@ -97,176 +89,90 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     }
   }, [shops])
 
-  // Sync URL with state changes
-  const updateURL = (newState: Partial<{
-    search: string
-    page: number
-    missingIn: string
-    shopFilter: string
-    onlyDuplicates: boolean
-    sortBy: string
-    sortOrder: string
-  }>) => {
-    const params = new URLSearchParams()
-    
-    // Always preserve the tab parameter
-    const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
-    params.set('tab', currentTab)
-    
-    const currentSearch = newState.search !== undefined ? newState.search : search
-    const currentPage = newState.page !== undefined ? newState.page : page
-    const currentMissingIn = newState.missingIn !== undefined ? newState.missingIn : missingIn
-    const currentShopFilter = newState.shopFilter !== undefined ? newState.shopFilter : shopFilter
-    const currentOnlyDuplicates = newState.onlyDuplicates !== undefined ? newState.onlyDuplicates : onlyDuplicates
-    const currentSortBy = newState.sortBy !== undefined ? newState.sortBy : sortBy
-    const currentSortOrder = newState.sortOrder !== undefined ? newState.sortOrder : sortOrder
-    
-    if (currentSearch) params.set('search', currentSearch)
-    if (currentPage > 1) params.set('page', currentPage.toString())
-    if (!isNullSku && currentMissingIn !== 'all') params.set('missingIn', currentMissingIn)
-    if (isNullSku && currentShopFilter !== 'all') params.set('shopFilter', currentShopFilter)
-    if (!isNullSku && currentOnlyDuplicates) params.set('onlyDuplicates', 'true')
-    if (currentSortBy !== 'created') params.set('sortBy', currentSortBy)
-    if (currentSortOrder !== 'desc') params.set('sortOrder', currentSortOrder)
-    
-    const queryString = params.toString()
-    router.push(`/dashboard/sync-operations${queryString ? `?${queryString}` : ''}`, { scroll: false })
-  }
-
-  // Sync state with URL params and fetch products - combined to prevent duplicate calls
+  // Fetch products when URL params or operation changes
   useEffect(() => {
-    const urlSearch = searchParams.get('search') || ''
-    const urlPage = parseInt(searchParams.get('page') || '1')
-    const urlMissingIn = searchParams.get('missingIn') || 'all'
-    const urlShopFilter = searchParams.get('shopFilter') || 'all'
-    const urlOnlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
-    const urlSortBy = (searchParams.get('sortBy') as any) || 'created'
-    const urlSortOrder = (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
-    
-    // Batch all state updates
-    setSearch(urlSearch)
-    setSearchInput(urlSearch)
-    setPage(urlPage)
-    setMissingIn(urlMissingIn)
-    setShopFilter(urlShopFilter)
-    setOnlyDuplicates(urlOnlyDuplicates)
-    setSortBy(urlSortBy)
-    setSortOrder(urlSortOrder)
-    
-    // Fetch products with URL params directly to avoid race conditions with state updates
-    fetchProducts({
-      search: urlSearch,
-      page: urlPage,
-      missingIn: urlMissingIn,
-      shopFilter: urlShopFilter,
-      onlyDuplicates: urlOnlyDuplicates,
-      sortBy: urlSortBy,
-      sortOrder: urlSortOrder,
-    })
-    
-    // Cleanup function to reset fetch guard when component unmounts
-    return () => {
-      isFetchingRef.current = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, operation])
-
-  // Scroll to top of the scrollable container (main element)
-  const scrollToTop = () => {
-    // The main element is the scrollable container in the dashboard layout
-    const mainElement = document.querySelector('main')
-    if (mainElement) {
-      mainElement.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }
-
-  async function fetchProducts(params?: {
-    search?: string
-    page?: number
-    missingIn?: string
-    shopFilter?: string
-    onlyDuplicates?: boolean
-    sortBy?: string
-    sortOrder?: string
-  }) {
-    // Prevent concurrent fetches
-    if (isFetchingRef.current) {
-      return
-    }
-    
-    try {
-      isFetchingRef.current = true
-      // Always show shimmer when fetching
-      setIsRefreshing(true)
+    const fetchProducts = async () => {
+      // Build params string for deduplication check
+      const paramsString = `${operation}-${searchParams.toString()}`
       
-      // Use provided params or fall back to state
-      const searchValue = params?.search !== undefined ? params.search : search
-      const pageValue = params?.page !== undefined ? params.page : page
-      const sortByValue = params?.sortBy !== undefined ? params.sortBy : sortBy
-      const sortOrderValue = params?.sortOrder !== undefined ? params.sortOrder : sortOrder
-      const missingInValue = params?.missingIn !== undefined ? params.missingIn : missingIn
-      const shopFilterValue = params?.shopFilter !== undefined ? params.shopFilter : shopFilter
-      const onlyDuplicatesValue = params?.onlyDuplicates !== undefined ? params.onlyDuplicates : onlyDuplicates
-      
-      const apiParams = new URLSearchParams({
-        operation: operation,
-        page: pageValue.toString(),
-        sortBy: sortByValue,
-        sortOrder: sortOrderValue,
-      })
-      
-      if (isNullSku) {
-        if (shopFilterValue !== 'all') apiParams.append('shopTld', shopFilterValue)
-      } else {
-        apiParams.append('missingIn', missingInValue)
-        apiParams.append('onlyDuplicates', onlyDuplicatesValue.toString())
+      // Prevent duplicate fetches for the same params
+      if (isFetchingRef.current || lastFetchParamsRef.current === paramsString) {
+        return
       }
       
-      if (searchValue) apiParams.append('search', searchValue)
-
-      const response = await fetch(`/api/sync-operations?${apiParams}`)
-      if (!response.ok) throw new Error('Failed to fetch products')
+      isFetchingRef.current = true
+      lastFetchParamsRef.current = paramsString
       
-      const data = await response.json()
-      setProducts(data.products || [])
-      setTotalPages(data.pagination.totalPages)
-      setTotal(data.pagination.total)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products')
-    } finally {
-      setInitialLoading(false)
-      setIsRefreshing(false)
-      isFetchingRef.current = false
-    }
-  }
+      // Get URL parameters
+      const search = searchParams.get('search') || ''
+      const page = parseInt(searchParams.get('page') || '1')
+      const missingIn = searchParams.get('missingIn') || 'all'
+      const shopFilter = searchParams.get('shopFilter') || 'all'
+      const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
+      const sortBy = searchParams.get('sortBy') || 'created'
+      const sortOrder = searchParams.get('sortOrder') || 'desc'
+      
+      // Update search input to match URL
+      setSearchInput(search)
+      
+      try {
+        setIsRefreshing(true)
+        
+        // Build API params
+        const apiParams = new URLSearchParams({
+          operation: operation,
+          page: page.toString(),
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+        })
+        
+        if (isNullSku) {
+          if (shopFilter !== 'all') apiParams.append('shopTld', shopFilter)
+        } else {
+          apiParams.append('missingIn', missingIn)
+          apiParams.append('onlyDuplicates', onlyDuplicates.toString())
+        }
+        
+        if (search) apiParams.append('search', search)
 
-  const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
-    let newSortOrder: 'asc' | 'desc'
-    if (sortBy === column) {
-      // Toggle sort order
-      newSortOrder = sortOrder === 'asc' ? 'desc' : 'asc'
-      setSortOrder(newSortOrder)
-    } else {
-      // New column, default to descending for created, ascending for others
-      newSortOrder = column === 'created' ? 'desc' : 'asc'
-      setSortBy(column)
-      setSortOrder(newSortOrder)
+        const response = await fetch(`/api/sync-operations?${apiParams}`)
+        if (!response.ok) throw new Error('Failed to fetch products')
+        
+        const data = await response.json()
+        setProducts(data.products || [])
+        setTotalPages(data.pagination.totalPages)
+        setTotal(data.pagination.total)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load products')
+      } finally {
+        setLoading(false)
+        setIsRefreshing(false)
+        isFetchingRef.current = false
+      }
     }
-    setPage(1)
-    updateURL({ sortBy: column, sortOrder: newSortOrder, page: 1 })
-  }
 
-  const handleProductClick = (product: SyncProduct) => {
-    // Show loading shimmer during navigation
-    setIsRefreshing(true)
-    
-    // Navigate to product detail page, preserving current state
+    fetchProducts()
+  }, [searchParams, operation, isNullSku])
+
+  // Helper to update URL with new params
+  const updateURL = (newParams: Record<string, string | number | boolean | undefined>) => {
     const params = new URLSearchParams()
     
-    // Always preserve the tab
+    // Get current tab from URL
     const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
     params.set('tab', currentTab)
     
+    // Get current values or use new ones
+    const search = newParams.search !== undefined ? String(newParams.search) : searchParams.get('search') || ''
+    const page = newParams.page !== undefined ? Number(newParams.page) : parseInt(searchParams.get('page') || '1')
+    const missingIn = newParams.missingIn !== undefined ? String(newParams.missingIn) : searchParams.get('missingIn') || 'all'
+    const shopFilter = newParams.shopFilter !== undefined ? String(newParams.shopFilter) : searchParams.get('shopFilter') || 'all'
+    const onlyDuplicates = newParams.onlyDuplicates !== undefined ? Boolean(newParams.onlyDuplicates) : searchParams.get('onlyDuplicates') === 'true'
+    const sortBy = newParams.sortBy !== undefined ? String(newParams.sortBy) : searchParams.get('sortBy') || 'created'
+    const sortOrder = newParams.sortOrder !== undefined ? String(newParams.sortOrder) : searchParams.get('sortOrder') || 'desc'
+    
+    // Add non-default params to URL
     if (search) params.set('search', search)
     if (page > 1) params.set('page', page.toString())
     if (!isNullSku && missingIn !== 'all') params.set('missingIn', missingIn)
@@ -275,22 +181,41 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     if (sortBy !== 'created') params.set('sortBy', sortBy)
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder)
     
-    // Route to different pages based on product type
+    router.push(`/dashboard/sync-operations?${params.toString()}`, { scroll: false })
+  }
+
+  const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
+    const currentSortBy = searchParams.get('sortBy') || 'created'
+    const currentSortOrder = searchParams.get('sortOrder') || 'desc'
+    
+    let newSortOrder: 'asc' | 'desc'
+    if (currentSortBy === column) {
+      newSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc'
+    } else {
+      newSortOrder = column === 'created' ? 'desc' : 'asc'
+    }
+    
+    updateURL({ sortBy: column, sortOrder: newSortOrder, page: 1 })
+  }
+
+  const handleProductClick = (product: SyncProduct) => {
+    setIsRefreshing(true)
+    
+    // Preserve all current URL params
+    const params = new URLSearchParams(searchParams.toString())
+    
+    // Route to appropriate detail page
     if (isNullSku) {
-      // Null SKU products go to the product/[productId] page (singular)
       router.push(`/dashboard/sync-operations/product/${product.source_product_id}?${params.toString()}`)
     } else {
-      // Regular products go to the products/[sku] page (plural)
       params.set('productId', product.source_product_id.toString())
       router.push(`/dashboard/sync-operations/products/${product.default_sku}?${params.toString()}`)
     }
   }
 
   const handleSearchSubmit = () => {
-    if (searchInput === search) return // No change, don't refetch
-    
-    setSearch(searchInput)
-    setPage(1) // Reset to first page on search
+    const currentSearch = searchParams.get('search') || ''
+    if (searchInput === currentSearch) return
     updateURL({ search: searchInput, page: 1 })
   }
 
@@ -302,16 +227,25 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
 
   const handleFilterChange = (value: string) => {
     if (isNullSku) {
-      setShopFilter(value)
       updateURL({ shopFilter: value, page: 1 })
     } else {
-      setMissingIn(value)
       updateURL({ missingIn: value, page: 1 })
     }
-    setPage(1)
   }
 
-  if (initialLoading && products.length === 0) {
+  const handlePageChange = (newPage: number) => {
+    updateURL({ page: newPage })
+    scrollToTop()
+  }
+
+  const scrollToTop = () => {
+    const mainElement = document.querySelector('main')
+    if (mainElement) {
+      mainElement.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  if (loading && products.length === 0) {
     return (
       <Card className="border-border/50">
         <CardContent className="flex items-center justify-center py-16">
@@ -331,16 +265,22 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     )
   }
 
+  const currentPage = parseInt(searchParams.get('page') || '1')
+  const currentSortBy = searchParams.get('sortBy') || 'created'
+  const currentSortOrder = searchParams.get('sortOrder') || 'desc'
+  const currentMissingIn = searchParams.get('missingIn') || 'all'
+  const currentShopFilter = searchParams.get('shopFilter') || 'all'
+  const currentOnlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
+
   return (
     <div className="space-y-4">
-      {/* Global Loading Shimmer */}
       <LoadingShimmer show={isRefreshing} position="top" />
       
-      {/* Filters and Controls */}
+      {/* Filters */}
       <Card className="border-border/50">
         <CardContent className="pt-4">
           <div className="flex flex-col gap-3">
-            {/* First Row: Search Bar with integrated Search Button */}
+            {/* Search Bar */}
             <div className="flex items-center gap-2">
               <div className="flex-1 flex items-center border border-input rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                 <Input
@@ -364,82 +304,55 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               </div>
             </div>
 
-            {/* Second Row: Filters and View Toggle */}
+            {/* Filters and View Toggle */}
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
               <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-1">
-                {/* Filter - Missing In or Shop Filter based on operation */}
                 <Select 
-                  value={isNullSku ? shopFilter : missingIn} 
+                  value={isNullSku ? currentShopFilter : currentMissingIn} 
                   onValueChange={handleFilterChange} 
                   disabled={isRefreshing}
                 >
-                  <SelectTrigger 
-                    className="w-full sm:w-[280px] cursor-pointer"
-                  >
+                  <SelectTrigger className="w-full sm:w-[280px] cursor-pointer">
                     <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
                   </SelectTrigger>
                   <SelectContent>
                     {isNullSku ? (
                       <>
-                        <SelectItem value="all" className="cursor-pointer">
-                          All shops
-                        </SelectItem>
+                        <SelectItem value="all" className="cursor-pointer">All shops</SelectItem>
                         {shops.map((shop) => (
-                          <SelectItem 
-                            key={shop.shop_id} 
-                            value={shop.tld} 
-                            className="cursor-pointer"
-                          >
+                          <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
                             {shop.shop_name} (.{shop.tld}) - {getShopRoleLabel(shop.role) || 'Target'}
                           </SelectItem>
                         ))}
                       </>
                     ) : (
                       <>
-                        <SelectItem value="all" className="cursor-pointer">
-                          Missing in all shops
-                        </SelectItem>
-                        {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target'))
-                          .map((shop) => (
-                            <SelectItem 
-                              key={shop.shop_id} 
-                              value={shop.tld} 
-                              className="cursor-pointer"
-                            >
-                              Missing in {shop.shop_name} (.{shop.tld}) - Target
-                            </SelectItem>
-                          ))
-                        }
+                        <SelectItem value="all" className="cursor-pointer">Missing in all shops</SelectItem>
+                        {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target')).map((shop) => (
+                          <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
+                            Missing in {shop.shop_name} (.{shop.tld}) - Target
+                          </SelectItem>
+                        ))}
                       </>
                     )}
                   </SelectContent>
                 </Select>
 
-                {/* Duplicate Filter Checkbox - Only for CREATE operation */}
                 {!isNullSku && (
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="only-duplicates"
-                      checked={onlyDuplicates}
-                      onCheckedChange={(checked: boolean) => {
-                        const newValue = checked === true
-                        setOnlyDuplicates(newValue)
-                        setPage(1)
-                        updateURL({ onlyDuplicates: newValue, page: 1 })
-                      }}
+                      checked={currentOnlyDuplicates}
+                      onCheckedChange={(checked) => updateURL({ onlyDuplicates: checked === true, page: 1 })}
                       disabled={isRefreshing}
                       className="cursor-pointer"
                     />
-                    <Label
-                      htmlFor="only-duplicates"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer whitespace-nowrap"
-                    >
+                    <Label htmlFor="only-duplicates" className="text-sm font-medium cursor-pointer whitespace-nowrap">
                       Show only duplicates
                     </Label>
                   </div>
                 )}
                 
-                {/* Warning Badge for NULL SKU */}
                 {isNullSku && (
                   <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-400 dark:border-amber-700 rounded-md">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -460,11 +373,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   variant={viewMode === 'table' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('table')}
-                  className={`cursor-pointer px-4 ${
-                    viewMode === 'table' 
-                      ? 'bg-red-600 hover:bg-red-700 text-white' 
-                      : ''
-                  }`}
+                  className={`cursor-pointer px-4 ${viewMode === 'table' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
                 >
                   <List className="h-4 w-4 mr-2" />
                   Table
@@ -473,11 +382,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('grid')}
-                  className={`cursor-pointer px-4 ${
-                    viewMode === 'grid' 
-                      ? 'bg-red-600 hover:bg-red-700 text-white' 
-                      : ''
-                  }`}
+                  className={`cursor-pointer px-4 ${viewMode === 'grid' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
                 >
                   <LayoutGrid className="h-4 w-4 mr-2" />
                   Grid
@@ -485,10 +390,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               </div>
             </div>
 
-            {/* Third Row: Results Count */}
+            {/* Results Count */}
             <div className="flex items-center justify-end">
               <div className="text-sm text-muted-foreground">
-                Showing {products.length > 0 ? ((page - 1) * 100) + 1 : 0} - {Math.min(page * 100, total)} of {total.toLocaleString()} products
+                Showing {products.length > 0 ? ((currentPage - 1) * 100) + 1 : 0} - {Math.min(currentPage * 100, total)} of {total.toLocaleString()} products
               </div>
             </div>
           </div>
@@ -505,8 +410,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       ) : viewMode === 'table' ? (
         <ProductListTable 
           products={products}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
+          sortBy={currentSortBy as 'title' | 'sku' | 'variants' | 'price' | 'created'}
+          sortOrder={currentSortOrder as 'asc' | 'desc'}
           loading={isRefreshing}
           onSort={handleSort}
           onProductClick={handleProductClick}
@@ -530,38 +435,27 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
         </div>
       )}
 
-      {/* Beautiful Pagination */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <Card className="border-border/50">
           <CardContent className="py-4">
             <div className="flex items-center justify-center gap-1">
-              {/* First Page Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setPage(1)
-                  updateURL({ page: 1 })
-                  scrollToTop()
-                }}
-                disabled={page === 1 || isRefreshing}
+                onClick={() => handlePageChange(1)}
+                disabled={currentPage === 1 || isRefreshing}
                 className="cursor-pointer"
                 title="First page"
               >
                 <ChevronsLeft className="h-4 w-4" />
               </Button>
 
-              {/* Previous Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  const newPage = page - 1
-                  setPage(newPage)
-                  updateURL({ page: newPage })
-                  scrollToTop()
-                }}
-                disabled={page === 1 || isRefreshing}
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1 || isRefreshing}
                 className="cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
@@ -572,34 +466,30 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               <div className="flex items-center gap-1 mx-2">
                 {(() => {
                   const pages: (number | string)[] = []
-                  const showPages = 5 // Number of page buttons to show
+                  const showPages = 5
                   
                   if (totalPages <= showPages + 2) {
-                    // Show all pages if total is small
                     for (let i = 1; i <= totalPages; i++) {
                       pages.push(i)
                     }
                   } else {
-                    // Always show first page
                     pages.push(1)
                     
-                    if (page > 3) {
+                    if (currentPage > 3) {
                       pages.push('...')
                     }
                     
-                    // Show pages around current page
-                    const start = Math.max(2, page - 1)
-                    const end = Math.min(totalPages - 1, page + 1)
+                    const start = Math.max(2, currentPage - 1)
+                    const end = Math.min(totalPages - 1, currentPage + 1)
                     
                     for (let i = start; i <= end; i++) {
                       pages.push(i)
                     }
                     
-                    if (page < totalPages - 2) {
+                    if (currentPage < totalPages - 2) {
                       pages.push('...')
                     }
                     
-                    // Always show last page
                     pages.push(totalPages)
                   }
                   
@@ -612,18 +502,13 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                       )
                     }
                     
-                    const isCurrentPage = pageNum === page
+                    const isCurrentPage = pageNum === currentPage
                     return (
                       <Button
                         key={pageNum}
                         variant={isCurrentPage ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => {
-                          const newPage = pageNum as number
-                          setPage(newPage)
-                          updateURL({ page: newPage })
-                          scrollToTop()
-                        }}
+                        onClick={() => handlePageChange(pageNum as number)}
                         disabled={isRefreshing}
                         className={`cursor-pointer min-w-[40px] ${
                           isCurrentPage 
@@ -638,33 +523,22 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 })()}
               </div>
 
-              {/* Next Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  const newPage = page + 1
-                  setPage(newPage)
-                  updateURL({ page: newPage })
-                  scrollToTop()
-                }}
-                disabled={page === totalPages || isRefreshing}
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || isRefreshing}
                 className="cursor-pointer"
               >
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
 
-              {/* Last Page Button */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setPage(totalPages)
-                  updateURL({ page: totalPages })
-                  scrollToTop()
-                }}
-                disabled={page === totalPages || isRefreshing}
+                onClick={() => handlePageChange(totalPages)}
+                disabled={currentPage === totalPages || isRefreshing}
                 className="cursor-pointer"
                 title="Last page"
               >
@@ -674,7 +548,6 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           </CardContent>
         </Card>
       )}
-
     </div>
   )
 }

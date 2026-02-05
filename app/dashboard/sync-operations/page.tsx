@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProductListTab } from '@/components/sync-operations/ProductListTab'
@@ -16,24 +16,16 @@ interface Shop {
 export default function SyncOperationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const shopsLoadedRef = useRef(false)
   
-  // Get activeTab directly from URL
+  // Get activeTab directly from URL, default to 'create' without redirect
   const activeTab = searchParams.get('tab') || 'create'
   const [shops, setShops] = useState<Shop[]>([])
-  const [shopsLoaded, setShopsLoaded] = useState(false)
 
-  // Redirect to default tab if no tab parameter - only check URL, don't use activeTab in deps
+  // Fetch shops once on mount - use ref to prevent duplicates
   useEffect(() => {
-    const urlTab = searchParams.get('tab')
-    if (!urlTab) {
-      // No tab in URL, redirect to create tab
-      router.replace('/dashboard/sync-operations?tab=create')
-    }
-  }, [searchParams, router])
-
-  // Fetch shops once on mount - shared across all tabs
-  useEffect(() => {
-    if (shopsLoaded) return // Prevent multiple fetches
+    if (shopsLoadedRef.current) return
+    shopsLoadedRef.current = true
     
     async function fetchShops() {
       try {
@@ -42,18 +34,17 @@ export default function SyncOperationsPage() {
         
         const data = await response.json()
         setShops(sortShopsSourceFirstThenByTld(data.shops))
-        setShopsLoaded(true)
       } catch (err) {
         console.error('Failed to load shops:', err)
+        shopsLoadedRef.current = false // Reset on error so it can retry
       }
     }
     
     fetchShops()
-  }, [shopsLoaded])
+  }, [])
 
   // Handle tab change - reset all filters when switching tabs
   const handleTabChange = (newTab: string) => {
-    // Only preserve the tab parameter, reset all filters
     router.push(`/dashboard/sync-operations?tab=${newTab}`, { scroll: false })
   }
 
