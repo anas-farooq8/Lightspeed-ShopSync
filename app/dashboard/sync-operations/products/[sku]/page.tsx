@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Package, ExternalLink, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react'
-import { getShopColorClasses } from '@/lib/constants/shop-colors'
-import { initializeShopColors } from '@/lib/constants/shop-colors'
+import { ArrowLeft, Loader2, Package, ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react'
+import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref } from '@/lib/utils'
 
@@ -85,15 +84,6 @@ export default function ProductDetailPage() {
   // Selected product IDs for duplicates
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
   const [selectedTargetProductIds, setSelectedTargetProductIds] = useState<Record<string, number>>({})
-
-  // Initialize shop colors when data loads
-  useEffect(() => {
-    if (details && details.source.length > 0) {
-      const targetTlds = Object.keys(details.targets)
-      const allTlds = [details.source[0].shop_tld, ...targetTlds]
-      initializeShopColors(allTlds, details.source[0].shop_tld)
-    }
-  }, [details])
 
   useEffect(() => {
     async function fetchProductDetails() {
@@ -315,7 +305,6 @@ function ProductPanel({
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
 
   const imageUrl = product.product_image?.src || product.product_image?.thumb
-  const shopColorClass = getShopColorClasses(product.shop_tld)
   const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
@@ -339,7 +328,7 @@ function ProductPanel({
               ) : (
                 <span className="truncate">{product.shop_name}</span>
               )}
-              <Badge variant="outline" className={`text-sm ${shopColorClass} shrink-0`}>
+              <Badge variant="outline" className="text-sm shrink-0">
                 .{product.shop_tld}
               </Badge>
             </CardTitle>
@@ -444,17 +433,17 @@ function ProductPanel({
           <div>
             <span className="text-muted-foreground block mb-1">Visibility</span>
             <div className="flex items-center gap-1.5">
-              {product.visibility === 'visible' ? (
-                <>
-                  <Eye className="h-4 w-4 text-green-600" />
-                  <span className="font-medium text-green-700">Visible</span>
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Hidden</span>
-                </>
-              )}
+              {(() => {
+                const vis = getVisibilityOption(product.visibility)
+                return (
+                  <>
+                    <vis.Icon className={`h-4 w-4 ${vis.iconClassName}`} />
+                    <span className={`font-medium ${vis.labelClassName || vis.iconClassName}`}>
+                      {vis.label}
+                    </span>
+                  </>
+                )
+              })()}
             </div>
           </div>
           <div>

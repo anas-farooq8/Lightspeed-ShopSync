@@ -4,7 +4,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, Layers, CheckCircle2, XCircle } from 'lucide-react'
 import type { SyncProduct } from './ProductListTab'
-import { getShopColorClasses } from '@/lib/constants/shop-colors'
 
 interface ProductCardProps {
   product: SyncProduct
@@ -47,7 +46,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         <div className="mb-2 flex items-center gap-2 flex-wrap">
           {showShopBadge ? (
             <>
-              <Badge variant="outline" className={`text-xs ${getShopColorClasses(product.source_shop_tld)}`}>
+              <Badge variant="outline" className="text-xs">
                 {product.source_shop_name} (.{product.source_shop_tld})
               </Badge>
               <Badge variant="outline" className="text-xs border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-300">

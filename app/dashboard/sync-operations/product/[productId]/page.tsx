@@ -6,9 +6,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Loader2, Package, ExternalLink, Eye, EyeOff } from 'lucide-react'
-import { getShopColorClasses } from '@/lib/constants/shop-colors'
-import { initializeShopColors } from '@/lib/constants/shop-colors'
+import { ArrowLeft, Loader2, Package, ExternalLink } from 'lucide-react'
+import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
 
@@ -72,13 +71,6 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true)
   const [navigating, setNavigating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Initialize shop colors when data loads
-  useEffect(() => {
-    if (details?.shop_tld) {
-      initializeShopColors([details.shop_tld], details.shop_tld)
-    }
-  }, [details])
 
   useEffect(() => {
     async function fetchProductDetails() {
@@ -193,7 +185,6 @@ function ProductPanel({ product }: ProductPanelProps) {
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
 
   const imageUrl = product.product_image?.src || product.product_image?.thumb
-  const shopColorClass = getShopColorClasses(product.shop_tld)
   const defaultVariant = product.variants?.find(v => v.is_default) || product.variants?.[0]
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
@@ -231,7 +222,7 @@ function ProductPanel({ product }: ProductPanelProps) {
               ) : (
                 <span className="text-lg font-semibold truncate">{product.shop_name}</span>
               )}
-              <Badge variant="outline" className={`text-sm ${shopColorClass} shrink-0`}>
+              <Badge variant="outline" className="text-sm shrink-0">
                 .{product.shop_tld}
               </Badge>
             </div>
@@ -247,15 +238,15 @@ function ProductPanel({ product }: ProductPanelProps) {
               </a>
             )}
             <div className="flex flex-wrap items-center gap-3 mt-1">
-              {product.visibility === 'visible' ? (
-                <span className="inline-flex items-center gap-1.5 text-sm text-green-600 dark:text-green-500">
-                  <Eye className="h-4 w-4" /> Visible
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <EyeOff className="h-4 w-4" /> Hidden
-                </span>
-              )}
+              {(() => {
+                const vis = getVisibilityOption(product.visibility)
+                return (
+                  <span className={`inline-flex items-center gap-1.5 text-sm ${vis.labelClassName || vis.iconClassName}`}>
+                    <vis.Icon className={`h-4 w-4 ${vis.iconClassName}`} />
+                    {vis.label}
+                  </span>
+                )
+              })()}
               <span className="text-sm text-muted-foreground">·</span>
               <span className="text-base font-semibold">€{defaultVariant?.price_excl?.toFixed(2) || '0.00'}</span>
               <span className="text-sm text-muted-foreground">·</span>

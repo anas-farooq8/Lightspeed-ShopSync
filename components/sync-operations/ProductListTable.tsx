@@ -14,7 +14,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import type { SyncProduct } from './ProductListTab'
-import { getShopColorClasses } from '@/lib/constants/shop-colors'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface ProductListTableProps {
@@ -193,7 +192,7 @@ export function ProductListTable({
             {/* Titles + Shop Badge */}
             <div className="flex-1 min-w-0">
               {showShopBadge && (
-                <Badge variant="outline" className={`text-xs mb-1 ${getShopColorClasses(product.source_shop_tld)}`}>
+                <Badge variant="outline" className="text-xs mb-1">
                   {product.source_shop_name} (.{product.source_shop_tld})
                 </Badge>
               )}

@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { ProductCard } from '@/components/sync-operations/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/ProductListTable'
-import { initializeShopColors } from '@/lib/constants/shop-colors'
 import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
@@ -79,15 +78,6 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   // Fetch guard
   const lastFetchParamsRef = useRef<string>('')
   const isFetchingRef = useRef(false)
-
-  // Initialize shop colors
-  useEffect(() => {
-    if (shops.length > 0) {
-      const sourceShop = shops.find(shop => shop.role === 'source')
-      const shopTlds = shops.map(shop => shop.tld)
-      initializeShopColors(shopTlds, sourceShop?.tld)
-    }
-  }, [shops])
 
   // Fetch products when URL params or operation changes
   useEffect(() => {
