@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     // Filters
     const operation = searchParams.get('operation') || 'create' // create, edit, null_sku
-    const missingIn = searchParams.get('missingIn') || 'be' // be, de, all (for create)
+    const missingIn = searchParams.get('missingIn') || 'all' // all (default), or specific shop TLD (for create)
     const shopTld = searchParams.get('shopTld') || '' // For null_sku operation
     const search = searchParams.get('search') || ''
     const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'

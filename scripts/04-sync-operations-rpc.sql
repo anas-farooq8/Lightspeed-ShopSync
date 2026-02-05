@@ -21,7 +21,7 @@ DROP FUNCTION IF EXISTS get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEX
 
 CREATE OR REPLACE FUNCTION get_sync_operations(
   p_operation TEXT,              -- 'create' | 'edit'
-  p_missing_in TEXT DEFAULT NULL, -- 'be' | 'de' | 'all' (for create only)
+  p_missing_in TEXT DEFAULT NULL, -- shop TLD | 'all' (for create only)
   p_search TEXT DEFAULT NULL,
   p_only_duplicates BOOLEAN DEFAULT FALSE, -- Filter to show only products with duplicate SKUs
   p_sort_by TEXT DEFAULT 'created', -- 'title' | 'sku' | 'variants' | 'price' | 'created'
@@ -98,29 +98,32 @@ AS $$
         OR pss.source_has_duplicates = TRUE
       )
       AND
-      -- Operation-specific filters
+      -- Operation-specific filters (DYNAMIC - works with any number of target shops)
       (
         -- CREATE operation filters
         (p_operation = 'create' AND (
-          -- Missing in ALL targets
+          -- Missing in ALL targets (all keys in targets JSONB have status = 'not_exists')
           (p_missing_in = 'all' AND 
-            (pss.targets->'be'->>'status' = 'not_exists' AND 
-             pss.targets->'de'->>'status' = 'not_exists'))
-          -- Missing in BE only
-          OR (p_missing_in = 'be' AND pss.targets->'be'->>'status' = 'not_exists')
-          -- Missing in DE only
-          OR (p_missing_in = 'de' AND pss.targets->'de'->>'status' = 'not_exists')
-          -- Default: missing in any
-          OR (p_missing_in IS NULL AND (
-            pss.targets->'be'->>'status' = 'not_exists' OR 
-            pss.targets->'de'->>'status' = 'not_exists'
+            NOT EXISTS (
+              SELECT 1 FROM jsonb_each(pss.targets) AS t(key, value)
+              WHERE t.value->>'status' != 'not_exists'
+            ))
+          -- Missing in specific shop only
+          OR (p_missing_in IS NOT NULL AND p_missing_in != 'all' AND 
+              pss.targets->p_missing_in->>'status' = 'not_exists')
+          -- Default: missing in at least one target
+          OR (p_missing_in IS NULL AND 
+            EXISTS (
+              SELECT 1 FROM jsonb_each(pss.targets) AS t(key, value)
+              WHERE t.value->>'status' = 'not_exists'
+            ))
+        ))
+        -- EDIT operation filters (exists in at least one target)
+        OR (p_operation = 'edit' AND 
+          EXISTS (
+            SELECT 1 FROM jsonb_each(pss.targets) AS t(key, value)
+            WHERE t.value->>'status' IN ('exists_single', 'exists_multiple')
           ))
-        ))
-        -- EDIT operation filters
-        OR (p_operation = 'edit' AND (
-          pss.targets->'be'->>'status' IN ('exists_single', 'exists_multiple') OR
-          pss.targets->'de'->>'status' IN ('exists_single', 'exists_multiple')
-        ))
       )
   ),
   counted_products AS (
@@ -196,14 +199,14 @@ GRANT EXECUTE ON FUNCTION get_sync_operations(TEXT, TEXT, TEXT, INTEGER, INTEGER
 -- Example Usage
 -- =====================================================
 
--- Get CREATE operations missing in .be (first page, 100 per page)
--- SELECT * FROM get_sync_operations('create', 'be', NULL, 1, 100);
+-- Get CREATE operations missing in a specific shop (e.g., 'be') (first page, 100 per page)
+-- SELECT * FROM get_sync_operations('create', 'be', NULL, FALSE, 'created', 'desc', 1, 100);
 
 -- Get CREATE operations missing in all targets (with search)
--- SELECT * FROM get_sync_operations('create', 'all', 'box', 1, 100);
+-- SELECT * FROM get_sync_operations('create', 'all', 'box', FALSE, 'created', 'desc', 1, 100);
 
 -- Get EDIT operations (products that exist in at least one target)
--- SELECT * FROM get_sync_operations('edit', NULL, NULL, 1, 100);
+-- SELECT * FROM get_sync_operations('edit', NULL, NULL, FALSE, 'created', 'desc', 1, 100);
 
 -- =====================================================
 -- Expected Response Structure
@@ -225,13 +228,23 @@ GRANT EXECUTE ON FUNCTION get_sync_operations(TEXT, TEXT, TEXT, INTEGER, INTEGER
 --   "source_has_duplicates": false,
 --   "targets": {
 --     "be": {
+--       "shop_id": "...",
+--       "shop_name": "VerpakkingenXL-BE",
+--       "shop_tld": "be",
 --       "status": "not_exists",
 --       "match_type": "no_match",
+--       "default_matches": 0,
+--       "non_default_matches": 0,
 --       "total_matches": 0
 --     },
 --     "de": {
+--       "shop_id": "...",
+--       "shop_name": "VerpackungenXL",
+--       "shop_tld": "de",
 --       "status": "exists_single",
 --       "match_type": "default_variant",
+--       "default_matches": 1,
+--       "non_default_matches": 0,
 --       "total_matches": 1
 --     }
 --   },

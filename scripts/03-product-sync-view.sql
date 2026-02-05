@@ -100,7 +100,7 @@ source_sku_stats AS (
 -- ==========================================
 -- STEP 5: Get Target Shops
 -- ==========================================
--- All target shops (.de, .be) cached for reuse
+-- All target shops (dynamically loaded from database) cached for reuse
 target_shops AS (
     SELECT id, tld, name
     FROM shops
@@ -204,7 +204,7 @@ SELECT
     -- Target Shops Data (JSONB format)
     -- ========================================
     -- Aggregates all target shop match info into single JSONB column
-    -- Format: { "be": {...}, "de": {...} }
+    -- Format: { "tld1": {...}, "tld2": {...}, ... } (dynamic based on target shops in database)
     -- Each target contains: status, match_type, match counts
     jsonb_object_agg(
         stm.target_tld,

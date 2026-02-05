@@ -1,8 +1,8 @@
 /**
  * Product Sync Status (Product-Level Sync)
  * 
- * Represents a product from .nl (via its default variant)
- * and its sync status with .de and .be shops.
+ * Represents a product from the source shop (via its default variant)
+ * and its sync status with all target shops (dynamically loaded from database).
  * 
  * Matching logic: Products matched by variant SKU
  * - First: match by DEFAULT variant SKU
@@ -38,7 +38,7 @@ export interface ProductSyncStatus {
   source_has_duplicates: boolean
   source_duplicate_product_ids: number[]
   
-  // All target shops data (ALWAYS includes all target shops: be, de)
+  // All target shops data (dynamically includes all target shops from database)
   targets: {
     [tld: string]: TargetShopStatus
   }
@@ -58,7 +58,8 @@ export interface ProductSyncStatusWithPagination extends ProductSyncStatus {
 
 /**
  * Target shop sync status for a specific product
- * Each target shop (be, de) will have this structure in the targets object
+ * Each target shop will have this structure in the targets object
+ * (dynamically loaded from database)
  * 
  * Matching logic:
  * - First checks default variants
@@ -118,7 +119,7 @@ export interface SyncLog {
   id: number
   shop_id: string
   shop_name?: string  // Joined from shops table
-  shop_tld?: string   // Joined from shops table (nl | de | be)
+  shop_tld?: string   // Joined from shops table (dynamically loaded, e.g., nl, de, be, fr, etc.)
   shop_role?: string  // Joined from shops table (source | target)
   
   // Timing
