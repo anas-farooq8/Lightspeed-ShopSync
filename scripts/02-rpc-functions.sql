@@ -33,7 +33,7 @@ AS $$
         s.tld,
         s.role,
         TRIM(v.sku) AS sku,
-        (v.sku IS NOT NULL AND TRIM(v.sku) <> '') AS has_valid_sku
+        (TRIM(v.sku) <> '') AS has_valid_sku
       FROM variants v
       JOIN shops s ON s.id = v.shop_id
       WHERE v.is_default
@@ -83,7 +83,6 @@ AS $$
       FROM variants v
       JOIN shops s ON s.id = v.shop_id
       WHERE s.role = 'target'
-        AND v.sku IS NOT NULL
         AND TRIM(v.sku) <> ''
     ),
     missing_per_target AS (

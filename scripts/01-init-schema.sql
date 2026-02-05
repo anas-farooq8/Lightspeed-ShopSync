@@ -173,10 +173,10 @@ create index idx_variants_shop_default_sku on variants (shop_id, is_default, sku
 create index idx_variants_default_sku on variants (sku) where is_default;
 -- 3. FUNCTIONAL INDEX on trimmed SKU (eliminates runtime TRIM())
 -- This is critical for matching performance as it allows index-only scans
-create index idx_variants_trimmed_sku on variants (TRIM(sku)) where sku is not null;
+create index idx_variants_trimmed_sku on variants (TRIM(sku));
 -- 4. FUNCTIONAL INDEX on trimmed SKU for default variants only
 -- Most important for CREATE/EDIT operations
-create index idx_variants_trimmed_sku_default on variants (TRIM(sku)) where is_default = true and sku is not null;
+create index idx_variants_trimmed_sku_default on variants (TRIM(sku)) where is_default = true;
 -- 5. Product-level index (for variant counting)
 create index idx_variants_product on variants (shop_id, lightspeed_product_id);
 

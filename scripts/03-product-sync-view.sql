@@ -55,7 +55,6 @@ source_products AS (
     FROM source_shop ss
     INNER JOIN variants v ON v.shop_id = ss.id
         AND v.is_default = true
-        AND v.sku IS NOT NULL
         AND TRIM(v.sku) <> ''  -- Leverages functional index
     INNER JOIN products p ON p.shop_id = ss.id 
         AND p.lightspeed_product_id = v.lightspeed_product_id
@@ -150,7 +149,6 @@ actual_matches AS (
         END AS match_type
     FROM normalized_source_skus nss
     INNER JOIN variants v ON TRIM(v.sku) = nss.sku  -- Uses functional index
-        AND v.sku IS NOT NULL
     INNER JOIN target_shops ts ON ts.id = v.shop_id
     GROUP BY nss.sku, v.shop_id, ts.tld, ts.name
 ),

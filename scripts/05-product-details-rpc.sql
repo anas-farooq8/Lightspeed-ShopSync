@@ -115,7 +115,6 @@ BEGIN
         FROM all_shops s
         INNER JOIN variants v ON v.shop_id = s.id 
             AND TRIM(v.sku) = v_sku
-            AND v.sku IS NOT NULL
         INNER JOIN products p ON p.shop_id = s.id 
             AND p.lightspeed_product_id = v.lightspeed_product_id
     ),
