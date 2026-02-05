@@ -102,8 +102,10 @@ export function Sidebar() {
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 px-3 py-4 overflow-y-auto">
           {navItems.map((item) => {
-            // Exact match for all routes to prevent multiple active states
-            const isActive = pathname === item.href
+            // Dashboard: exact match only. Others: active when on exact href or any child route
+            const isActive = item.href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname === item.href || pathname.startsWith(item.href + '/')
             const Icon = item.icon
             
             return (

@@ -210,7 +210,7 @@ BEGIN
       sg.*,
       DENSE_RANK() OVER (
         ORDER BY
-          -- Sort groups by their representative value
+          -- Text sorts (title, sku)
           CASE 
             WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' 
               THEN sg.group_sort_value
@@ -219,27 +219,44 @@ BEGIN
             WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' 
               THEN sg.group_sort_value
           END DESC NULLS LAST,
+          -- Numeric sorts (variants, price)
           CASE 
-            WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'asc' 
+            WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'asc' 
               THEN sg.group_sort_value::NUMERIC
           END ASC NULLS LAST,
           CASE 
-            WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'desc' 
+            WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'desc' 
               THEN sg.group_sort_value::NUMERIC
+          END DESC NULLS LAST,
+          -- Timestamp sort (created)
+          CASE 
+            WHEN p_sort_by = 'created' AND p_sort_order = 'asc' 
+              THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE
+          END ASC NULLS LAST,
+          CASE 
+            WHEN p_sort_by = 'created' AND p_sort_order = 'desc' 
+              THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE
           END DESC NULLS LAST,
           -- Secondary sort by created date for consistency
           sg.group_secondary_sort DESC,
           sg.default_sku ASC
-      ) AS sku_group_rank,
-      -- Count total unique SKU groups for pagination
-      COUNT(DISTINCT sg.default_sku) OVER () AS total_sku_groups
+      ) AS sku_group_rank
     FROM sku_groups sg
+  ),
+  -- ========================================
+  -- Count total unique SKU groups efficiently
+  -- OPTIMIZATION: Use MAX(DENSE_RANK) instead of COUNT(DISTINCT)
+  -- Since DENSE_RANK gives consecutive numbers 1,2,3..., MAX = total count
+  -- This avoids the "DISTINCT not supported in window functions" error
+  -- ========================================
+  total_count_calc AS (
+    SELECT MAX(sku_group_rank) AS total_sku_groups
+    FROM ranked_groups
   ),
   -- Filter to get only the SKU groups that belong to current page
   page_groups AS (
     SELECT DISTINCT
-      rg.default_sku,
-      rg.total_sku_groups
+      rg.default_sku
     FROM ranked_groups rg
     WHERE rg.sku_group_rank > (p_page - 1) * p_page_size
       AND rg.sku_group_rank <= p_page * p_page_size
@@ -248,9 +265,10 @@ BEGIN
   page_products AS (
     SELECT 
       rg.*,
-      pg.total_sku_groups
+      tcc.total_sku_groups
     FROM ranked_groups rg
     INNER JOIN page_groups pg ON pg.default_sku = rg.default_sku
+    CROSS JOIN total_count_calc tcc
   ),
   -- Apply final sorting within each page
   sorted_products AS (
@@ -259,7 +277,7 @@ BEGIN
       CEIL(pp.total_sku_groups::NUMERIC / p_page_size)::INTEGER AS total_pages
     FROM page_products pp
     ORDER BY
-      -- Sort by the same criteria used for grouping
+      -- Text sorts (title, sku)
       CASE 
         WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' 
           THEN pp.group_sort_value
@@ -268,13 +286,23 @@ BEGIN
         WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' 
           THEN pp.group_sort_value
       END DESC NULLS LAST,
+      -- Numeric sorts (variants, price)
       CASE 
-        WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'asc' 
+        WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'asc' 
           THEN pp.group_sort_value::NUMERIC
       END ASC NULLS LAST,
       CASE 
-        WHEN p_sort_by IN ('variants', 'price', 'created') AND p_sort_order = 'desc' 
+        WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'desc' 
           THEN pp.group_sort_value::NUMERIC
+      END DESC NULLS LAST,
+      -- Timestamp sort (created)
+      CASE 
+        WHEN p_sort_by = 'created' AND p_sort_order = 'asc' 
+          THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE
+      END ASC NULLS LAST,
+      CASE 
+        WHEN p_sort_by = 'created' AND p_sort_order = 'desc' 
+          THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE
       END DESC NULLS LAST,
       pp.group_secondary_sort DESC,
       pp.default_sku ASC,

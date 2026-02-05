@@ -224,13 +224,12 @@ export default function ProductDetailPage() {
       <LoadingShimmer show={navigating} position="top" />
       
       <div className="w-full p-6">
-        {/* Header with Back Button */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header with Back Button and SKU */}
+        <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" onClick={handleBack} className="cursor-pointer">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to List
           </Button>
-          
           <div className="text-sm text-muted-foreground">
             SKU: <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{sku}</code>
           </div>
@@ -505,10 +504,21 @@ function ProductPanel({
                     {content.url && (
                       <div>
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
-                          Slug
+                          Slug:
                         </label>
                         <div className="text-sm font-semibold break-all">
-                          {content.url}
+                          {shopUrl ? (
+                            <a
+                              href={`${shopUrl.replace(/\/$/, '')}/${content.url}.html`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              {content.url}
+                            </a>
+                          ) : (
+                            content.url
+                          )}
                         </div>
                       </div>
                     )}
@@ -517,7 +527,7 @@ function ProductPanel({
                     {content.title && (
                       <div>
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
-                          Title
+                          Title:
                         </label>
                         <div className="text-sm leading-snug break-words">
                           {content.title}
@@ -525,11 +535,11 @@ function ProductPanel({
                       </div>
                     )}
 
-                    {/* Fulltitle - Always show if exists */}
+                    {/* Full Title - Always show if exists */}
                     {content.fulltitle && (
                       <div>
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
-                          Fulltitle
+                          Full Title:
                         </label>
                         <div className="text-sm break-words">
                           {content.fulltitle}
@@ -541,7 +551,7 @@ function ProductPanel({
                     {content.description && (
                       <div>
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
-                          Description
+                          Description:
                         </label>
                         <div className="text-sm text-muted-foreground break-words whitespace-pre-wrap">
                           {content.description}
@@ -553,12 +563,12 @@ function ProductPanel({
                     {content.content && (
                       <div>
                         <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">
-                          Content
+                          Content:
                         </label>
-                        <div className="text-sm break-words max-h-96 overflow-y-auto border border-border/30 rounded-md p-3">
+                        <div className="text-base break-words max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-4 bg-muted/30">
                           <div 
                             dangerouslySetInnerHTML={{ __html: content.content }} 
-                            className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground"
+                            className="prose prose-base max-w-none [&>:first-child]:mt-0 prose-headings:text-foreground prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-muted-foreground prose-p:my-2 prose-li:text-muted-foreground prose-strong:text-foreground prose-ul:my-2 prose-ol:my-2"
                           />
                         </div>
                       </div>
