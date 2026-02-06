@@ -123,9 +123,9 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-[200px] flex items-center justify-center px-4">
+      <div className="w-full min-h-screen flex items-center justify-center">
         <LoadingShimmer show={true} position="top" />
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -288,20 +288,20 @@ function ProductPanel({ product }: ProductPanelProps) {
                   return (
                     <TabsContent key={lang.code} value={lang.code} className="space-y-4 mt-0">
                       {content.url && (
-                        <div>
+                        <div className="min-w-0 overflow-hidden">
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Slug:</label>
-                          <div className="text-sm sm:text-base break-all font-mono">
+                          <div className="text-sm sm:text-base font-mono truncate" title={content.url}>
                             {shopUrl ? (
                               <a
                                 href={`${shopUrl.replace(/\/$/, '')}${!lang.is_default ? `/${lang.code}` : ''}/${content.url}.html`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-700 hover:underline"
+                                className="text-blue-600 hover:text-blue-700 hover:underline truncate block"
                               >
                                 {content.url}
                               </a>
                             ) : (
-                              content.url
+                              <span className="truncate block">{content.url}</span>
                             )}
                           </div>
                         </div>
