@@ -123,7 +123,7 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-[200px] flex items-center justify-center">
+      <div className="w-full min-h-[200px] flex items-center justify-center px-4">
         <LoadingShimmer show={true} position="top" />
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
@@ -132,15 +132,15 @@ export default function ProductDetailPage() {
 
   if (error || !details) {
     return (
-      <div className="w-full p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" onClick={handleBack} className="cursor-pointer">
+      <div className="w-full p-4 sm:p-6">
+        <div className="flex flex-wrap items-center gap-3 mb-4 sm:mb-6">
+          <Button variant="outline" onClick={handleBack} className="cursor-pointer min-h-[44px] sm:min-h-0 touch-manipulation">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to List
           </Button>
         </div>
         <Card className="border-destructive/50">
-          <CardContent className="flex items-center justify-center py-8 text-destructive text-sm">
+          <CardContent className="flex items-center justify-center py-8 px-4 text-destructive text-sm">
             {error || 'Product not found'}
           </CardContent>
         </Card>
@@ -149,17 +149,18 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full min-w-0">
       <LoadingShimmer show={navigating} position="top" />
       
-      <div className="w-full p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" onClick={handleBack} className="cursor-pointer">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to List
+      <div className="w-full p-4 sm:p-6">
+        <div className="flex flex-row items-center flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-6">
+          <Button variant="outline" onClick={handleBack} className="cursor-pointer min-h-[40px] sm:min-h-0 touch-manipulation shrink-0">
+            <ArrowLeft className="h-4 w-4 mr-1.5 sm:mr-2" />
+            <span className="hidden sm:inline">Back to List</span>
+            <span className="sm:hidden">Back</span>
           </Button>
-          <div className="text-sm text-muted-foreground">
-            Product Id: <code className="text-sm bg-muted px-2 py-1 rounded font-mono">{details.product_id}</code>
+          <div className="text-xs sm:text-sm text-muted-foreground min-w-0">
+            Product Id: <code className="text-xs sm:text-sm bg-muted px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono">{details.product_id}</code>
           </div>
         </div>
 
@@ -192,9 +193,9 @@ function ProductPanel({ product }: ProductPanelProps) {
   return (
     <Card className="border-border/50 overflow-hidden">
       <CardContent className="p-0">
-        {/* Hero row: larger image + meta */}
-        <div className="flex gap-6 p-6 sm:p-8 border-b border-border/50">
-          <div className="w-32 h-32 sm:w-40 sm:h-40 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50">
+        {/* Hero row: image + meta - stack on mobile */}
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 sm:p-6 md:p-8 border-b border-border/50">
+          <div className="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50 self-start sm:self-auto">
             {imageUrl ? (
               <img
                 src={imageUrl}
@@ -207,22 +208,22 @@ function ProductPanel({ product }: ProductPanelProps) {
             )}
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col justify-center gap-3">
+          <div className="flex-1 min-w-0 flex flex-col justify-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               {shopUrl ? (
                 <a
                   href={shopUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-lg font-semibold truncate hover:text-primary transition-colors flex items-center gap-1"
+                  className="text-base sm:text-lg font-semibold truncate hover:text-primary transition-colors flex items-center gap-1"
                 >
                   {product.shop_name}
-                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                 </a>
               ) : (
-                <span className="text-lg font-semibold truncate">{product.shop_name}</span>
+                <span className="text-base sm:text-lg font-semibold truncate">{product.shop_name}</span>
               )}
-              <Badge variant="outline" className="text-sm shrink-0">
+              <Badge variant="outline" className="text-xs sm:text-sm shrink-0">
                 .{product.shop_tld}
               </Badge>
             </div>
@@ -237,22 +238,22 @@ function ProductPanel({ product }: ProductPanelProps) {
                 Product #{product.product_id}
               </a>
             )}
-            <div className="flex flex-wrap items-center gap-3 mt-1">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-xs sm:text-sm">
               {(() => {
                 const vis = getVisibilityOption(product.visibility)
                 return (
-                  <span className={`inline-flex items-center gap-1.5 text-sm ${vis.labelClassName || vis.iconClassName}`}>
-                    <vis.Icon className={`h-4 w-4 ${vis.iconClassName}`} />
+                  <span className={`inline-flex items-center gap-1 sm:gap-1.5 ${vis.labelClassName || vis.iconClassName}`}>
+                    <vis.Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${vis.iconClassName}`} />
                     {vis.label}
                   </span>
                 )
               })()}
-              <span className="text-sm text-muted-foreground">·</span>
-              <span className="text-base font-semibold">€{defaultVariant?.price_excl?.toFixed(2) || '0.00'}</span>
-              <span className="text-sm text-muted-foreground">·</span>
-              <span className="text-sm">{product.variant_count} variant{product.variant_count !== 1 ? 's' : ''}</span>
-              <span className="text-sm text-muted-foreground">·</span>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold">€{defaultVariant?.price_excl?.toFixed(2) || '0.00'}</span>
+              <span className="text-muted-foreground">·</span>
+              <span>{product.variant_count} variant{product.variant_count !== 1 ? 's' : ''}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">
                 {new Date(product.ls_created_at).toLocaleDateString('en-GB', {
                   day: '2-digit',
                   month: 'short',
@@ -263,18 +264,18 @@ function ProductPanel({ product }: ProductPanelProps) {
           </div>
         </div>
 
-        {/* 2-column layout: Language content | Variants */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+        {/* 2-column layout: Language content | Variants - stack on mobile/tablet */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 min-w-0">
           {/* Language Tabs - Left column */}
           {sortedLanguages.length > 0 && (
-            <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-border/50">
-              <Tabs value={activeLanguage} onValueChange={setActiveLanguage} className="w-full">
-                <TabsList className="h-10 mb-4 w-full flex p-1 items-stretch">
+            <div className="p-4 sm:p-6 md:p-8 border-b lg:border-b-0 lg:border-r border-border/50">
+              <Tabs value={activeLanguage} onValueChange={setActiveLanguage} className="w-full min-w-0">
+                <TabsList className="h-9 sm:h-10 mb-3 sm:mb-4 w-full flex p-0.5 sm:p-1 items-stretch flex-wrap sm:flex-nowrap gap-0.5 sm:gap-0">
                   {sortedLanguages.map(lang => (
                     <TabsTrigger 
                       key={lang.code} 
                       value={lang.code}
-                      className="cursor-pointer uppercase text-sm flex-1 min-w-0 items-center justify-center"
+                      className="cursor-pointer uppercase text-xs sm:text-sm flex-1 min-w-0 items-center justify-center py-2 px-2 sm:px-3 touch-manipulation"
                     >
                       {lang.code}
                       {lang.is_default && <span className="ml-0.5">★</span>}
@@ -289,7 +290,7 @@ function ProductPanel({ product }: ProductPanelProps) {
                       {content.url && (
                         <div>
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Slug:</label>
-                          <div className="text-base break-all font-mono">
+                          <div className="text-sm sm:text-base break-all font-mono">
                             {shopUrl ? (
                               <a
                                 href={`${shopUrl.replace(/\/$/, '')}${!lang.is_default ? `/${lang.code}` : ''}/${content.url}.html`}
@@ -308,25 +309,25 @@ function ProductPanel({ product }: ProductPanelProps) {
                       {content.title && (
                         <div>
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Title:</label>
-                          <div className="text-base break-words">{content.title}</div>
+                          <div className="text-sm sm:text-base break-words">{content.title}</div>
                         </div>
                       )}
                       {content.fulltitle && (
                         <div>
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Full Title:</label>
-                          <div className="text-base break-words text-muted-foreground">{content.fulltitle}</div>
+                          <div className="text-sm sm:text-base break-words text-muted-foreground">{content.fulltitle}</div>
                         </div>
                       )}
                       {content.description && (
                         <div>
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Description:</label>
-                          <div className="text-base text-muted-foreground break-words whitespace-pre-wrap max-h-32 overflow-y-auto">{content.description}</div>
+                          <div className="text-sm sm:text-base text-muted-foreground break-words whitespace-pre-wrap max-h-24 sm:max-h-32 overflow-y-auto">{content.description}</div>
                         </div>
                       )}
                       {content.content && (
                         <div>
                           <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Content:</label>
-                          <div className="text-base break-words max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-4 bg-muted/30">
+                          <div className="text-sm sm:text-base break-words max-h-[20rem] sm:max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-3 sm:p-4 bg-muted/30">
                             <div 
                               dangerouslySetInnerHTML={{ __html: content.content }} 
                               className="prose prose-base max-w-none [&>:first-child]:mt-0 prose-headings:text-foreground prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-muted-foreground prose-p:my-2 prose-li:text-muted-foreground prose-strong:text-foreground prose-ul:my-2 prose-ol:my-2"
@@ -342,11 +343,11 @@ function ProductPanel({ product }: ProductPanelProps) {
           )}
 
           {/* Variants Section - Right column (full width when no languages) */}
-          <div className={cn("p-6 sm:p-8", sortedLanguages.length === 0 && "lg:col-span-2")}>
-            <h4 className="text-sm font-bold uppercase mb-3">
+          <div className={cn("p-4 sm:p-6 md:p-8", sortedLanguages.length === 0 && "lg:col-span-2")}>
+            <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">
               Variants ({product.variants?.length || 0})
             </h4>
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {[...(product.variants || [])]
                 .sort((a, b) => {
                   if (a.is_default && !b.is_default) return -1
@@ -358,31 +359,31 @@ function ProductPanel({ product }: ProductPanelProps) {
                   const variantImageUrl = variant.image?.thumb || variant.image?.src
                   
                   return (
-                    <div key={variant.variant_id} className="flex items-center gap-4 py-3 px-4 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
-                      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                    <div key={variant.variant_id} className="flex items-center gap-3 sm:gap-4 py-3 sm:py-3 px-3.5 sm:px-4 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors min-w-0">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                         {variantImageUrl ? (
                           <img src={variantImageUrl} alt={variant.sku || 'Variant'} className="w-full h-full object-cover" />
                         ) : (
-                          <Package className="h-7 w-7 text-muted-foreground/50" />
+                          <Package className="h-5 w-5 sm:h-7 sm:w-7 text-muted-foreground/50" />
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                           {variant.sku ? (
-                            <code className="text-sm bg-muted px-2 py-0.5 rounded font-mono">{variant.sku}</code>
+                            <code className="text-xs sm:text-sm bg-muted px-1.5 sm:px-2 py-0.5 rounded font-mono truncate max-w-full">{variant.sku}</code>
                           ) : (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-500/70 text-amber-700 dark:text-amber-400">
+                            <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 border-amber-500/70 text-amber-700 dark:text-amber-400 shrink-0">
                               No SKU
                             </Badge>
                           )}
                           {variant.is_default && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-blue-500/70 text-blue-700 dark:text-blue-400">
+                            <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-1.5 py-0 border-blue-500/70 text-blue-700 dark:text-blue-400 shrink-0">
                               Default
                             </Badge>
                           )}
-                          <span className="text-sm font-semibold ml-auto">€{variant.price_excl?.toFixed(2)}</span>
+                          <span className="text-xs sm:text-sm font-semibold ml-auto shrink-0">€{variant.price_excl?.toFixed(2)}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground mt-1 break-words leading-relaxed">{variantTitle}</div>
+                        <div className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 break-words leading-relaxed line-clamp-2 sm:line-clamp-none">{variantTitle}</div>
                       </div>
                     </div>
                   )

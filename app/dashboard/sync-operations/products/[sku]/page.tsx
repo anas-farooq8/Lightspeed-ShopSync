@@ -355,7 +355,7 @@ function ProductPanel({
         <CardContent className="p-0">
           {/* Hero row: image + meta (product-page style) */}
           <div className="flex gap-6 p-6 sm:p-8 border-b border-border/50">
-            <div className="w-32 h-32 sm:w-40 sm:h-40 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50">
+            <div className="w-36 h-36 sm:w-40 sm:h-40 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50">
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -478,7 +478,7 @@ function ProductPanel({
                   const variantImageUrl = variant.image?.thumb || variant.image?.src
                   return (
                     <div key={variant.variant_id} className="flex items-center gap-4 py-3 px-4 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
-                      <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                      <div className="w-[4.25rem] h-[4.25rem] sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                         {variantImageUrl ? <img src={variantImageUrl} alt={variant.sku} className="w-full h-full object-cover" /> : <Package className="h-7 w-7 text-muted-foreground/50" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -692,7 +692,7 @@ function ProductPanel({
                 
                 return (
                   <div key={variant.variant_id} className="flex items-center gap-4 py-3 px-4 rounded-lg bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
-                    <div className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                    <div className="w-16 h-16 sm:w-14 sm:h-14 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                       {variantImageUrl ? (
                         <img src={variantImageUrl} alt={variant.sku} className="w-full h-full object-cover" />
                       ) : (
