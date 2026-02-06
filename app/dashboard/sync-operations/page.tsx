@@ -62,53 +62,59 @@ export default function SyncOperationsPage() {
   }
 
   return (
-    <div className="w-full h-full p-6">
+    <div className="w-full h-full p-4 sm:p-5 md:p-6">
       <div className="max-w-full mx-auto">
         {/* Page Header */}
-        <div className="mb-5">
-          <h1 className="text-2xl font-bold mb-1">Sync Operations</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="mb-4 sm:mb-5">
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">Sync Operations</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Manage product synchronization between shops
           </p>
         </div>
 
-        {/* Tabs - Segmented control style (matches grid/table toggle) */}
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="flex w-full max-w-[600px] gap-1 border border-border rounded-md p-1.5 mb-6 bg-muted/50">
+        {/* Tabs - Compact on mobile, spacious on web */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0">
+          <TabsList className="flex w-full sm:max-w-[550px] md:max-w-[700px] lg:max-w-[900px] gap-0.5 sm:gap-1 border border-border rounded-md p-0.5 sm:p-1.5 md:p-2 mb-4 sm:mb-6 bg-muted/50">
             <TabsTrigger
               value="create"
-              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
+              className="flex-1 cursor-pointer rounded-md px-2 py-1.5 sm:px-5 sm:py-2.5 md:px-10 md:py-4 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-0 touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
             >
               Create
             </TabsTrigger>
             <TabsTrigger
               value="edit"
-              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:text-muted-foreground/60 disabled:opacity-50"
+              className="flex-1 cursor-pointer rounded-md px-2 py-1.5 sm:px-5 sm:py-2.5 md:px-10 md:py-4 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-0 touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:text-muted-foreground/60 disabled:opacity-50"
               disabled
             >
               Edit
             </TabsTrigger>
             <TabsTrigger
               value="null_sku"
-              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
+              className="flex-1 cursor-pointer rounded-md px-2 py-1.5 sm:px-5 sm:py-2.5 md:px-10 md:py-4 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-0 touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
             >
               Null SKU
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="create" className="mt-0">
-            <ProductListTab operation="create" shops={shops} />
-          </TabsContent>
-
-          <TabsContent value="edit" className="mt-0">
-            <div className="text-center py-12 text-muted-foreground">
-              Edit tab - Coming soon
-            </div>
-          </TabsContent>
-
-          <TabsContent value="null_sku" className="mt-0">
-            <ProductListTab operation="null_sku" shops={shops} />
-          </TabsContent>
+          <div className="mt-0 overflow-hidden">
+            {activeTab === 'create' && (
+              <div key="create" className="animate-in fade-in-50 slide-in-from-bottom-2 duration-200 ease-out">
+                <ProductListTab operation="create" shops={shops} />
+              </div>
+            )}
+            {activeTab === 'edit' && (
+              <div key="edit" className="animate-in fade-in-50 slide-in-from-bottom-2 duration-200 ease-out">
+                <div className="text-center py-8 sm:py-12 text-sm sm:text-base text-muted-foreground px-4">
+                  Edit tab - Coming soon
+                </div>
+              </div>
+            )}
+            {activeTab === 'null_sku' && (
+              <div key="null_sku" className="animate-in fade-in-50 slide-in-from-bottom-2 duration-200 ease-out">
+                <ProductListTab operation="null_sku" shops={shops} />
+              </div>
+            )}
+          </div>
         </Tabs>
       </div>
     </div>

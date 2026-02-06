@@ -9,9 +9,10 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
 
-    // Pagination (fixed at 100 per page, not accepting from URL)
+    // Pagination - pageSize from URL (50 for mobile, 100 default), 1-1000
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = 100 // Fixed at 100, used for response metadata
+    const requestedSize = parseInt(searchParams.get('pageSize') || '100')
+    const pageSize = Math.min(1000, Math.max(1, requestedSize))
 
     // Filters
     const operation = searchParams.get('operation') || 'create' // create, edit, null_sku
@@ -31,8 +32,8 @@ export async function GET(request: NextRequest) {
         p_search: search || null,
         p_sort_by: sortBy,
         p_sort_order: sortOrder,
-        p_page: page
-        // p_page_size defaults to 100 in RPC function
+        p_page: page,
+        p_page_size: pageSize,
       })
 
       if (error) {
@@ -69,8 +70,8 @@ export async function GET(request: NextRequest) {
       p_only_duplicates: onlyDuplicates,
       p_sort_by: sortBy,
       p_sort_order: sortOrder,
-      p_page: page
-      // p_page_size defaults to 100 in RPC function
+      p_page: page,
+      p_page_size: pageSize,
     })
 
     if (error) {

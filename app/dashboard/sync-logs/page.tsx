@@ -43,7 +43,7 @@ interface SyncLogsResponse {
 
 function SyncLogsPageHeader() {
   return (
-    <div className="mb-3 sm:mb-4">
+    <div className="mb-4 sm:mb-5">
       <h1 className="text-xl sm:text-2xl font-bold mb-1">Sync Logs</h1>
       <p className="text-xs sm:text-sm text-muted-foreground">
         Monitor synchronization operations with Lightspeed API

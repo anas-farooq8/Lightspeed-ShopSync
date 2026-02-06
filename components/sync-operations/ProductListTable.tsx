@@ -175,9 +175,9 @@ export function ProductListTable({
 
         {/* Product (Image + Title + Variant Title) */}
         <TableCell>
-          <div className="flex items-start gap-3">
+            <div className="flex items-start gap-2 sm:gap-3">
             {/* Thumbnail */}
-            <div className="w-14 h-14 shrink-0 bg-muted rounded-md overflow-hidden flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 shrink-0 bg-muted rounded-md overflow-hidden flex items-center justify-center">
               {imageUrl ? (
                 <img
                   src={imageUrl}
@@ -185,7 +185,7 @@ export function ProductListTable({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <Package className="h-5 w-5 text-muted-foreground/50" />
+                <Package className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground/50" />
               )}
             </div>
             
@@ -196,7 +196,7 @@ export function ProductListTable({
                   {product.source_shop_name} (.{product.source_shop_tld})
                 </Badge>
               )}
-              <div className="font-medium line-clamp-2 text-sm leading-snug mb-1">
+              <div className="font-medium line-clamp-2 text-xs sm:text-sm leading-snug mb-1">
                 {product.product_title || 'Untitled Product'}
               </div>
               {product.variant_title && (
@@ -264,7 +264,7 @@ export function ProductListTable({
   }
 
   return (
-    <Card className="border-border/50">
+    <Card className="border-border/50 min-w-0">
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table>

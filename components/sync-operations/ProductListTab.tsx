@@ -70,10 +70,17 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   // Pagination
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [pageSize, setPageSize] = useState(100)
   
-  // UI states
+  // UI states - default to grid on mobile (better UX), table on desktop
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [searchInput, setSearchInput] = useState('')
+  
+  // Set grid as default on mobile viewport (runs once on mount)
+  useEffect(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+    if (isMobile) setViewMode('grid')
+  }, [])
   
   // Fetch guard
   const lastFetchParamsRef = useRef<string>('')
@@ -91,8 +98,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
         return
       }
       
+      // Page size: 50 on mobile, 100 on desktop
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+      const fetchPageSize = isMobile ? 50 : 100
+
       // Build params string for deduplication check
-      const paramsString = `${operation}-${searchParams.toString()}`
+      const paramsString = `${operation}-${searchParams.toString()}-${fetchPageSize}`
       
       // Prevent duplicate fetches for the same params
       if (isFetchingRef.current || lastFetchParamsRef.current === paramsString) {
@@ -133,6 +144,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
         }
         
         if (search) apiParams.append('search', search)
+        apiParams.append('pageSize', fetchPageSize.toString())
 
         const response = await fetch(`/api/sync-operations?${apiParams}`)
         if (!response.ok) throw new Error('Failed to fetch products')
@@ -141,6 +153,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
         setProducts(data.products || [])
         setTotalPages(data.pagination.totalPages)
         setTotal(data.pagination.total)
+        setPageSize(data.pagination.pageSize ?? fetchPageSize)
         setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load products')
@@ -247,8 +260,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   if (loading && products.length === 0) {
     return (
       <Card className="border-border/50">
-        <CardContent className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardContent className="flex items-center justify-center py-12 sm:py-16">
+          <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     )
@@ -257,7 +270,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   if (error) {
     return (
       <Card className="border-destructive/50">
-        <CardContent className="flex items-center justify-center py-12 text-destructive">
+        <CardContent className="flex items-center justify-center py-8 sm:py-12 text-destructive text-sm sm:text-base px-4">
           {error}
         </CardContent>
       </Card>
@@ -272,22 +285,22 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const currentOnlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4 min-w-0">
       <LoadingShimmer show={isRefreshing} position="top" />
       
       {/* Filters */}
       <Card className="border-border/50">
-        <CardContent className="pt-4">
-          <div className="flex flex-col gap-3">
+        <CardContent className="pt-2 sm:pt-3 px-3 sm:px-6 pb-2 sm:pb-4">
+          <div className="flex flex-col gap-2 sm:gap-3">
             {/* Search Bar */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center border border-input rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex-1 min-w-0 flex items-center border border-input rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                 <Input
-                  placeholder={isNullSku ? "Search by product title or variant title..." : "Search by SKU, product title, or variant title..."}
+                  placeholder={isNullSku ? "Search by product title, variant title..." : "Search by SKU, product title, variant title..."}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyPress={handleSearchKeyPress}
-                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-text flex-1"
+                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 cursor-text flex-1 min-w-[80px] text-sm"
                   disabled={isRefreshing}
                 />
                 <Button
@@ -295,104 +308,94 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   size="sm"
                   onClick={handleSearchSubmit}
                   disabled={isRefreshing}
-                  className="cursor-pointer bg-red-600 hover:bg-red-700 h-9 rounded-none border-l border-border px-4 m-0"
+                  className="cursor-pointer bg-red-600 hover:bg-red-700 h-9 sm:h-9 rounded-none border-l border-border px-3 sm:px-4 m-0 min-h-[44px] sm:min-h-0 touch-manipulation shrink-0"
+                  title="Search"
                 >
-                  <Search className="h-4 w-4 mr-2" />
-                  Search
+                  <Search className="h-4 w-4 sm:mr-1 shrink-0" />
+                  <span className="hidden sm:inline">Search</span>
                 </Button>
               </div>
             </div>
 
-            {/* Filters and View Toggle */}
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-1">
+            {/* Filters and View Toggle - filter + toggle in same row */}
+            <div className="flex flex-row flex-wrap gap-2 sm:gap-3 items-center min-w-0">
+              {/* Filter - takes remaining space */}
+              <div className="flex-1 min-w-0 sm:flex-initial sm:min-w-0">
                 <Select 
                   value={isNullSku ? currentShopFilter : currentMissingIn} 
                   onValueChange={handleFilterChange} 
                   disabled={isRefreshing}
                 >
-                  <SelectTrigger className="w-full sm:w-[280px] cursor-pointer">
-                    <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isNullSku ? (
-                      <>
-                        <SelectItem value="all" className="cursor-pointer">All shops</SelectItem>
-                        {shops.map((shop) => (
-                          <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
-                            {shop.shop_name} (.{shop.tld}) - {getShopRoleLabel(shop.role) || 'Target'}
-                          </SelectItem>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        <SelectItem value="all" className="cursor-pointer">Missing in all shops</SelectItem>
-                        {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target')).map((shop) => (
-                          <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
-                            Missing in {shop.shop_name} (.{shop.tld}) - Target
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-
-                {!isNullSku && (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="only-duplicates"
-                      checked={currentOnlyDuplicates}
-                      onCheckedChange={(checked) => updateURL({ onlyDuplicates: checked === true, page: 1 })}
-                      disabled={isRefreshing}
-                      className="cursor-pointer"
-                    />
-                    <Label htmlFor="only-duplicates" className="text-sm font-medium cursor-pointer whitespace-nowrap">
-                      Show only duplicates
-                    </Label>
-                  </div>
-                )}
-                
-                {isNullSku && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-400 dark:border-amber-700 rounded-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                      <line x1="12" y1="9" x2="12" y2="13"></line>
-                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                      Products without SKU cannot be synced
-                    </span>
-                  </div>
-                )}
+                  <SelectTrigger className="w-full sm:w-[280px] h-9 sm:h-10 cursor-pointer min-w-0">
+                  <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {isNullSku ? (
+                    <>
+                      <SelectItem value="all" className="cursor-pointer">All shops</SelectItem>
+                      {shops.map((shop) => (
+                        <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
+                          {shop.shop_name} (.{shop.tld}) - {getShopRoleLabel(shop.role) || 'Target'}
+                        </SelectItem>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="all" className="cursor-pointer">Missing in all shops</SelectItem>
+                      {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target')).map((shop) => (
+                        <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
+                          Missing in {shop.shop_name} (.{shop.tld}) - Target
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
               </div>
 
-              {/* View Mode Toggle */}
-              <div className="flex gap-1 border border-border rounded-md p-1">
+              {/* Checkbox - desktop only, between filter and toggle */}
+              {!isNullSku && (
+                <div className="hidden sm:flex items-center space-x-2 shrink-0">
+                  <Checkbox
+                    id="only-duplicates"
+                    checked={currentOnlyDuplicates}
+                    onCheckedChange={(checked) => updateURL({ onlyDuplicates: checked === true, page: 1 })}
+                    disabled={isRefreshing}
+                    className="cursor-pointer"
+                  />
+                  <Label htmlFor="only-duplicates" className="text-xs sm:text-sm font-medium cursor-pointer whitespace-nowrap">
+                    Show only duplicates
+                  </Label>
+                </div>
+              )}
+
+              {/* View Mode Toggle - right after filter on mobile; pushed right on web (above product count) */}
+              <div className="flex gap-0.5 border border-border rounded-md p-0.5 sm:p-1 shrink-0 sm:ml-auto">
                 <Button
                   variant={viewMode === 'table' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('table')}
-                  className={`cursor-pointer px-4 ${viewMode === 'table' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
+                  className={`cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9 ${viewMode === 'table' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
                 >
-                  <List className="h-4 w-4 mr-2" />
-                  Table
+                  <List className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="ml-1 sm:ml-1.5">Table</span>
                 </Button>
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('grid')}
-                  className={`cursor-pointer px-4 ${viewMode === 'grid' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
+                  className={`cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9 ${viewMode === 'grid' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
                 >
-                  <LayoutGrid className="h-4 w-4 mr-2" />
-                  Grid
+                  <LayoutGrid className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="ml-1 sm:ml-1.5">Grid</span>
                 </Button>
               </div>
             </div>
 
             {/* Results Count */}
-            <div className="flex items-center justify-end">
-              <div className="text-sm text-muted-foreground">
-                Showing {products.length > 0 ? ((currentPage - 1) * 100) + 1 : 0} - {Math.min(currentPage * 100, total)} of {total.toLocaleString()} products
+            <div className="flex items-center justify-end min-w-0">
+              <div className="text-xs sm:text-sm text-muted-foreground truncate">
+                Showing {products.length > 0 ? ((currentPage - 1) * pageSize) + 1 : 0} - {Math.min(currentPage * pageSize, total)} of {total.toLocaleString()} products
               </div>
             </div>
           </div>
@@ -402,7 +405,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       {/* Products Display */}
       {products.length === 0 ? (
         <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-12 text-muted-foreground">
+          <CardContent className="flex items-center justify-center py-8 sm:py-12 text-muted-foreground text-sm sm:text-base px-4">
             No products found matching your filters
           </CardContent>
         </Card>
@@ -420,7 +423,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           showShopBadge={isNullSku}
         />
       ) : (
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-w-0">
           {products.map((product) => (
             <ProductCard
               key={`${product.source_product_id}-${product.default_sku}`}
@@ -437,17 +440,17 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       {/* Pagination */}
       {totalPages > 1 && (
         <Card className="border-border/50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-center gap-1">
+          <CardContent className="py-2 sm:py-4 px-2 sm:px-6">
+            <div className="flex flex-nowrap items-center justify-center gap-1 overflow-x-auto overflow-y-hidden min-w-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(1)}
                 disabled={currentPage === 1 || isRefreshing}
-                className="cursor-pointer"
+                className="cursor-pointer min-h-[40px] min-w-[40px] sm:min-h-9 sm:min-w-9 touch-manipulation shrink-0"
                 title="First page"
               >
-                <ChevronsLeft className="h-4 w-4" />
+                <ChevronsLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
 
               <Button
@@ -455,14 +458,14 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 size="sm"
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1 || isRefreshing}
-                className="cursor-pointer"
+                className="cursor-pointer min-h-[40px] min-w-[40px] sm:min-h-9 sm:min-w-0 touch-manipulation text-xs sm:text-sm shrink-0"
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1 shrink-0" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
 
               {/* Page Numbers */}
-              <div className="flex items-center gap-1 mx-2">
+              <div className="flex flex-nowrap items-center justify-center gap-1 mx-1 sm:mx-2 shrink-0">
                 {(() => {
                   const pages: (number | string)[] = []
                   const showPages = 5
@@ -509,7 +512,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                         size="sm"
                         onClick={() => handlePageChange(pageNum as number)}
                         disabled={isRefreshing}
-                        className={`cursor-pointer min-w-[40px] ${
+                        className={`cursor-pointer min-w-[36px] sm:min-w-[40px] min-h-[40px] sm:min-h-9 touch-manipulation text-xs sm:text-sm shrink-0 ${
                           isCurrentPage 
                             ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' 
                             : 'hover:bg-red-50 hover:border-red-300'
@@ -527,10 +530,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 size="sm"
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages || isRefreshing}
-                className="cursor-pointer"
+                className="cursor-pointer min-h-[40px] min-w-[40px] sm:min-h-9 sm:min-w-0 touch-manipulation text-xs sm:text-sm shrink-0"
               >
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1 shrink-0" />
+                <span className="hidden sm:inline">Next</span>
               </Button>
 
               <Button
@@ -538,10 +541,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                 size="sm"
                 onClick={() => handlePageChange(totalPages)}
                 disabled={currentPage === totalPages || isRefreshing}
-                className="cursor-pointer"
+                className="cursor-pointer min-h-[40px] min-w-[40px] sm:min-h-9 sm:min-w-9 touch-manipulation shrink-0"
                 title="Last page"
               >
-                <ChevronsRight className="h-4 w-4" />
+                <ChevronsRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </CardContent>

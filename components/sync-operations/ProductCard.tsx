@@ -19,12 +19,12 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
 
   return (
     <Card
-      className="border-border/50 hover:border-primary/50 transition-all cursor-pointer hover:shadow-lg"
+      className="border-border/50 hover:border-primary/50 transition-all cursor-pointer hover:shadow-lg min-w-0"
       onClick={onClick}
     >
-      <CardContent className="p-3">
+      <CardContent className="p-2.5 sm:p-3">
         {/* Image - Fixed aspect ratio */}
-        <div className="w-full aspect-[4/3] mb-3 bg-muted rounded-md overflow-hidden flex items-center justify-center">
+        <div className="w-full aspect-[4/3] mb-2 sm:mb-3 bg-muted rounded-md overflow-hidden flex items-center justify-center">
           {imageUrl ? (
             <img
               src={imageUrl}
@@ -43,7 +43,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         </div>
 
         {/* SKU/Shop Badge with Duplicate Badge */}
-        <div className="mb-2 flex items-center gap-2 flex-wrap">
+        <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
           {showShopBadge ? (
             <>
               <Badge variant="outline" className="text-xs">
@@ -68,7 +68,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         </div>
 
         {/* Product Title */}
-        <h3 className="font-semibold text-sm line-clamp-2 mb-1 min-h-[36px]">
+        <h3 className="font-semibold text-xs sm:text-sm line-clamp-2 mb-1 min-h-[32px] sm:min-h-[36px]">
           {product.product_title || 'Untitled Product'}
         </h3>
 
@@ -80,7 +80,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         )}
 
         {/* Variant Count & Price */}
-        <div className="flex items-center justify-between mb-3 text-xs">
+        <div className="flex items-center justify-between mb-2 sm:mb-3 text-xs">
           <div className="flex items-center gap-1.5">
             <Layers className="h-3 w-3 text-muted-foreground" />
             <span className="text-muted-foreground">
@@ -96,7 +96,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
 
         {/* Shop Status Indicators (like table view) - Hidden for NULL SKU mode */}
         {!hideShopIndicators && (
-          <div className="flex flex-wrap items-center justify-start gap-3 pt-2 border-t border-border/50">
+          <div className="flex flex-wrap items-center justify-start gap-2 sm:gap-3 pt-1.5 sm:pt-2 border-t border-border/50">
             {Object.entries(product.targets || {})
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([tld, targetInfo]) => {
