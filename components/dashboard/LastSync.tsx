@@ -48,33 +48,33 @@ export function LastSync() {
   }, [])
 
   return (
-    <div>
+    <div className="min-w-0">
       {/* Heading - always visible */}
-      <div className="mb-3">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <Clock className="h-5 w-5 text-muted-foreground" />
+      <div className="mb-2 sm:mb-3">
+        <h2 className="text-base sm:text-lg font-semibold flex items-center gap-2">
+          <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
           Last Sync Status
         </h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
           Most recent synchronization from Lightspeed API
         </p>
       </div>
 
       {loading ? (
         <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <CardContent className="flex items-center justify-center py-10 sm:py-12">
+            <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       ) : error ? (
         <Card className="border-destructive/50">
-          <CardContent className="flex items-center justify-center py-8 text-destructive text-base">
+          <CardContent className="flex items-center justify-center py-6 sm:py-8 text-destructive text-sm sm:text-base px-4">
             {error}
           </CardContent>
         </Card>
       ) : syncInfo.length === 0 ? (
         <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-8 text-muted-foreground text-base">
+          <CardContent className="flex items-center justify-center py-6 sm:py-8 text-muted-foreground text-sm sm:text-base px-4">
             No sync history available
           </CardContent>
         </Card>
@@ -83,13 +83,13 @@ export function LastSync() {
         <CardContent className="p-0">
           <div className="divide-y divide-border">
             {syncInfo.map((sync) => (
-              <div key={sync.shop_id} className="p-4 hover:bg-muted/30 transition-colors">
+              <div key={sync.shop_id} className="p-3 sm:p-4 hover:bg-muted/30 transition-colors">
                 {/* Shop Header */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Store className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <h3 className="font-semibold text-base">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Store className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sm sm:text-base truncate">
                         {(() => {
                           const href = toSafeExternalHref(sync.base_url)
                           if (!href) return sync.shop_name
@@ -106,28 +106,28 @@ export function LastSync() {
                           )
                         })()}
                       </h3>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs sm:text-sm text-muted-foreground">
                         {sync.role} · .{sync.tld}
                       </p>
                     </div>
                   </div>
                   {sync.status === 'success' ? (
-                    <div className="flex items-center gap-1.5 text-green-600">
-                      <CheckCircle2 className="h-5 w-5" />
-                      <span className="text-sm font-medium">Success</span>
+                    <div className="flex items-center gap-1.5 text-green-600 shrink-0">
+                      <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-xs sm:text-sm font-medium">Success</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-red-600">
-                      <XCircle className="h-5 w-5" />
-                      <span className="text-sm font-medium">Failed</span>
+                    <div className="flex items-center gap-1.5 text-red-600 shrink-0">
+                      <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-xs sm:text-sm font-medium">Failed</span>
                     </div>
                   )}
                 </div>
 
                 {/* Sync Details */}
-                <div className="space-y-3 text-sm">
+                <div className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                   {/* Started & Completed */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <span className="text-muted-foreground">Started:</span>
                       <p className="font-medium mt-0.5">{formatDateTime(sync.started_at)}</p>
@@ -139,10 +139,10 @@ export function LastSync() {
                   </div>
 
                   {/* Products & Variants side by side */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     <div>
                       <span className="text-muted-foreground">Products:</span>
-                      <p className="font-medium mt-0.5">
+                      <p className="font-medium mt-0.5 break-words">
                         <span className="text-blue-600">{sync.products_fetched.toLocaleString()}</span> fetched, 
                         <span className="text-green-600"> {sync.products_synced.toLocaleString()}</span> synced
                         {sync.products_deleted > 0 && (
@@ -152,7 +152,7 @@ export function LastSync() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">Variants:</span>
-                      <p className="font-medium mt-0.5">
+                      <p className="font-medium mt-0.5 break-words">
                         <span className="text-blue-600">{sync.variants_fetched.toLocaleString()}</span> fetched, 
                         <span className="text-green-600"> {sync.variants_synced.toLocaleString()}</span> synced
                         {sync.variants_deleted > 0 && (
@@ -174,8 +174,8 @@ export function LastSync() {
 
                 {/* Error message if any */}
                 {sync.error_message && (
-                  <div className="mt-3 pt-3 border-t border-red-500/20">
-                    <p className="text-sm text-red-600">
+                  <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-red-500/20">
+                    <p className="text-xs sm:text-sm text-red-600 break-words">
                       <span className="font-medium">Error:</span> {sync.error_message}
                     </p>
                   </div>
