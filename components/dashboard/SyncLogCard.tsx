@@ -5,7 +5,6 @@ import { formatDateTime, getShopRoleLabel } from '@/lib/utils'
 import { 
   CheckCircle2, 
   XCircle, 
-  Loader2, 
   Download, 
   Upload, 
   Trash2, 
@@ -25,8 +24,6 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
         return <CheckCircle2 className="h-5 w-5 text-green-600" />
       case 'error':
         return <XCircle className="h-5 w-5 text-red-600" />
-      case 'running':
-        return <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
       default:
         return <AlertCircle className="h-5 w-5 text-gray-400" />
     }
@@ -38,8 +35,6 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
         return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100">Success</Badge>
       case 'error':
         return <Badge variant="destructive">Error</Badge>
-      case 'running':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Running</Badge>
       default:
         return <Badge variant="outline">Unknown</Badge>
     }

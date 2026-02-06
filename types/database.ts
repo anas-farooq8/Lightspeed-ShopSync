@@ -60,31 +60,20 @@ export interface ProductSyncStatusWithPagination extends ProductSyncStatus {
  * Target shop sync status for a specific product
  * Each target shop will have this structure in the targets object
  * (dynamically loaded from database)
- * 
+ *
  * Matching logic:
- * - First checks default variants
- * - If not found, checks non-default variants (fallback)
- * - If still not found, status is 'not_exists'
+ * - Searches all variants (default + non-default) in one pass
+ * - match_type: default_variant > non_default_variant > no_match
  */
 export interface TargetShopStatus {
   shop_id: string
   shop_name: string
   shop_tld: string
-  
-  // Status based on matching
   status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'unknown'
-  
-  // Match type (priority: default > non_default > no_match)
   match_type: 'default_variant' | 'non_default_variant' | 'no_match'
-  
-  // Match counts
+  total_matches: number
   default_matches: number
   non_default_matches: number
-  total_matches: number
-  
-  // Arrays of matched product IDs separated by match type (for handling target duplicates)
-  default_product_ids: number[]      // Products matched by default variant
-  non_default_product_ids: number[]  // Products matched by non-default variant
 }
 
 /**
@@ -94,6 +83,7 @@ export interface TargetShopStatus {
  * One object per shop with product counts, SKU stats, and missing counts.
  */
 export interface DashboardKpi {
+  shop_id: string
   shop_name: string
   /** Shop base URL, e.g. "https://www.example.com" */
   base_url: string

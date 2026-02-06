@@ -1,3 +1,12 @@
+-- =====================================================
+-- INIT SCHEMA (Run first: 01-init-schema.sql)
+-- =====================================================
+--
+-- Creates: extensions, tables, indexes, RLS policies, triggers
+-- Tables: shops, shop_languages, products, product_content,
+--         variants, variant_content, sync_logs
+-- =====================================================
+
 -- =========================
 -- EXTENSIONS
 -- =========================
@@ -10,15 +19,12 @@ create extension if not exists "pgcrypto";
 create table shops (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  store_number integer not null,
-  base_url text not null,
+  store_number integer not null unique,
+  base_url text not null unique,
   role text not null check (role in ('source', 'target')),
   tld text not null,  -- nl / de / be
   created_at timestamp with time zone default now()
 );
-
-create unique index idx_shops_store_number on shops (store_number);
-CREATE INDEX IF NOT EXISTS idx_shops_role ON shops (role);
 
 -- RLS: Shops
 alter table shops enable row level security;
@@ -38,11 +44,9 @@ create table shop_languages (
   code text not null,              -- nl / fr / de
   is_active boolean not null,
   is_default boolean not null,
-  created_at timestamp with time zone default now()
+  created_at timestamp with time zone default now(),
+  unique (shop_id, code)
 );
-
-create unique index idx_shop_languages_unique
-  on shop_languages (shop_id, code);
 
 -- RLS: Shop Languages
 alter table shop_languages enable row level security;
@@ -71,9 +75,6 @@ create table products (
 
   primary key (shop_id, lightspeed_product_id)
 );
-
-create index idx_products_shop
-  on products (shop_id);
 
 -- For sorting by creation date (used in sync operations RPC)
 create index idx_products_created_at on products (ls_created_at DESC);
@@ -119,9 +120,6 @@ create table product_content (
   foreign key (shop_id, lightspeed_product_id) references products(shop_id, lightspeed_product_id) on delete cascade
 );
 
-create index idx_product_content_shop_lang
-  on product_content (shop_id, language_code);
-
 -- RLS: Product Content
 -- Note: All authenticated users are manually-created admins with full access
 alter table product_content enable row level security;
@@ -166,18 +164,15 @@ create table variants (
 -- PERFORMANCE-CRITICAL INDEXES FOR VARIANTS
 -- =====================================================
 -- These indexes are essential for view and RPC performance
-
 -- 1. Composite index for shop + default + SKU lookups
 create index idx_variants_shop_default_sku on variants (shop_id, is_default, sku);
--- 2. Default variant SKU index (for source product filtering)
-create index idx_variants_default_sku on variants (sku) where is_default;
--- 3. FUNCTIONAL INDEX on trimmed SKU (eliminates runtime TRIM())
+-- 2. FUNCTIONAL INDEX on trimmed SKU (eliminates runtime TRIM())
 -- This is critical for matching performance as it allows index-only scans
 create index idx_variants_trimmed_sku on variants (TRIM(sku));
--- 4. FUNCTIONAL INDEX on trimmed SKU for default variants only
+-- 3. FUNCTIONAL INDEX on trimmed SKU for default variants only
 -- Most important for CREATE/EDIT operations
 create index idx_variants_trimmed_sku_default on variants (TRIM(sku)) where is_default = true;
--- 5. Product-level index (for variant counting)
+-- 4. Product-level index (for variant counting)
 create index idx_variants_product on variants (shop_id, lightspeed_product_id);
 
 -- RLS: Variants
@@ -216,9 +211,6 @@ create table variant_content (
   primary key (shop_id, lightspeed_variant_id, language_code),
   foreign key (shop_id, lightspeed_variant_id) references variants(shop_id, lightspeed_variant_id) on delete cascade
 );
-
-create index idx_variant_content_shop_lang
-  on variant_content (shop_id, language_code);
 
 -- RLS: Variant Content
 -- Note: All authenticated users are manually-created admins with full access

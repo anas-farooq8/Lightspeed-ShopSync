@@ -20,9 +20,9 @@ export interface TargetShopInfo {
   shop_tld: string
   status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'unknown'
   match_type: 'default_variant' | 'non_default_variant' | 'no_match'
+  total_matches: number
   default_matches: number
   non_default_matches: number
-  total_matches: number
 }
 
 export interface SyncProduct {

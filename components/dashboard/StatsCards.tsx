@@ -63,7 +63,7 @@ export function StatsCards() {
       <div className="grid gap-3 w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {kpis.map((kpi) => (
           <Card
-            key={`${kpi.shop_name}-${kpi.tld}`}
+            key={kpi.shop_id}
             className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md"
           >
             <CardHeader className="py-2 px-4">
