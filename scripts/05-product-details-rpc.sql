@@ -282,7 +282,7 @@ GRANT EXECUTE ON FUNCTION get_product_details_by_sku(TEXT, BIGINT) TO authentica
 -- Design:
 --   - Flat JSONB structure (not source/targets format)
 --   - Single product, single store
---   - When product exists in multiple shops, prefers source shop
+--   - lightspeed_product_id is unique across all shops
 --   - LATERAL join for variants (single scan)
 --
 -- Parameters:
@@ -317,16 +317,7 @@ BEGIN
 
     -- ========================================
     -- STEP 2: Build complete product data
-    -- When product exists in multiple shops, prefer source shop
     -- ========================================
-    WITH best_match AS (
-        SELECT p.shop_id, p.lightspeed_product_id
-        FROM products p
-        INNER JOIN shops s ON s.id = p.shop_id
-        WHERE p.lightspeed_product_id = p_product_id
-        ORDER BY CASE WHEN s.role = 'source' THEN 0 ELSE 1 END
-        LIMIT 1
-    )
     SELECT jsonb_build_object(
         'product_id', p.lightspeed_product_id,
         'shop_id', s.id,
@@ -364,7 +355,6 @@ BEGIN
     ) INTO v_result
     FROM products p
     INNER JOIN shops s ON s.id = p.shop_id
-    INNER JOIN best_match bm ON bm.shop_id = p.shop_id AND bm.lightspeed_product_id = p.lightspeed_product_id
     LEFT JOIN LATERAL (
         SELECT
             MAX(v.lightspeed_variant_id) FILTER (WHERE v.is_default = true) AS default_variant_id,
