@@ -43,9 +43,9 @@ interface SyncLogsResponse {
 
 function SyncLogsPageHeader() {
   return (
-    <div className="mb-4">
-      <h1 className="text-2xl font-bold mb-1">Sync Logs</h1>
-      <p className="text-sm text-muted-foreground">
+    <div className="mb-3 sm:mb-4">
+      <h1 className="text-xl sm:text-2xl font-bold mb-1">Sync Logs</h1>
+      <p className="text-xs sm:text-sm text-muted-foreground">
         Monitor synchronization operations with Lightspeed API
       </p>
     </div>
@@ -177,29 +177,28 @@ export default function SyncLogsPage() {
   }, [totalPages, currentPage])
 
   return (
-    <div className="w-full h-full p-6">
-      <div className="max-w-full mx-auto">
+    <div className="w-full h-full p-4 sm:p-5 md:p-6">
+      <div className="max-w-full mx-auto min-w-0">
         {/* Global Loading Shimmer */}
         <LoadingShimmer show={isFilterLoading} position="top" />
         
         <SyncLogsPageHeader />
 
         {loading && syncLogs.length === 0 ? (
-          <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 200px)' }}>
-            <div className="text-center">
-              <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Loading sync logs...</p>
+          <div className="flex items-center justify-center min-h-[calc(100vh-220px)] sm:min-h-[calc(100vh-200px)]">
+            <div className="text-center px-4">
+              <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-spin mx-auto mb-2" />
+              <p className="text-xs sm:text-sm text-muted-foreground">Loading sync logs...</p>
             </div>
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-
+            <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
               <Select value={shopFilter} onValueChange={handleShopFilterChange} disabled={isFilterLoading}>
-                <SelectTrigger className="w-[180px] h-10 cursor-pointer">
-                  <SelectValue placeholder="All Shops" />
-                </SelectTrigger>
+                <SelectTrigger className="flex-1 min-w-0 sm:flex-initial sm:w-[180px] h-9 sm:h-10 cursor-pointer">
+                    <SelectValue placeholder="All Shops" />
+                  </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all" className="cursor-pointer">All Shops</SelectItem>
                   {shops.map(shop => (
@@ -209,9 +208,8 @@ export default function SyncLogsPage() {
                   ))}
                 </SelectContent>
               </Select>
-
               <Select value={statusFilter} onValueChange={handleStatusFilterChange} disabled={isFilterLoading}>
-                <SelectTrigger className="w-[180px] h-10 cursor-pointer">
+                <SelectTrigger className="flex-1 min-w-0 sm:flex-initial sm:w-[180px] h-9 sm:h-10 cursor-pointer">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -224,18 +222,18 @@ export default function SyncLogsPage() {
 
         {/* Error Alert */}
         {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" className="mb-3 sm:mb-4 text-xs sm:text-sm">
+            <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
           </Alert>
         )}
 
         {!error && hasNoData && !hasActiveFilters && (
-          <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
-            <div className="text-center">
-              <RefreshCw className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-              <h3 className="text-lg font-semibold mb-1">No Sync Operations Yet</h3>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex items-center justify-center min-h-[200px] sm:min-h-[calc(100vh-300px)]">
+            <div className="text-center px-4">
+              <RefreshCw className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-2 sm:mb-3 opacity-50" />
+              <h3 className="text-base sm:text-lg font-semibold mb-1">No Sync Operations Yet</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Sync operations will appear here once the Python sync script has been run.
               </p>
             </div>
@@ -243,11 +241,11 @@ export default function SyncLogsPage() {
         )}
 
         {!error && hasNoData && hasActiveFilters && (
-          <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 300px)' }}>
-            <div className="text-center">
-              <Filter className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-              <h3 className="text-lg font-semibold mb-1">No Results</h3>
-              <p className="text-sm text-muted-foreground">
+          <div className="flex items-center justify-center min-h-[200px] sm:min-h-[calc(100vh-300px)]">
+            <div className="text-center px-4">
+              <Filter className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-2 sm:mb-3 opacity-50" />
+              <h3 className="text-base sm:text-lg font-semibold mb-1">No Results</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 Try adjusting your filters to see more results.
               </p>
             </div>
@@ -256,8 +254,8 @@ export default function SyncLogsPage() {
 
         {/* Sync Logs Grouped by Date */}
         {!error && syncLogs.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs sm:text-sm text-muted-foreground">
               <span>
                 Showing page {currentPage} of {totalPages}
               </span>
@@ -266,47 +264,47 @@ export default function SyncLogsPage() {
               )}
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {groupedByDate.map((group) => {
                 const isExpanded = expandedDates.has(group.date)
                 const displayLogs = group.logs.slice(0, group.displayCount)
                 const hasMore = group.logs.length > group.displayCount
 
                 return (
-                  <div key={group.date} className="border rounded-lg overflow-hidden">
+                  <div key={group.date} className="border rounded-lg overflow-hidden min-w-0">
                     {/* Date Header */}
                     <button
                       onClick={() => toggleDate(group.date)}
-                      className="w-full px-4 py-3 bg-muted/50 hover:bg-muted/70 transition-colors flex items-center justify-between cursor-pointer group"
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-muted/50 hover:bg-muted/70 transition-colors flex items-center justify-between gap-2 cursor-pointer group min-h-[44px] touch-manipulation"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                         {isExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
                         )}
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-semibold text-base">{group.date}</span>
+                        <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+                        <span className="font-semibold text-sm sm:text-base truncate">{group.date}</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-xs sm:text-sm text-muted-foreground shrink-0">
                         {group.logs.length} sync{group.logs.length !== 1 ? 's' : ''}
                       </span>
                     </button>
 
                     {/* Logs List */}
                     {isExpanded && (
-                      <div className="p-4 space-y-3">
+                      <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
                         {displayLogs.map((log) => (
                           <SyncLogCard key={log.id} log={log} />
                         ))}
                         
                         {hasMore && (
-                          <div className="flex justify-center pt-2">
+                          <div className="flex justify-center pt-1 sm:pt-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => showMoreForDate(group.date)}
-                              className="cursor-pointer"
+                              className="cursor-pointer text-xs sm:text-sm min-h-[36px] sm:min-h-0 touch-manipulation"
                             >
                               Show More ({group.logs.length - group.displayCount} remaining)
                             </Button>
@@ -321,18 +319,18 @@ export default function SyncLogsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-4">
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-3 sm:pt-4">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1 || loading}
-                  className="cursor-pointer"
+                  className="cursor-pointer min-h-[36px] sm:min-h-0 touch-manipulation"
                 >
                   Previous
                 </Button>
                 
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center justify-center gap-1">
                   {paginationPages.map((pageNum) => (
                     <Button
                       key={pageNum}
@@ -340,7 +338,7 @@ export default function SyncLogsPage() {
                       size="sm"
                       onClick={() => handlePageChange(pageNum)}
                       disabled={loading}
-                      className="cursor-pointer w-9"
+                      className="cursor-pointer w-8 sm:w-9 min-h-[36px] sm:min-h-0 touch-manipulation"
                     >
                       {pageNum}
                     </Button>
@@ -352,7 +350,7 @@ export default function SyncLogsPage() {
                   size="sm"
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages || loading}
-                  className="cursor-pointer"
+                  className="cursor-pointer min-h-[36px] sm:min-h-0 touch-manipulation"
                 >
                   Next
                 </Button>

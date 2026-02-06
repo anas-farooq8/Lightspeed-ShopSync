@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Clock, CheckCircle2, XCircle, Store } from 'lucide-react'
+import { Clock, CheckCircle2, XCircle, Store } from 'lucide-react'
 import { sortShopsSourceFirstThenByTld, formatDateTime, toSafeExternalHref } from '@/lib/utils'
 
 interface LastSyncInfo {
@@ -61,9 +61,36 @@ export function LastSync() {
       </div>
 
       {loading ? (
-        <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-10 sm:py-12">
-            <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-muted-foreground" />
+        <Card className="border-border/50 overflow-hidden">
+          <CardContent className="p-0">
+            <div className="divide-y divide-border">
+              {[1, 2].map((i) => (
+                <div key={i} className="p-3 sm:p-4 animate-pulse">
+                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                    <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted shrink-0" />
+                    <div className="flex-1 space-y-1">
+                      <div className="h-4 bg-muted rounded w-1/3" />
+                      <div className="h-3 bg-muted rounded w-1/4" />
+                    </div>
+                    <div className="h-4 bg-muted rounded w-16" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <div className="space-y-1">
+                      <div className="h-3 bg-muted rounded w-16" />
+                      <div className="h-4 bg-muted rounded w-full" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="h-3 bg-muted rounded w-20" />
+                      <div className="h-4 bg-muted rounded w-full" />
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <div className="h-3 bg-muted rounded w-24" />
+                    <div className="h-4 bg-muted rounded w-32" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       ) : error ? (

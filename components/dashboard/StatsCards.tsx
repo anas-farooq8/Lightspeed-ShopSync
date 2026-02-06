@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Store, Activity } from 'lucide-react'
+import { Store, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { sortShopsSourceFirstThenByTld, toSafeExternalHref } from '@/lib/utils'
 import type { DashboardKpi } from '@/types/database'
@@ -43,11 +43,40 @@ export function StatsCards() {
       </div>
 
       {loading ? (
-        <Card className="border-border/50">
-          <CardContent className="flex items-center justify-center py-12 sm:py-16">
-            <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
+        <div
+          className={cn(
+            'grid gap-2 sm:gap-3 w-full',
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          )}
+        >
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-border/50 animate-pulse">
+              <CardHeader className="py-2 px-3 sm:px-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted" />
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-1 pb-2 px-3 sm:px-4">
+                <div className="mb-1.5 sm:mb-2">
+                  <div className="h-6 sm:h-8 bg-muted rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-24 mt-1" />
+                </div>
+                <div className="space-y-1.5">
+                  {[1, 2, 3, 4].map((j) => (
+                    <div key={j} className="flex justify-between">
+                      <div className="h-3 bg-muted rounded w-1/2" />
+                      <div className="h-3 bg-muted rounded w-12" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : error ? (
         <Card className="border-destructive/50">
           <CardContent className="flex items-center justify-center py-8 sm:py-12 text-destructive text-sm sm:text-base px-4">
