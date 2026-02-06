@@ -72,16 +72,26 @@ export default function SyncOperationsPage() {
           </p>
         </div>
 
-        {/* Tabs - Remove conditional rendering to prevent unmount/remount */}
+        {/* Tabs - Segmented control style (matches grid/table toggle) */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full max-w-[600px] grid-cols-3 mb-6">
-            <TabsTrigger value="create" className="cursor-pointer">
+          <TabsList className="flex w-full max-w-[600px] gap-1 border border-border rounded-md p-1.5 mb-6 bg-muted/50">
+            <TabsTrigger
+              value="create"
+              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
+            >
               Create
             </TabsTrigger>
-            <TabsTrigger value="edit" className="cursor-pointer" disabled>
+            <TabsTrigger
+              value="edit"
+              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:text-muted-foreground/60 disabled:opacity-50"
+              disabled
+            >
               Edit
             </TabsTrigger>
-            <TabsTrigger value="null_sku" className="cursor-pointer">
+            <TabsTrigger
+              value="null_sku"
+              className="flex-1 cursor-pointer rounded-md px-4 py-3.5 text-sm font-medium transition-colors data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
+            >
               Null SKU
             </TabsTrigger>
           </TabsList>
