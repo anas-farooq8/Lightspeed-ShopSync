@@ -6,7 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogClose,
+  DialogTitle,
 } from '@/components/ui/dialog'
+import * as VisuallyHidden from '@radix-ui/react-visually-hidden'
 import { cn } from '@/lib/utils'
 
 export interface ProductImage {
@@ -123,6 +125,9 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
 
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="max-w-4xl p-0 overflow-hidden" showCloseButton={false}>
+          <VisuallyHidden.Root>
+            <DialogTitle>{previewImage?.title || 'Image preview'}</DialogTitle>
+          </VisuallyHidden.Root>
           <DialogClose className="absolute top-3 right-3 z-50 rounded-md p-2 bg-black/50 text-white hover:bg-black/70 focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer transition-colors">
             <X className="h-5 w-5" />
             <span className="sr-only">Close</span>

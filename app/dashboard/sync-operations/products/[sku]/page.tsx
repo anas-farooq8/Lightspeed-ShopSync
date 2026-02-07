@@ -556,7 +556,7 @@ function ProductPanel({
       <CardContent className="space-y-3 sm:space-y-4 pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
         {/* Photo + metadata - side by side on all screens */}
         <div className="flex flex-row gap-3 sm:gap-5 min-w-0">
-          <div className="w-20 h-20 sm:w-56 sm:h-56 md:w-72 md:h-72 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
             {imageUrl ? (
               <img src={imageUrl} alt={product.content_by_language[defaultLanguage]?.title || 'Product'} className="w-full h-full object-cover" loading="lazy" />
             ) : (
