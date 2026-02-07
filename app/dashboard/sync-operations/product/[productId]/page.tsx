@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Loader2, Package, ExternalLink } from 'lucide-react'
+import { ProductImagesGrid } from '@/components/sync-operations/ProductImagesGrid'
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
@@ -54,6 +55,7 @@ interface ProductData {
     thumb?: string
     title?: string
   } | null
+  images_link?: string | null
   ls_created_at: string
   default_variant_id: number
   variant_count: number
@@ -196,7 +198,7 @@ function ProductPanel({ product }: ProductPanelProps) {
       <CardContent className="p-0">
         {/* Hero row: image + meta - stack on mobile */}
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 sm:p-6 md:p-8 border-b border-border/50">
-          <div className="w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50 self-start sm:self-auto">
+          <div className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 shrink-0 rounded-xl overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50 self-start sm:self-auto">
             {imageUrl ? (
               <img
                 src={imageUrl}
@@ -393,6 +395,13 @@ function ProductPanel({ product }: ProductPanelProps) {
                   )
                 })}
             </div>
+            {/* Product Images - below variants in right column */}
+            {product.images_link && (
+              <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
+                <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
+                <ProductImagesGrid imagesLink={product.images_link} shopTld={product.shop_tld} />
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

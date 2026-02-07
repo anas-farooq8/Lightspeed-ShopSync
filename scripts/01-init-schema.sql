@@ -66,6 +66,7 @@ create table products (
 
   visibility text,
   image jsonb, -- default variant image {src, thumb, title}
+  images_link text, -- link to product images API (images.resource.link)
 
   -- Lightspeed timestamps
   ls_created_at timestamp with time zone not null,

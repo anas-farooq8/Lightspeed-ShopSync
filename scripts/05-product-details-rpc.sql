@@ -112,6 +112,7 @@ BEGIN
             v.is_default AS matched_by_default_variant,
             p.visibility,
             p.image AS product_image,
+            p.images_link,
             p.ls_created_at
         FROM all_shops s
         INNER JOIN variants v ON v.shop_id = s.id 
@@ -184,6 +185,7 @@ BEGIN
             mp.matched_by_default_variant,
             mp.visibility,
             mp.product_image,
+            mp.images_link,
             mp.ls_created_at,
             COALESCE(pc.content_by_language, '{}'::jsonb) AS content_by_language,
             COALESCE(pv.variants, '[]'::jsonb) AS variants,
@@ -209,6 +211,7 @@ BEGIN
                 'sku', v_sku,
                 'visibility', visibility,
                 'product_image', product_image,
+                'images_link', images_link,
                 'ls_created_at', ls_created_at,
                 'content_by_language', content_by_language,
                 'variants', variants,
@@ -247,6 +250,7 @@ BEGIN
                         'matched_by_default_variant', matched_by_default_variant,
                         'visibility', visibility,
                         'product_image', product_image,
+                        'images_link', images_link,
                         'ls_created_at', ls_created_at,
                         'content_by_language', content_by_language,
                         'variants', variants,
@@ -327,6 +331,7 @@ BEGIN
         'base_url', s.base_url,
         'visibility', p.visibility,
         'product_image', p.image,
+        'images_link', p.images_link,
         'ls_created_at', p.ls_created_at,
         'default_variant_id', v_agg.default_variant_id,
         'variant_count', COALESCE(v_agg.variant_count, 0),

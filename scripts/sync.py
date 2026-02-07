@@ -35,6 +35,17 @@ def normalize_image(img):
     return None
 
 
+def extract_images_link(images):
+    """Extract images API link from images field. Returns link string or None."""
+    if not images or not isinstance(images, dict):
+        return None
+    resource = images.get("resource")
+    if not resource or not isinstance(resource, dict):
+        return None
+    link = resource.get("link")
+    return link if isinstance(link, str) and link.strip() else None
+
+
 def fetch_products(lang, api_key, api_secret):
     products, page = [], 1
     url = f"https://api.webshopapp.com/{lang}/products.json"
@@ -216,6 +227,7 @@ def sync_shop(shop):
                 "lightspeed_product_id": p["id"],
                 "visibility": p.get("visibility"),
                 "image": p.get("image"),
+                "images_link": extract_images_link(p.get("images")),
                 "ls_created_at": p.get("createdAt"),
                 "ls_updated_at": p.get("updatedAt"),
             })
