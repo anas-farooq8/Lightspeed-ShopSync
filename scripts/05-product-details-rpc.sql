@@ -150,11 +150,12 @@ BEGIN
                     'variant_id', v.lightspeed_variant_id,
                     'sku', v.sku,
                     'is_default', v.is_default,
+                    'sort_order', v.sort_order,
                     'price_excl', v.price_excl,
                     'image', v.image,
                     'content_by_language', COALESCE(vc_agg.content_by_language, '{}'::jsonb)
                 )
-                ORDER BY v.is_default DESC, v.lightspeed_variant_id
+                ORDER BY v.sort_order ASC NULLS LAST, v.is_default DESC NULLS LAST, v.lightspeed_variant_id
             ) AS variants
         FROM matched_products mp
         INNER JOIN variants v ON v.shop_id = mp.shop_id 
@@ -364,6 +365,7 @@ BEGIN
                     'variant_id', v.lightspeed_variant_id,
                     'sku', v.sku,
                     'is_default', v.is_default,
+                    'sort_order', v.sort_order,
                     'price_excl', v.price_excl,
                     'image', v.image,
                     'content', (
@@ -372,7 +374,7 @@ BEGIN
                         WHERE vc.shop_id = v.shop_id AND vc.lightspeed_variant_id = v.lightspeed_variant_id
                     )
                 )
-                ORDER BY v.is_default DESC, v.lightspeed_variant_id
+                ORDER BY v.sort_order ASC NULLS LAST, v.is_default DESC NULLS LAST, v.lightspeed_variant_id
             ), '[]'::jsonb) AS variants
         FROM variants v
         WHERE v.shop_id = p.shop_id AND v.lightspeed_product_id = p.lightspeed_product_id

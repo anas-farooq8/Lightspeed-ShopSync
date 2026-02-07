@@ -151,6 +151,7 @@ create table variants (
 
   sku text not null,
   is_default boolean,
+  sort_order integer,  -- display order from Lightspeed API
   price_excl numeric,
   image jsonb, -- {src, thumb, title}
 

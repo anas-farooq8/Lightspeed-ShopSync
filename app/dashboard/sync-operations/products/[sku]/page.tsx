@@ -33,6 +33,7 @@ interface Variant {
   variant_id: number
   sku: string
   is_default: boolean
+  sort_order?: number
   price_excl: number
   image: {
     src?: string
@@ -686,9 +687,12 @@ function ProductPanel({
         <div className="border-t border-border/50 pt-3 sm:pt-4">
           <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Variants ({product.variants.length})</h4>
           <div className="space-y-2 sm:space-y-3">
-            {/* Sort: Default first, then by variant_id */}
+            {/* Sort by sort_order from Lightspeed (default first as fallback) */}
             {[...product.variants]
               .sort((a, b) => {
+                const sa = a.sort_order ?? 999999
+                const sb = b.sort_order ?? 999999
+                if (sa !== sb) return sa - sb
                 if (a.is_default && !b.is_default) return -1
                 if (!a.is_default && b.is_default) return 1
                 return a.variant_id - b.variant_id

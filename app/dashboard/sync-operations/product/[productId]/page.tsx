@@ -32,6 +32,7 @@ interface Variant {
   variant_id: number
   sku: string | null
   is_default: boolean
+  sort_order?: number
   price_excl: number
   image: {
     src?: string
@@ -350,6 +351,9 @@ function ProductPanel({ product }: ProductPanelProps) {
             <div className="space-y-2 sm:space-y-3">
               {[...(product.variants || [])]
                 .sort((a, b) => {
+                  const sa = a.sort_order ?? 999999
+                  const sb = b.sort_order ?? 999999
+                  if (sa !== sb) return sa - sb
                   if (a.is_default && !b.is_default) return -1
                   if (!a.is_default && b.is_default) return 1
                   return a.variant_id - b.variant_id

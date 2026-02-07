@@ -18,8 +18,8 @@ LIMIT = 250
 API_TIMEOUT = 30
 MAX_RETRIES = 3
 
-PRODUCT_FIELDS = "id,visibility,url,title,fulltitle,description,content,image,createdAt,updatedAt"
-VARIANT_FIELDS = "id,isDefault,sku,priceExcl,title,image,product"
+PRODUCT_FIELDS = "id,visibility,url,title,fulltitle,description,content,image,images,createdAt,updatedAt"
+VARIANT_FIELDS = "id,isDefault,sortOrder,sku,priceExcl,title,image,product"
 
 # =====================================================
 # API HELPERS
@@ -238,6 +238,7 @@ def sync_shop(shop):
                     "lightspeed_variant_id": v["id"],
                     "sku": v["sku"],
                     "is_default": v.get("isDefault"),
+                    "sort_order": v.get("sortOrder"),
                     "price_excl": v.get("priceExcl"),
                     "image": v.get("image"),
                 })
