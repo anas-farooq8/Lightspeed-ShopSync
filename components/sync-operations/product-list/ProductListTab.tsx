@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
-import { ProductCard } from '@/components/sync-operations/ProductCard'
-import { ProductListTable } from '@/components/sync-operations/ProductListTable'
-import { TargetShopSelectionDialog } from '@/components/sync-operations/TargetShopSelectionDialog'
+import { ProductCard } from '@/components/sync-operations/product-list/ProductCard'
+import { ProductListTable } from '@/components/sync-operations/product-list/ProductListTable'
+import { TargetShopSelectionDialog } from '@/components/sync-operations/dialogs/TargetShopSelectionDialog'
 import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 

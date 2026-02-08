@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ProductListTab } from '@/components/sync-operations/ProductListTab'
+import { ProductListTab } from '@/components/sync-operations/product-list/ProductListTab'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface Shop {
