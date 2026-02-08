@@ -12,7 +12,7 @@ import { ProductImagesGrid } from '@/components/sync-operations/ProductImagesGri
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
-import { clearProductImagesCache } from '@/lib/product-images-cache'
+import { clearProductImagesCache } from '@/lib/cache/product-images-cache'
 
 interface Language {
   code: string
@@ -78,7 +78,7 @@ export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const sku = params.sku as string
+  const sku = decodeURIComponent((params.sku as string) || '')
 
   const [details, setDetails] = useState<ProductDetails | null>(null)
   const [loading, setLoading] = useState(true)

@@ -100,7 +100,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
             {Object.entries(product.targets || {})
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([tld, targetInfo]) => {
-                const exists = targetInfo.status === 'exists_single' || targetInfo.status === 'exists_multiple'
+                const exists = targetInfo.status === 'exists'
                 const totalMatches = targetInfo.total_matches || 0
                 return (
                   <div key={tld} className="flex flex-col items-center gap-1">

@@ -20,6 +20,7 @@
 --   - COUNT only (no ARRAY_AGG of product IDs - not needed for list view)
 --   - GROUP BY for source_sku_stats (cleaner than window + DISTINCT)
 --   - Uses idx_variants_trimmed_sku for SKU lookups
+--   - Uses idx_shops_role for source_shop / target_shops CTEs (01-init-schema)
 --
 -- Example row (targets excerpt):
 --   "be": {
@@ -33,7 +34,7 @@
 --     "shop_tld": "be"
 --   },
 --   "de": {
---     "status": "exists_single",
+--     "status": "exists",
 --     "match_type": "default_variant",
 --     "total_matches": 1,
 --     "default_matches": 1,
@@ -83,10 +84,10 @@ source_products AS (
 ),
 
 source_variant_counts AS (
-    SELECT shop_id, lightspeed_product_id, COUNT(*) AS variant_count
-    FROM variants
-    WHERE shop_id = (SELECT id FROM source_shop LIMIT 1)
-    GROUP BY shop_id, lightspeed_product_id
+    SELECT v.shop_id, v.lightspeed_product_id, COUNT(*) AS variant_count
+    FROM variants v
+    INNER JOIN source_shop ss ON v.shop_id = ss.id
+    GROUP BY v.shop_id, v.lightspeed_product_id
 ),
 
 source_sku_stats AS (
@@ -179,8 +180,7 @@ SELECT
         jsonb_build_object(
             'status', CASE
                 WHEN stm.match_type = 'no_match' THEN 'not_exists'
-                WHEN stm.total_matches = 1 THEN 'exists_single'
-                WHEN stm.total_matches > 1 THEN 'exists_multiple'
+                WHEN stm.total_matches > 0 THEN 'exists'
                 ELSE 'unknown'
             END,
             'match_type', stm.match_type,

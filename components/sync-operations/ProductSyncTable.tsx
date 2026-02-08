@@ -187,7 +187,7 @@ export function ProductSyncTable({
                     {targetShops.map(shop => {
                       const targetInfo = product.targets?.[shop.tld]
                       const status = targetInfo?.status || 'not_exists'
-                      const exists = status === 'exists_single' || status === 'exists_multiple'
+                      const exists = status === 'exists'
                       
                       return (
                         <TableCell key={shop.tld} className="text-center">

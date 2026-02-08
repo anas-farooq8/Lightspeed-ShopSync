@@ -11,7 +11,7 @@ import { ProductImagesGrid } from '@/components/sync-operations/ProductImagesGri
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
-import { clearProductImagesCache } from '@/lib/product-images-cache'
+import { clearProductImagesCache } from '@/lib/cache/product-images-cache'
 
 interface Language {
   code: string

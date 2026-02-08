@@ -2,7 +2,7 @@
 
 import { useEffect, useState, memo } from 'react'
 import { Star, Package, X } from 'lucide-react'
-import { getCachedImages, setCachedImages, type ProductImage as CachedProductImage } from '@/lib/product-images-cache'
+import { getCachedImages, setCachedImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
 import {
   Dialog,
   DialogContent,

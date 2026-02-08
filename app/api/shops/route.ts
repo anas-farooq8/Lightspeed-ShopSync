@@ -20,7 +20,7 @@ export async function GET() {
       )
     }
 
-    // Transform to match the expected format
+    // Transform to match expected format (shop_id, shop_name for sync operations)
     const transformedShops = (shops || []).map(shop => ({
       shop_id: shop.id,
       shop_name: shop.name,

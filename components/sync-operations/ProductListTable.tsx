@@ -239,7 +239,7 @@ export function ProductListTable({
         {!hideShopIndicators && targetShops.map(shop => {
           const targetInfo = product.targets?.[shop.tld]
           const status = targetInfo?.status || 'not_exists'
-          const exists = status === 'exists_single' || status === 'exists_multiple'
+          const exists = status === 'exists'
           const totalMatches = targetInfo?.total_matches || 0
           
           return (

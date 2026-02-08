@@ -26,6 +26,7 @@ create table shops (
   created_at timestamp with time zone default now()
 );
 
+CREATE INDEX IF NOT EXISTS idx_shops_role ON shops(role);
 -- RLS: Shops
 alter table shops enable row level security;
 

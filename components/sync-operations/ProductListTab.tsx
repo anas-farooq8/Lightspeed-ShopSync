@@ -18,7 +18,7 @@ export interface TargetShopInfo {
   shop_id: string
   shop_name: string
   shop_tld: string
-  status: 'not_exists' | 'exists_single' | 'exists_multiple' | 'unknown'
+  status: 'not_exists' | 'exists' | 'unknown'
   match_type: 'default_variant' | 'non_default_variant' | 'no_match'
   total_matches: number
   default_matches: number
@@ -229,7 +229,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       router.push(`/dashboard/sync-operations/product/${product.source_product_id}?${params.toString()}`)
     } else {
       params.set('productId', product.source_product_id.toString())
-      router.push(`/dashboard/sync-operations/products/${product.default_sku}?${params.toString()}`)
+      router.push(`/dashboard/sync-operations/products/${encodeURIComponent(product.default_sku)}?${params.toString()}`)
     }
   }
 

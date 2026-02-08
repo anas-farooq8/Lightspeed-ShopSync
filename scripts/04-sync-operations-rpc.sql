@@ -155,10 +155,10 @@ BEGIN
             SELECT 1 FROM jsonb_each(pss.targets) AS t(k, v)
             WHERE t.v->>'status' = 'not_exists'
           ))
-          OR (p_missing_in != 'all' AND p_missing_in IS NOT NULL AND pss.targets->p_missing_in->>'status' IN ('exists_single', 'exists_multiple'))
+          OR (p_missing_in != 'all' AND p_missing_in IS NOT NULL AND pss.targets->p_missing_in->>'status' = 'exists')
           OR (p_missing_in IS NULL AND EXISTS (
             SELECT 1 FROM jsonb_each(pss.targets) AS t(k, v)
-            WHERE t.v->>'status' IN ('exists_single', 'exists_multiple')
+            WHERE t.v->>'status' = 'exists'
           ))
         ))
       )
@@ -373,7 +373,7 @@ BEGIN
   variant_counts AS (
     SELECT v.shop_id, v.lightspeed_product_id, COUNT(*) AS variant_count
     FROM variants v
-    WHERE (v.shop_id, v.lightspeed_product_id) IN (SELECT fp.shop_id, fp.product_id FROM filtered_products fp)
+    INNER JOIN filtered_products fp ON fp.shop_id = v.shop_id AND fp.product_id = v.lightspeed_product_id
     GROUP BY v.shop_id, v.lightspeed_product_id
   ),
 
@@ -467,7 +467,7 @@ GRANT EXECUTE ON FUNCTION get_null_sku_products(TEXT, TEXT, TEXT, TEXT, INTEGER,
 --       "shop_tld": "be"
 --     },
 --     "de": {
---       "status": "exists_single",
+--       "status": "exists",
 --       "match_type": "default_variant",
 --       "total_matches": 1,
 --       "default_matches": 1,
