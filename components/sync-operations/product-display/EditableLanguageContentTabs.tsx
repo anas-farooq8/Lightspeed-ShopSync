@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,6 +27,22 @@ interface ProductContent {
   content?: string
 }
 
+const QL_TOOLBAR_TITLES: Record<string, string> = {
+  'ql-bold': 'Bold',
+  'ql-italic': 'Italic',
+  'ql-underline': 'Underline',
+  'ql-strike': 'Strikethrough',
+  'ql-list': 'List',
+  'ql-ordered': 'Ordered list',
+  'ql-bullet': 'Bullet list',
+  'ql-color': 'Text color',
+  'ql-background': 'Highlight',
+  'ql-link': 'Insert link',
+  'ql-image': 'Insert image',
+  'ql-clean': 'Clear formatting',
+  'ql-header': 'Heading',
+}
+
 interface EditableLanguageContentTabsProps {
   languages: Language[]
   content: Record<string, ProductContent>
@@ -44,51 +60,38 @@ export function EditableLanguageContentTabs({
   onResetField,
   onResetLanguage
 }: EditableLanguageContentTabsProps) {
-  const sortedLanguages = [...languages].sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1
-    if (!a.is_default && b.is_default) return 1
-    return a.code.localeCompare(b.code)
-  })
-
+  const sortedLanguages = useMemo(
+    () => [...languages].sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      return a.code.localeCompare(b.code)
+    }),
+    [languages]
+  )
   const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const contentWrapperRef = useRef<HTMLDivElement>(null)
 
-  const toolbarTitles: Record<string, string> = {
-    'ql-bold': 'Bold',
-    'ql-italic': 'Italic',
-    'ql-underline': 'Underline',
-    'ql-strike': 'Strikethrough',
-    'ql-list': 'List',
-    'ql-ordered': 'Ordered list',
-    'ql-bullet': 'Bullet list',
-    'ql-color': 'Text color',
-    'ql-background': 'Highlight',
-    'ql-link': 'Insert link',
-    'ql-image': 'Insert image',
-    'ql-clean': 'Clear formatting',
-    'ql-header': 'Heading',
-  }
-
   useEffect(() => {
-    const el = contentWrapperRef.current
-    if (!el) return
-    el.querySelectorAll('.ql-toolbar').forEach((toolbar) => {
-      toolbar.querySelectorAll('button, .ql-picker-label, .ql-picker-item').forEach((btn) => {
-      const el = btn as HTMLElement
-      if (el.hasAttribute('title')) return
-      for (const [cls, title] of Object.entries(toolbarTitles)) {
-        if (el.classList.contains(cls) || el.closest(`.${cls}`)) {
-          el.setAttribute('title', title)
-          break
-        }
-      }
-      if (!el.getAttribute('title')) {
-        if (el.classList.contains('ql-picker-label')) el.setAttribute('title', (el.parentElement?.classList.contains('ql-header') ? 'Heading' : el.textContent?.trim() || 'Options'))
-        else if (el.classList.contains('ql-picker-item')) el.setAttribute('title', el.textContent?.trim() || '')
-      }
+    const id = setTimeout(() => {
+      const el = contentWrapperRef.current
+      if (!el) return
+      el.querySelectorAll('.ql-toolbar').forEach((toolbar) => {
+        toolbar.querySelectorAll('button, .ql-picker-label, .ql-picker-item').forEach((btn) => {
+          const el = btn as HTMLElement
+          if (el.getAttribute('title')) return
+          for (const [cls, title] of Object.entries(QL_TOOLBAR_TITLES)) {
+            if (el.classList.contains(cls) || el.closest(`.${cls}`)) {
+              el.setAttribute('title', title)
+              return
+            }
+          }
+          if (el.classList.contains('ql-picker-label')) el.setAttribute('title', el.parentElement?.classList.contains('ql-header') ? 'Heading' : (el.textContent?.trim() || 'Options'))
+          else if (el.classList.contains('ql-picker-item')) el.setAttribute('title', el.textContent?.trim() || '')
+        })
       })
-    })
+    }, 150)
+    return () => clearTimeout(id)
   }, [activeLanguage, content])
 
   if (sortedLanguages.length === 0) return null

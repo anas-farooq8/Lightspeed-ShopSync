@@ -12,7 +12,7 @@ import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsL
 import { ProductCard } from '@/components/sync-operations/product-list/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/product-list/ProductListTable'
 import { TargetShopSelectionDialog } from '@/components/sync-operations/dialogs/TargetShopSelectionDialog'
-import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
+import { sortShopsSourceFirstThenByTld, getShopRoleLabel, cn } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
 export interface TargetShopInfo {
@@ -422,7 +422,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   variant={viewMode === 'table' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('table')}
-                  className={`cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9 ${viewMode === 'table' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
+                  className={cn('cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9', viewMode === 'table' && 'bg-red-600 hover:bg-red-700 text-white')}
                 >
                   <List className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                   <span className="ml-1 sm:ml-1.5">Table</span>
@@ -431,7 +431,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('grid')}
-                  className={`cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9 ${viewMode === 'grid' ? 'bg-red-600 hover:bg-red-700 text-white' : ''}`}
+                  className={cn('cursor-pointer px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm min-h-0 touch-manipulation justify-center h-8 sm:h-9', viewMode === 'grid' && 'bg-red-600 hover:bg-red-700 text-white')}
                 >
                   <LayoutGrid className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                   <span className="ml-1 sm:ml-1.5">Grid</span>

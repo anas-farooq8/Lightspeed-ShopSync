@@ -33,33 +33,6 @@ function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
   return (a.src || '') === (b.src || '')
 }
 
-/** Normalize HTML so Quill output and source content compare equal when semantically the same */
-function normalizeHtmlForComparison(html: string): string {
-  if (!html || typeof html !== 'string') return ''
-  let s = html.trim()
-  if (!s) return ''
-  // Remove class, style, data-* attributes (Quill and CMS add these)
-  s = s.replace(/\s+class="[^"]*"/gi, '').replace(/\s+class='[^']*'/gi, '')
-  s = s.replace(/\s+style="[^"]*"/gi, '').replace(/\s+style='[^']*'/gi, '')
-  s = s.replace(/\s+data-[a-z-]+="[^"]*"/gi, '').replace(/\s+data-[a-z-]+='[^']*'/gi, '')
-  // Empty blocks and br-only paragraphs
-  s = s.replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '')
-  s = s.replace(/<p>\s*<\/p>/gi, '')
-  s = s.replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, '')
-  s = s.replace(/<div>\s*<\/div>/gi, '')
-  // Any empty tag
-  s = s.replace(/<(\w+)>\s*<\/\1>/gi, '')
-  // Whitespace between tags
-  s = s.replace(/>\s+</g, '><')
-  // Collapse multiple spaces/newlines to single space inside text (between tags we already collapsed)
-  s = s.replace(/\s+/g, ' ')
-  // Normalize <br>, <br/>, <br />
-  s = s.replace(/<br\s*\/?>\s*/gi, '<br>')
-  // Trim again and remove space-only text nodes (optional: we collapsed to single space so "> <" becomes "><" in next step - but we already did >\s+< so ">  \n  <" is "><". So space is only inside text. Leave it.)
-  return s.trim()
-}
-
-
 export default function PreviewCreatePage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -292,10 +265,7 @@ export default function PreviewCreatePage() {
         sourceValue = sourceProduct?.content_by_language?.[sourceDefaultLang]?.[field] || ''
       }
       
-      const normalizedValue = field === 'content' ? normalizeHtmlForComparison(value) : value
-      const normalizedSource = field === 'content' ? normalizeHtmlForComparison(sourceValue) : sourceValue
-      
-      const isChanged = normalizedValue !== normalizedSource
+      const isChanged = value !== sourceValue
       const fieldKey = `${langCode}.${field}`
       
       const newDirtyFields = new Set(updated[tld].dirtyFields)
@@ -455,9 +425,10 @@ export default function PreviewCreatePage() {
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      
-      const removedKey = getVariantKey(updated[tld].variants[variantIndex])
-      const newVariants = updated[tld].variants.filter((_, idx) => idx !== variantIndex)
+      const variants = updated[tld].variants
+      if (variantIndex < 0 || variantIndex >= variants.length) return prev
+      const removedKey = getVariantKey(variants[variantIndex])
+      const newVariants = variants.filter((_, idx) => idx !== variantIndex)
       const newDirtyVariants = new Set(updated[tld].dirtyVariants)
       newDirtyVariants.delete(removedKey)
       
@@ -478,11 +449,13 @@ export default function PreviewCreatePage() {
   }
 
   const moveVariant = (tld: string, fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      
-      const newVariants = [...updated[tld].variants]
+      const variants = updated[tld].variants
+      if (fromIndex < 0 || fromIndex >= variants.length || toIndex < 0 || toIndex >= variants.length) return prev
+      const newVariants = [...variants]
       const [movedVariant] = newVariants.splice(fromIndex, 1)
       newVariants.splice(toIndex, 0, movedVariant)
       
@@ -926,7 +899,6 @@ export default function PreviewCreatePage() {
                   allProducts={details.source}
                   selectedProductId={selectedSourceProductId}
                   onProductSelect={setSelectedSourceProductId}
-                  productImages={productImages[sourceProduct.shop_tld] || []}
                 />
               </div>
 
@@ -938,8 +910,9 @@ export default function PreviewCreatePage() {
                     baseUrl={details.shops?.[tld]?.base_url ?? details.targets[tld]?.[0]?.base_url ?? ''}
                     languages={details.shops[tld]?.languages ?? []}
                     data={targetData[tld]}
-                    productImages={productImages[sourceProduct.shop_tld] || []}
                     activeLanguage={activeLanguages[tld] || ''}
+                    imagesLink={sourceProduct.images_link}
+                    sourceShopTld={sourceProduct.shop_tld}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
                     onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -962,13 +935,9 @@ export default function PreviewCreatePage() {
                       setSelectingImageForVariant(null)
                       setShowImageDialog(true)
                     }}
-                    onRemoveImage={(imgId) => removeImage(tld, imgId)}
-                    onRestoreImage={(imgId) => restoreImage(tld, imgId)}
                     onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
                     onResetVisibility={() => resetVisibility(tld)}
                     onResetProductImage={() => resetProductImage(tld)}
-                    onMoveImage={(from, to) => moveImage(tld, from, to)}
-                    onResetImageOrder={() => resetImageOrder(tld)}
                   />
                 </TabsContent>
               ))}
@@ -989,7 +958,6 @@ export default function PreviewCreatePage() {
               allProducts={details.source}
               selectedProductId={selectedSourceProductId}
               onProductSelect={setSelectedSourceProductId}
-              productImages={productImages[sourceProduct.shop_tld] || []}
             />
             <TargetPanel
               shopTld={sortedTargetShops[0]}
@@ -997,8 +965,9 @@ export default function PreviewCreatePage() {
               baseUrl={details.shops?.[sortedTargetShops[0]]?.base_url ?? details.targets[sortedTargetShops[0]]?.[0]?.base_url ?? ''}
               languages={details.shops[sortedTargetShops[0]]?.languages ?? []}
               data={targetData[sortedTargetShops[0]]}
-              productImages={productImages[sourceProduct?.shop_tld || ''] || []}
               activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
+              imagesLink={sourceProduct?.images_link}
+              sourceShopTld={sourceProduct?.shop_tld}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
               onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}
@@ -1021,13 +990,9 @@ export default function PreviewCreatePage() {
                 setSelectingImageForVariant(null)
                 setShowImageDialog(true)
               }}
-              onRemoveImage={(imgId) => removeImage(sortedTargetShops[0], imgId)}
-              onRestoreImage={(imgId) => restoreImage(sortedTargetShops[0], imgId)}
               onUpdateVisibility={(visibility) => updateVisibility(sortedTargetShops[0], visibility)}
               onResetVisibility={() => resetVisibility(sortedTargetShops[0])}
               onResetProductImage={() => resetProductImage(sortedTargetShops[0])}
-              onMoveImage={(from, to) => moveImage(sortedTargetShops[0], from, to)}
-              onResetImageOrder={() => resetImageOrder(sortedTargetShops[0])}
             />
           </div>
         </div>

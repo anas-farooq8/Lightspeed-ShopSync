@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Language, ProductContent } from '@/types/product'
-import { toSafeExternalHref } from '@/lib/utils'
+import { toSafeExternalHref, cn } from '@/lib/utils'
 
 interface LanguageContentTabsProps {
   languages: Language[]
@@ -21,14 +21,20 @@ export function LanguageContentTabs({
   className = '',
   showSlug = true
 }: LanguageContentTabsProps) {
-  const sortedLanguages = [...languages].sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1
-    if (!a.is_default && b.is_default) return 1
-    return a.code.localeCompare(b.code)
-  })
-
+  const sortedLanguages = useMemo(
+    () => [...languages].sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      return a.code.localeCompare(b.code)
+    }),
+    [languages]
+  )
   const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
+
+  useEffect(() => {
+    if (!sortedLanguages.some(l => l.code === activeLanguage)) setActiveLanguage(defaultLanguage)
+  }, [defaultLanguage, sortedLanguages, activeLanguage])
 
   const handleLanguageChange = (lang: string) => {
     setActiveLanguage(lang)
@@ -40,7 +46,7 @@ export function LanguageContentTabs({
   if (sortedLanguages.length === 0) return null
 
   return (
-    <Tabs value={activeLanguage} onValueChange={handleLanguageChange} className={`w-full min-w-0 ${className}`}>
+    <Tabs value={activeLanguage} onValueChange={handleLanguageChange} className={cn('w-full min-w-0', className)}>
       <TabsList className="h-9 sm:h-10 mb-3 sm:mb-4 w-full flex p-0.5 sm:p-1 items-stretch flex-wrap sm:flex-nowrap gap-0.5 sm:gap-0">
         {sortedLanguages.map(lang => (
           <TabsTrigger 

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Table,
   TableBody,
@@ -56,37 +56,29 @@ export function ProductListTable({
   hideShopIndicators = false,
   showShopBadge = false
 }: ProductListTableProps) {
-  const [targetShops, setTargetShops] = useState<TargetShop[]>([])
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  const targetShops = useMemo(() => {
+    if (products.length === 0) return []
+    const shopsSet = new Set<string>()
+    const shopsMap = new Map<string, string>()
+    products.forEach(product => {
+      Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
+        shopsSet.add(tld)
+        shopsMap.set(tld, targetInfo.shop_name)
+      })
+    })
+    return sortShopsSourceFirstThenByTld(
+      Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
+    )
+  }, [products])
 
   // Auto-expand duplicate groups on initial load
   useEffect(() => {
     const duplicateSkus = products
       .filter(p => p.source_has_duplicates)
       .map(p => p.default_sku)
-    const uniqueDuplicateSkus = Array.from(new Set(duplicateSkus))
-    setExpandedGroups(new Set(uniqueDuplicateSkus))
-  }, [products])
-
-  // Extract unique target shops from products
-  useEffect(() => {
-    if (products.length > 0) {
-      const shopsSet = new Set<string>()
-      const shopsMap = new Map<string, string>()
-      
-      products.forEach(product => {
-        Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
-          shopsSet.add(tld)
-          shopsMap.set(tld, targetInfo.shop_name)
-        })
-      })
-      
-      setTargetShops(
-        sortShopsSourceFirstThenByTld(
-          Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
-        )
-      )
-    }
+    setExpandedGroups(new Set(Array.from(new Set(duplicateSkus))))
   }, [products])
 
   // Group products by SKU

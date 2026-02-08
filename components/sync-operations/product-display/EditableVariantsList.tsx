@@ -41,6 +41,7 @@ export function EditableVariantsList({
 }: EditableVariantsListProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const lastDropTargetRef = useRef<number | null>(null)
+  const dragPreviewRef = useRef<HTMLDivElement>(null)
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index)
@@ -48,6 +49,24 @@ export function EditableVariantsList({
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', String(index))
     e.dataTransfer.dropEffect = 'move'
+    const row = e.currentTarget as HTMLElement
+    const rect = row.getBoundingClientRect()
+    const preview = dragPreviewRef.current
+    if (preview && typeof document !== 'undefined') {
+      const clone = row.cloneNode(true) as HTMLElement
+      clone.style.width = `${rect.width}px`
+      clone.style.opacity = '1'
+      clone.style.pointerEvents = 'none'
+      clone.style.boxShadow = '0 10px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.15)'
+      clone.style.borderRadius = '0.5rem'
+      clone.style.background = 'hsl(var(--background))'
+      clone.style.border = '1px solid hsl(var(--border))'
+      preview.innerHTML = ''
+      preview.appendChild(clone)
+      const offsetX = e.clientX - rect.left
+      const offsetY = e.clientY - rect.top
+      e.dataTransfer.setDragImage(preview.firstChild as HTMLElement, offsetX, offsetY)
+    }
   }
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -63,10 +82,16 @@ export function EditableVariantsList({
   const handleDragEnd = () => {
     setDraggedIndex(null)
     lastDropTargetRef.current = null
+    if (dragPreviewRef.current) dragPreviewRef.current.innerHTML = ''
   }
 
   return (
     <div className="space-y-3">
+      <div
+        ref={dragPreviewRef}
+        className="fixed left-[-9999px] top-0 z-[9999] pointer-events-none"
+        aria-hidden
+      />
       <div className="flex items-center justify-between">
         <h4 className="text-xs sm:text-sm font-bold uppercase">Variants ({variants.length})</h4>
         <div className="flex gap-2">
@@ -103,8 +128,8 @@ export function EditableVariantsList({
               onDragOver={(e) => handleDragOver(e, idx)}
               onDragEnd={handleDragEnd}
               className={cn(
-                "flex items-start gap-2 p-2 sm:p-3 rounded-lg border bg-muted/30 transition-all duration-150 cursor-move select-none",
-                draggedIndex === idx && "scale-[0.98] border-dashed border-primary",
+                "flex items-start gap-2 p-2 sm:p-3 rounded-lg border bg-muted/30 transition-all duration-200 ease-out cursor-move select-none",
+                draggedIndex === idx && "opacity-100 scale-[1.02] border-primary shadow-lg ring-2 ring-primary/20",
                 draggedIndex !== null && draggedIndex !== idx && "border-primary/50 bg-primary/5",
                 isChanged && "border-amber-500"
               )}
@@ -121,16 +146,17 @@ export function EditableVariantsList({
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <div
+              <button
+                type="button"
                 onClick={() => onSelectVariantImage(idx)}
-                className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors"
+                className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
               >
                 {variantImageUrl ? (
                   <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
                 )}
-              </div>
+              </button>
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex gap-2">
                   <Input
@@ -139,15 +165,15 @@ export function EditableVariantsList({
                     placeholder="SKU"
                     className="h-8 text-xs flex-1 cursor-text"
                   />
-                  <div className="flex items-center gap-1 border rounded-md px-2 bg-background">
-                    <span className="text-xs text-muted-foreground">€</span>
-                    <Input
+                  <div className="flex items-center gap-1 h-8 rounded-md border border-input bg-background px-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 min-w-[100px]">
+                    <span className="text-xs text-muted-foreground shrink-0">€</span>
+                    <input
                       type="number"
                       value={variant.price_excl}
                       onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
-                      step="1"
-                      placeholder="0"
-                      className="w-16 h-6 text-xs border-0 p-0 cursor-text"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="flex-1 h-full text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 </div>

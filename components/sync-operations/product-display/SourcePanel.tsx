@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package, ExternalLink, Star } from 'lucide-react'
-import { ProductImagesGrid } from '@/components/sync-operations/product-display/ProductImagesGrid'
+import { Package, ExternalLink } from 'lucide-react'
 import { LanguageContentTabs } from '@/components/sync-operations/product-display/LanguageContentTabs'
 import { VariantsList } from '@/components/sync-operations/product-display/VariantsList'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
+import { ProductImagesGrid } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { toSafeExternalHref } from '@/lib/utils'
-import type { ProductData, Language, ProductImage } from '@/types/product'
+import type { ProductData, Language } from '@/types/product'
 
 interface SourcePanelProps {
   product: ProductData
@@ -17,7 +17,6 @@ interface SourcePanelProps {
   allProducts: ProductData[]
   selectedProductId: number | null
   onProductSelect: (id: number) => void
-  productImages: ProductImage[]
 }
 
 export function SourcePanel({ 
@@ -26,15 +25,16 @@ export function SourcePanel({
   hasDuplicates,
   allProducts,
   selectedProductId,
-  onProductSelect,
-  productImages
+  onProductSelect
 }: SourcePanelProps) {
-  const sortedLanguages = [...languages].sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1
-    if (!a.is_default && b.is_default) return 1
-    return a.code.localeCompare(b.code)
-  })
-
+  const sortedLanguages = useMemo(
+    () => [...languages].sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      return a.code.localeCompare(b.code)
+    }),
+    [languages]
+  )
   const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const imageUrl = product.product_image?.src || product.product_image?.thumb
@@ -135,34 +135,10 @@ export function SourcePanel({
             variants={product.variants}
             activeLanguage={activeLanguage}
           />
-          {productImages.length > 0 && (
+          {product.images_link && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {[...productImages]
-                  .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
-                  .map((img, index) => {
-                    const isDefault = index === 0
-                    return (
-                      <div key={img.id} className="group relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-lg overflow-hidden border border-border bg-muted">
-                        {img.title && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                            <div className="relative px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg">
-                              {img.title}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]" />
-                            </div>
-                          </div>
-                        )}
-                        <img src={img.src || img.thumb} alt={img.title || ''} className="w-full h-full object-cover" />
-                        {isDefault && (
-                          <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
-                            <Star className="h-3 w-3 fill-white text-white shrink-0" />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-              </div>
+              <ProductImagesGrid imagesLink={product.images_link} shopTld={product.shop_tld} />
             </div>
           )}
         </div>

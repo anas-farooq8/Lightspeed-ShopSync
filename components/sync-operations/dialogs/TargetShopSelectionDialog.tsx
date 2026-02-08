@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import type { TargetShopInfo } from '../product-list/ProductListTab'
+import { cn } from '@/lib/utils'
 
 interface TargetShop {
   tld: string
@@ -32,24 +32,17 @@ export function TargetShopSelectionDialog({
   productSku,
   isLoading = false,
 }: TargetShopSelectionDialogProps) {
-  // Pre-select shops where product doesn't exist
-  const defaultSelection = targetShops
-    .filter(shop => shop.status === 'not_exists')
-    .map(shop => shop.tld)
-  
-  const [selectedShops, setSelectedShops] = useState<Set<string>>(new Set(defaultSelection))
+  const defaultSelection = useMemo(
+    () => targetShops.filter(shop => shop.status === 'not_exists').map(shop => shop.tld),
+    [targetShops]
+  )
+  const [selectedShops, setSelectedShops] = useState<Set<string>>(() => new Set(defaultSelection))
 
-  // Reset selection when dialog opens (e.g. after cancel/close/outside click)
   useEffect(() => {
-    if (open) {
-      const nextDefault = targetShops
-        .filter(shop => shop.status === 'not_exists')
-        .map(shop => shop.tld)
-      setSelectedShops(new Set(nextDefault))
-    }
-  }, [open, targetShops])
+    if (open) setSelectedShops(new Set(defaultSelection))
+  }, [open, defaultSelection])
 
-  const handleToggle = (tld: string, canSelect: boolean) => {
+  const handleToggle = useCallback((tld: string, canSelect: boolean) => {
     if (!canSelect) return
     
     const newSelection = new Set(selectedShops)
@@ -59,11 +52,11 @@ export function TargetShopSelectionDialog({
       newSelection.add(tld)
     }
     setSelectedShops(newSelection)
-  }
+  }, [])
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     onConfirm(Array.from(selectedShops))
-  }
+  }, [onConfirm, selectedShops])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,20 +76,26 @@ export function TargetShopSelectionDialog({
             return (
               <div
                 key={shop.tld}
-                className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  exists 
-                    ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' 
+                role="button"
+                tabIndex={canSelect ? 0 : -1}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg border',
+                  exists
+                    ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60'
                     : 'bg-background border-border hover:bg-muted/50 cursor-pointer transition-colors'
-                }`}
+                )}
                 onClick={() => handleToggle(shop.tld, canSelect)}
+                onKeyDown={(e) => canSelect && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleToggle(shop.tld, true))}
               >
-                <Checkbox
-                  id={`shop-${shop.tld}`}
-                  checked={selectedShops.has(shop.tld)}
-                  disabled={!canSelect}
-                  onCheckedChange={() => handleToggle(shop.tld, canSelect)}
-                  className="cursor-pointer"
-                />
+                <span onClick={(e) => e.stopPropagation()} className="flex items-center">
+                  <Checkbox
+                    id={`shop-${shop.tld}`}
+                    checked={selectedShops.has(shop.tld)}
+                    disabled={!canSelect}
+                    onCheckedChange={() => handleToggle(shop.tld, canSelect)}
+                    className="cursor-pointer"
+                  />
+                </span>
                 <div className="flex-1 min-w-0">
                   <Label
                     htmlFor={`shop-${shop.tld}`}

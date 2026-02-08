@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -31,12 +31,14 @@ export function ProductPanel({
   onProductSelect,
   compactLayout = false
 }: ProductPanelProps) {
-  const sortedLanguages = [...languages].sort((a, b) => {
-    if (a.is_default && !b.is_default) return -1
-    if (!a.is_default && b.is_default) return 1
-    return a.code.localeCompare(b.code)
-  })
-
+  const sortedLanguages = useMemo(
+    () => [...languages].sort((a, b) => {
+      if (a.is_default && !b.is_default) return -1
+      if (!a.is_default && b.is_default) return 1
+      return a.code.localeCompare(b.code)
+    }),
+    [languages]
+  )
   const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const shopUrl = toSafeExternalHref(product.base_url)

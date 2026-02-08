@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import {
   Table,
   TableBody,
@@ -36,27 +36,19 @@ export function ProductSyncTable({
   onSort,
   onProductClick 
 }: ProductSyncTableProps) {
-  const [targetShops, setTargetShops] = useState<TargetShop[]>([])
-
-  // Extract unique target shops from products
-  useEffect(() => {
-    if (products.length > 0) {
-      const shopsSet = new Set<string>()
-      const shopsMap = new Map<string, string>()
-      
-      products.forEach(product => {
-        Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
-          shopsSet.add(tld)
-          shopsMap.set(tld, targetInfo.shop_name)
-        })
+  const targetShops = useMemo(() => {
+    if (products.length === 0) return []
+    const shopsSet = new Set<string>()
+    const shopsMap = new Map<string, string>()
+    products.forEach(product => {
+      Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
+        shopsSet.add(tld)
+        shopsMap.set(tld, targetInfo.shop_name)
       })
-      
-      setTargetShops(
-        sortShopsSourceFirstThenByTld(
-          Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
-        )
-      )
-    }
+    })
+    return sortShopsSourceFirstThenByTld(
+      Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
+    )
   }, [products])
 
   const SortableHeader = ({ 
