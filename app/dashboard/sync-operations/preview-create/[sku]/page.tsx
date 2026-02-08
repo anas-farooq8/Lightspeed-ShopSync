@@ -54,7 +54,9 @@ export default function PreviewCreatePage() {
   const [isDirty, setIsDirty] = useState(false)
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
   const initialContentRef = useRef<Record<string, Record<string, string>>>({})
-  
+  /** Tracks whether we've seen the first onChange for content (tld, lang). Ignore that one for dirty so Quill's mount normalization doesn't mark content changed. */
+  const contentEditorReadyRef = useRef<Record<string, Record<string, boolean>>>({})
+
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [selectingImageForVariant, setSelectingImageForVariant] = useState<number | null>(null)
   const [selectingProductImage, setSelectingProductImage] = useState(false)
@@ -236,8 +238,8 @@ export default function PreviewCreatePage() {
     setTargetData(newTargetData)
     setActiveLanguages(newActiveLanguages)
     setIsDirty(false)
-    
-    // Store initial content for comparison
+    contentEditorReadyRef.current = {}
+
     const initialContent: Record<string, Record<string, string>> = {}
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
@@ -257,15 +259,26 @@ export default function PreviewCreatePage() {
       
       let sourceValue: string
       if (field === 'content') {
-        // For HTML content, compare with initial content from source
         sourceValue = initialContentRef.current[tld]?.[langCode] || ''
       } else {
         const sourceProduct = details?.source.find(p => p.product_id === selectedSourceProductId)
         const sourceDefaultLang = details?.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code || 'nl'
         sourceValue = sourceProduct?.content_by_language?.[sourceDefaultLang]?.[field] || ''
       }
-      
-      const isChanged = value !== sourceValue
+
+      let isChanged: boolean
+      if (field === 'content') {
+        const ready = contentEditorReadyRef.current[tld]?.[langCode]
+        if (!ready) {
+          if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+          contentEditorReadyRef.current[tld][langCode] = true
+          isChanged = false
+        } else {
+          isChanged = value !== sourceValue
+        }
+      } else {
+        isChanged = value !== sourceValue
+      }
       const fieldKey = `${langCode}.${field}`
       
       const newDirtyFields = new Set(updated[tld].dirtyFields)
@@ -672,24 +685,30 @@ export default function PreviewCreatePage() {
 
   const resetField = (tld: string, langCode: string, field: keyof ProductContent) => {
     if (!details || !selectedSourceProductId) return
-    
+
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
-    
+
+    if (field === 'content') {
+      if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+      contentEditorReadyRef.current[tld][langCode] = false
+    }
     const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     const sourceValue = sourceProduct.content_by_language?.[sourceDefaultLang]?.[field]
-    
     updateField(tld, langCode, field, sourceValue || '')
   }
 
   const resetLanguage = (tld: string, langCode: string) => {
     if (!details || !selectedSourceProductId) return
-    
+
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
-    
+
+    if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+    contentEditorReadyRef.current[tld][langCode] = false
+
     const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
-    
+
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
@@ -899,6 +918,7 @@ export default function PreviewCreatePage() {
                   allProducts={details.source}
                   selectedProductId={selectedSourceProductId}
                   onProductSelect={setSelectedSourceProductId}
+                  sourceImages={productImages[sourceProduct.shop_tld] ?? []}
                 />
               </div>
 
@@ -913,6 +933,7 @@ export default function PreviewCreatePage() {
                     activeLanguage={activeLanguages[tld] || ''}
                     imagesLink={sourceProduct.images_link}
                     sourceShopTld={sourceProduct.shop_tld}
+                    sourceImages={productImages[sourceProduct.shop_tld] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
                     onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -958,6 +979,7 @@ export default function PreviewCreatePage() {
               allProducts={details.source}
               selectedProductId={selectedSourceProductId}
               onProductSelect={setSelectedSourceProductId}
+              sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
             />
             <TargetPanel
               shopTld={sortedTargetShops[0]}
@@ -968,6 +990,7 @@ export default function PreviewCreatePage() {
               activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
               imagesLink={sourceProduct?.images_link}
               sourceShopTld={sourceProduct?.shop_tld}
+              sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
               onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}
@@ -1045,7 +1068,7 @@ export default function PreviewCreatePage() {
       </Dialog>
 
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end gap-3">
+        <div className="w-full flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4">
           <Button
             variant="outline"
             onClick={handleBack}
@@ -1057,7 +1080,7 @@ export default function PreviewCreatePage() {
             onClick={handleCreateProduct}
             className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
           >
-            Create Product in .{activeTargetTld}
+            Create Products
           </Button>
         </div>
       </div>

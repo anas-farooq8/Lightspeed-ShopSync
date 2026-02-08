@@ -202,7 +202,7 @@ export function EditableLanguageContentTabs({
                 onChange={(e) => onUpdateField(lang.code, 'description', e.target.value)}
                 placeholder="Enter description..."
                 className={cn(
-                  "cursor-text min-h-[100px] resize-y",
+                  "cursor-text min-h-[100px] resize-y bg-transparent dark:bg-input/30",
                   dirtyFields.has(`${lang.code}.description`) && 'border-amber-500'
                 )}
               />
@@ -225,7 +225,7 @@ export function EditableLanguageContentTabs({
               </div>
               <div
                 className={cn(
-                  "rounded-md overflow-hidden border",
+                  "rounded-md overflow-hidden border transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300",
                   dirtyFields.has(`${lang.code}.content`) ? 'border-amber-500' : 'border-border'
                 )}
               >
@@ -242,11 +242,10 @@ export function EditableLanguageContentTabs({
                         [{ 'color': [] }, { 'background': [] }],
                         ['link', 'image'],
                         ['clean']
-                      ],
-                      handlers: {}
+                      ]
                     },
                   }}
-                  className="bg-background [&_.ql-editor]:min-h-[20rem] [&_.ql-editor]:max-h-[28rem] [&_.ql-editor]:cursor-text [&_.ql-toolbar]:cursor-pointer [&_.ql-toolbar_button]:cursor-pointer [&_.ql-toolbar_.ql-picker]:cursor-pointer"
+                  className="bg-transparent dark:bg-input/30 [&_.ql-editor]:min-h-[20rem] [&_.ql-editor]:max-h-[28rem] [&_.ql-editor]:cursor-text [&_.ql-toolbar]:cursor-pointer [&_.ql-toolbar_button]:cursor-pointer [&_.ql-toolbar_.ql-picker]:cursor-pointer"
                 />
               </div>
             </div>

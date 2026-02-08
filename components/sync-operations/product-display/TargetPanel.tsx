@@ -6,7 +6,7 @@ import { Package, ExternalLink, RotateCcw } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/visibility'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
-import { ProductImagesGrid } from '@/components/sync-operations/product-display/ProductImagesGrid'
+import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { toSafeExternalHref, cn } from '@/lib/utils'
 import type { Language, ImageInfo, EditableTargetData, ProductContent } from '@/types/product'
 
@@ -19,6 +19,8 @@ interface TargetPanelProps {
   activeLanguage: string
   imagesLink: string | null | undefined
   sourceShopTld: string
+  /** Pre-fetched source images (create-preview: same metadata for all targets, no extra fetch). */
+  sourceImages?: ProductImageMeta[] | null
   onLanguageChange: (lang: string) => void
   onUpdateField: (lang: string, field: keyof ProductContent, value: string) => void
   onResetField: (lang: string, field: keyof ProductContent) => void
@@ -53,6 +55,7 @@ export function TargetPanel({
   activeLanguage,
   imagesLink,
   sourceShopTld,
+  sourceImages,
   onLanguageChange,
   onUpdateField,
   onResetField,
@@ -227,10 +230,14 @@ export function TargetPanel({
             onResetAllVariants={onResetAllVariants}
             onSelectVariantImage={onSelectVariantImage}
           />
-          {imagesLink && (
+          {(imagesLink || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <ProductImagesGrid imagesLink={imagesLink} shopTld={sourceShopTld} />
+              <ProductImagesGrid
+                imagesLink={imagesLink}
+                shopTld={sourceShopTld}
+                images={sourceImages ?? undefined}
+              />
             </div>
           )}
         </div>

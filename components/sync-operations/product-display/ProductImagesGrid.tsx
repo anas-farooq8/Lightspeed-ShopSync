@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { Star, Package, X } from 'lucide-react'
 import { getCachedImages, setCachedImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
 import {
@@ -20,26 +21,56 @@ export interface ProductImage {
   src?: string
 }
 
+/** Pre-fetched image metadata. Matches API response: id, sortOrder, title, thumb, src. */
+export type ProductImageMeta = {
+  id: number | string
+  sortOrder?: number
+  sort_order?: number
+  title?: string
+  thumb?: string
+  src?: string
+}
+
 interface ProductImagesGridProps {
   imagesLink: string | null | undefined
   shopTld: string
+  /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
+  images?: ProductImageMeta[] | null
   className?: string
 }
 
-function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImagesGridProps) {
-  const [images, setImages] = useState<ProductImage[]>([])
+function normalizeImages(raw: ProductImageMeta[]): ProductImage[] {
+  const order = (img: ProductImageMeta) => img.sortOrder ?? img.sort_order ?? 999
+  return [...raw]
+    .sort((a, b) => order(a) - order(b))
+    .map((img, idx) => ({
+      id: typeof img.id === 'number' ? img.id : idx,
+      sortOrder: order(img),
+      title: img.title,
+      thumb: img.thumb,
+      src: img.src,
+    }))
+}
+
+function ProductImagesGridInner({ imagesLink, shopTld, images: imagesProp, className }: ProductImagesGridProps) {
+  const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<ProductImage | null>(null)
+  const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
+
+  const usePreFetched = imagesProp !== undefined && imagesProp !== null
+  const images = usePreFetched ? normalizeImages(imagesProp) : fetchedImages
 
   useEffect(() => {
+    if (usePreFetched) return
     if (!imagesLink || !shopTld) {
-      setImages([])
+      setFetchedImages([])
       return
     }
     const cached = getCachedImages(imagesLink, shopTld)
     if (cached) {
-      setImages(cached)
+      setFetchedImages(cached)
       setLoading(false)
       setError(null)
       return
@@ -58,7 +89,7 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
             (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
           )
           setCachedImages(imagesLink, shopTld, sorted as CachedProductImage[])
-          setImages(sorted)
+          setFetchedImages(sorted)
         }
       })
       .catch((err) => {
@@ -68,11 +99,13 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [imagesLink, shopTld])
+  }, [imagesLink, shopTld, usePreFetched])
 
-  if (!imagesLink) return null
+  if (usePreFetched) {
+    if (!images.length) return null
+  } else if (!imagesLink) return null
 
-  if (loading) {
+  if (!usePreFetched && loading) {
     return (
       <div className={cn("grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3", className)}>
         {Array.from({ length: 4 }).map((_, i) => (
@@ -86,8 +119,30 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
     return null
   }
 
+  const tooltipEl =
+    tooltip && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed z-[200] pointer-events-none px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg"
+            style={{
+              left: tooltip.anchor.left + tooltip.anchor.width / 2,
+              top: tooltip.anchor.top,
+              transform: 'translate(-50%, calc(-100% - 8px))',
+            }}
+          >
+            {tooltip.title}
+            <div
+              className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]"
+              aria-hidden
+            />
+          </div>,
+          document.body
+        )
+      : null
+
   return (
     <>
+      {tooltipEl}
       <div className={cn("grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3", className)}>
         {images.map((img, index) => {
           const src = img.src ?? img.thumb
@@ -96,16 +151,9 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
             <div
               key={img.id}
               className="group relative"
+              onMouseEnter={img.title ? (e) => setTooltip({ title: img.title!, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
+              onMouseLeave={img.title ? () => setTooltip(null) : undefined}
             >
-              {/* Title on hover - tooltip above image with bottom arrow (screenshot style) */}
-              {img.title && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <div className="relative px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg">
-                    {img.title}
-                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]" />
-                  </div>
-                </div>
-              )}
               <button
                 type="button"
                 onClick={() => setPreviewImage(img)}

@@ -5,7 +5,7 @@ import { Package, ExternalLink } from 'lucide-react'
 import { LanguageContentTabs } from '@/components/sync-operations/product-display/LanguageContentTabs'
 import { VariantsList } from '@/components/sync-operations/product-display/VariantsList'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
-import { ProductImagesGrid } from '@/components/sync-operations/product-display/ProductImagesGrid'
+import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { toSafeExternalHref } from '@/lib/utils'
 import type { ProductData, Language } from '@/types/product'
@@ -17,6 +17,8 @@ interface SourcePanelProps {
   allProducts: ProductData[]
   selectedProductId: number | null
   onProductSelect: (id: number) => void
+  /** Pre-fetched source images (create-preview: pass from page so grid does not fetch). */
+  sourceImages?: ProductImageMeta[] | null
 }
 
 export function SourcePanel({ 
@@ -25,7 +27,8 @@ export function SourcePanel({
   hasDuplicates,
   allProducts,
   selectedProductId,
-  onProductSelect
+  onProductSelect,
+  sourceImages
 }: SourcePanelProps) {
   const sortedLanguages = useMemo(
     () => [...languages].sort((a, b) => {
@@ -135,10 +138,14 @@ export function SourcePanel({
             variants={product.variants}
             activeLanguage={activeLanguage}
           />
-          {product.images_link && (
+          {(product.images_link || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <ProductImagesGrid imagesLink={product.images_link} shopTld={product.shop_tld} />
+              <ProductImagesGrid
+                imagesLink={product.images_link}
+                shopTld={product.shop_tld}
+                images={sourceImages ?? undefined}
+              />
             </div>
           )}
         </div>

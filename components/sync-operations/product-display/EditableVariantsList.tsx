@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Package, GripVertical, Plus, Trash2, RotateCcw } from 'lucide-react'
+import { Package, GripVertical, Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { EditableVariant } from '@/types/product'
 
@@ -165,16 +165,40 @@ export function EditableVariantsList({
                     placeholder="SKU"
                     className="h-8 text-xs flex-1 cursor-text"
                   />
-                  <div className="flex items-center gap-1 h-8 rounded-md border border-input bg-background px-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 min-w-[100px]">
-                    <span className="text-xs text-muted-foreground shrink-0">€</span>
+                  <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
+                    <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
                     <input
                       type="number"
                       value={variant.price_excl}
                       onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
-                      step="0.01"
+                      step="1"
                       placeholder="0.00"
-                      className="flex-1 h-full text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="flex-1 h-full px-1 text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
+                    <div className="flex flex-col border-l border-input">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                          onUpdateVariant(idx, 'price_excl', (currentPrice + 1).toFixed(2))
+                        }}
+                        className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center"
+                        title="Increase price"
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                          onUpdateVariant(idx, 'price_excl', Math.max(0, currentPrice - 1).toFixed(2))
+                        }}
+                        className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center border-t border-input"
+                        title="Decrease price"
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <Input

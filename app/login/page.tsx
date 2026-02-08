@@ -181,7 +181,6 @@ function LoginForm() {
                   text-base sm:text-sm
                   px-3 sm:px-4
                   min-h-[44px]
-                  focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:border-red-300
                 "
                 aria-invalid={error ? "true" : "false"}
                 aria-describedby={error ? "login-error" : undefined}
@@ -211,7 +210,6 @@ function LoginForm() {
                     text-base sm:text-sm
                     px-3 sm:px-4
                     min-h-[44px]
-                    focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:border-red-300
                   "
                   aria-invalid={error ? "true" : "false"}
                   aria-describedby={error ? "login-error" : undefined}
