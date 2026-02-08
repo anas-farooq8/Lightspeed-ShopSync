@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { ProductCard } from '@/components/sync-operations/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/ProductListTable'
+import { TargetShopSelectionDialog } from '@/components/sync-operations/TargetShopSelectionDialog'
 import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 
@@ -77,6 +78,10 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   // UI states - default to grid on mobile (better UX), table on desktop
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [searchInput, setSearchInput] = useState('')
+  
+  // Target shop selection dialog state
+  const [showSelectionDialog, setShowSelectionDialog] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<SyncProduct | null>(null)
   
   // Set grid as default on mobile viewport (runs once on mount)
   useEffect(() => {
@@ -231,6 +236,28 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       params.set('productId', product.source_product_id.toString())
       router.push(`/dashboard/sync-operations/products/${encodeURIComponent(product.default_sku)}?${params.toString()}`)
     }
+  }
+
+  const handleCreateClick = (product: SyncProduct, event: React.MouseEvent) => {
+    event.stopPropagation()
+    setSelectedProduct(product)
+    setShowSelectionDialog(true)
+  }
+
+  const handleTargetShopConfirm = (selectedShopTlds: string[]) => {
+    if (!selectedProduct) return
+    
+    // Close dialog
+    setShowSelectionDialog(false)
+    
+    // Preserve all current URL params
+    const params = new URLSearchParams(searchParams.toString())
+    
+    // Add selected shops as comma-separated list
+    params.set('targetShops', selectedShopTlds.join(','))
+    
+    // Navigate to preview-create page
+    router.push(`/dashboard/sync-operations/preview-create/${encodeURIComponent(selectedProduct.default_sku)}?${params.toString()}`)
   }
 
   const handleSearchSubmit = () => {
@@ -441,6 +468,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           hideDuplicateBadges={isNullSku}
           hideShopIndicators={isNullSku}
           showShopBadge={isNullSku}
+          showCreateButton={isCreate}
+          onCreateClick={handleCreateClick}
         />
       ) : (
         <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-w-0">
@@ -452,9 +481,26 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               hideShopIndicators={isNullSku}
               showShopBadge={isNullSku}
               hideDuplicateBadges={isNullSku}
+              showCreateButton={isCreate}
+              onCreateClick={handleCreateClick}
             />
           ))}
         </div>
+      )}
+
+      {/* Target Shop Selection Dialog */}
+      {selectedProduct && (
+        <TargetShopSelectionDialog
+          open={showSelectionDialog}
+          onOpenChange={setShowSelectionDialog}
+          targetShops={Object.entries(selectedProduct.targets || {}).map(([tld, info]) => ({
+            tld,
+            name: info.shop_name,
+            status: info.status,
+          }))}
+          onConfirm={handleTargetShopConfirm}
+          productSku={selectedProduct.default_sku}
+        />
       )}
 
       {/* Pagination */}

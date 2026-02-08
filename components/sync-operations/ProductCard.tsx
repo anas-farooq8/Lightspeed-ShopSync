@@ -2,7 +2,8 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package, Layers, CheckCircle2, XCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Package, Layers, CheckCircle2, XCircle, Plus } from 'lucide-react'
 import type { SyncProduct } from './ProductListTab'
 
 interface ProductCardProps {
@@ -11,9 +12,11 @@ interface ProductCardProps {
   hideShopIndicators?: boolean
   showShopBadge?: boolean
   hideDuplicateBadges?: boolean
+  showCreateButton?: boolean
+  onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
-export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false }: ProductCardProps) {
+export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick }: ProductCardProps) {
   // Use src image for better quality in card view
   const imageUrl = product.product_image?.src || product.product_image?.thumb || null
 
@@ -120,6 +123,22 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
                   </div>
                 )
               })}
+          </div>
+        )}
+
+        {/* Create Button */}
+        {showCreateButton && (
+          <div className="pt-2 border-t border-border/50 mt-2">
+            <Button
+              className="w-full cursor-pointer bg-red-600 hover:bg-red-700 min-h-[40px] touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCreateClick?.(product, e)
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Create Product
+            </Button>
           </div>
         )}
       </CardContent>

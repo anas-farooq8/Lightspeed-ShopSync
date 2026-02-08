@@ -12,7 +12,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react'
 import type { SyncProduct } from './ProductListTab'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
@@ -27,6 +27,8 @@ interface ProductListTableProps {
   hideDuplicateBadges?: boolean
   hideShopIndicators?: boolean
   showShopBadge?: boolean
+  showCreateButton?: boolean
+  onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
 interface TargetShop {
@@ -48,6 +50,8 @@ export function ProductListTable({
   onSort,
   onProductClick,
   hideSkuColumn = false,
+  showCreateButton = false,
+  onCreateClick,
   hideDuplicateBadges = false,
   hideShopIndicators = false,
   showShopBadge = false
@@ -259,6 +263,24 @@ export function ProductListTable({
             </TableCell>
           )
         })}
+
+        {/* Actions Column */}
+        {showCreateButton && (
+          <TableCell className="text-center">
+            <Button
+              size="sm"
+              variant="default"
+              className="cursor-pointer bg-red-600 hover:bg-red-700 min-h-[36px] touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCreateClick?.(product, e)
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Create
+            </Button>
+          </TableCell>
+        )}
       </TableRow>
     )
   }
@@ -292,6 +314,11 @@ export function ProductListTable({
                     .{shop.tld}
                   </TableHead>
                 ))}
+                {showCreateButton && (
+                  <TableHead className="text-center w-[120px]">
+                    Actions
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
