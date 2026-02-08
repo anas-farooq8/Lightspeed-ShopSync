@@ -16,14 +16,14 @@ export interface VisibilityOption {
 export const VISIBILITY_OPTIONS: VisibilityOption[] = [
   {
     value: 'auto',
-    label: 'Auto',
+    label: 'Visible When in Stock',
     Icon: RefreshCw,
     iconClassName: 'text-amber-600 dark:text-amber-500',
     labelClassName: 'text-amber-700 dark:text-amber-400',
   },
   {
     value: 'visible',
-    label: 'Visible',
+    label: 'Always Visible',
     Icon: Eye,
     iconClassName: 'text-green-600 dark:text-green-500',
     labelClassName: 'text-green-700 dark:text-green-400',

@@ -11,6 +11,7 @@ import { ProductImagesGrid } from '@/components/sync-operations/ProductImagesGri
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
+import { clearProductImagesCache } from '@/lib/product-images-cache'
 
 interface Language {
   code: string
@@ -100,6 +101,11 @@ export default function ProductDetailPage() {
 
     fetchProductDetails()
   }, [productId])
+
+  // Clear product images cache when leaving this page (Back to List, etc.)
+  useEffect(() => {
+    return () => clearProductImagesCache()
+  }, [])
 
   const handleBack = () => {
     setNavigating(true)

@@ -12,6 +12,7 @@ import { ProductImagesGrid } from '@/components/sync-operations/ProductImagesGri
 import { getVisibilityOption } from '@/lib/constants/visibility'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
+import { clearProductImagesCache } from '@/lib/product-images-cache'
 
 interface Language {
   code: string
@@ -87,6 +88,8 @@ export default function ProductDetailPage() {
   // Selected product IDs for duplicates
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
   const [selectedTargetProductIds, setSelectedTargetProductIds] = useState<Record<string, number>>({})
+  // Selected target tab (when multiple targets) - TLD string
+  const [selectedTargetTab, setSelectedTargetTab] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchProductDetails() {
@@ -122,6 +125,17 @@ export default function ProductDetailPage() {
           }
         })
         setSelectedTargetProductIds(initialTargets)
+
+        // Set default target tab when multiple targets: prioritize first where product doesn't exist
+        const targetTlds = Object.keys(data.targets || {})
+          .filter(tld => (data.targets[tld] as ProductData[]).length > 0)
+          .sort((a, b) => a.localeCompare(b))
+        if (targetTlds.length > 1) {
+          const defaultTab = targetTlds.find(tld => (data.targets[tld] as ProductData[]).length === 0) ?? targetTlds[0]
+          setSelectedTargetTab(defaultTab)
+        } else {
+          setSelectedTargetTab(null)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
       } finally {
@@ -132,6 +146,11 @@ export default function ProductDetailPage() {
     fetchProductDetails()
   }, [sku, searchParams])
 
+  // Clear product images cache when leaving this page (Back to List, etc.)
+  useEffect(() => {
+    return () => clearProductImagesCache()
+  }, [])
+
   const handleBack = () => {
     setNavigating(true)
     // Preserve navigation state from URL
@@ -140,6 +159,7 @@ export default function ProductDetailPage() {
     const search = searchParams.get('search')
     const page = searchParams.get('page')
     const missingIn = searchParams.get('missingIn')
+    const existsIn = searchParams.get('existsIn')
     const onlyDuplicates = searchParams.get('onlyDuplicates')
     const sortBy = searchParams.get('sortBy')
     const sortOrder = searchParams.get('sortOrder')
@@ -151,6 +171,7 @@ export default function ProductDetailPage() {
     
     // Add tab-specific parameters
     if (missingIn) params.set('missingIn', missingIn)
+    if (existsIn) params.set('existsIn', existsIn)
     if (onlyDuplicates) params.set('onlyDuplicates', onlyDuplicates)
     
     if (sortBy) params.set('sortBy', sortBy)
@@ -189,9 +210,17 @@ export default function ProductDetailPage() {
 
   const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId) || details.source[0]
   const hasSourceDuplicates = details.source.length > 1
-  const targetCount = Object.keys(details.targets).filter(tld => details.targets[tld].length > 0).length
-  const totalPanels = 1 + targetCount // source + targets
+  const targetTlds = Object.keys(details.targets)
+    .filter(tld => details.targets[tld].length > 0)
+    .sort((a, b) => a.localeCompare(b))
+  const targetCount = targetTlds.length
   const hasTargets = targetCount > 0
+  const hasMultipleTargets = targetCount > 1
+  // Default tab for multi-target: first where product doesn't exist, else first alphabetical
+  const defaultTargetTab = hasMultipleTargets
+    ? (targetTlds.find(tld => details.targets[tld].length === 0) ?? targetTlds[0])
+    : null
+  const activeTargetTab = selectedTargetTab ?? defaultTargetTab ?? targetTlds[0]
   
   // Safety check for shop_languages
   if (!details.shop_languages || !sourceProduct?.shop_tld) {
@@ -215,55 +244,141 @@ export default function ProductDetailPage() {
   return (
     <div className="w-full h-full min-w-0">
       <LoadingShimmer show={navigating} position="top" />
-      
-      <div className="w-full p-4 sm:p-6">
-        {/* Header with Back Button and SKU */}
-        <div className="flex flex-row items-center flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-6">
-          <Button variant="outline" onClick={handleBack} className="cursor-pointer min-h-[40px] sm:min-h-0 touch-manipulation shrink-0">
-            <ArrowLeft className="h-4 w-4 mr-1.5 sm:mr-2" />
-            <span className="hidden sm:inline">Back to List</span>
-            <span className="sm:hidden">Back</span>
-          </Button>
-          <div className="text-xs sm:text-sm text-muted-foreground min-w-0">
-            SKU: <code className="text-xs sm:text-sm bg-muted px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono">{sku}</code>
+      {hasMultipleTargets ? (
+        <Tabs value={activeTargetTab} onValueChange={setSelectedTargetTab} className="w-full min-w-0">
+          <div className="w-full p-4 sm:p-6">
+            {/* Header: Back Button, SKU, and Target Tabs - all in one row */}
+      <div className="flex flex-row items-center flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <Button variant="outline" onClick={handleBack} className="cursor-pointer min-h-[40px] sm:min-h-0 touch-manipulation shrink-0">
+          <ArrowLeft className="h-4 w-4 mr-1.5 sm:mr-2" />
+          <span className="hidden sm:inline">Back to List</span>
+          <span className="sm:hidden">Back</span>
+        </Button>
+        <div className="text-xs sm:text-sm text-muted-foreground min-w-0">
+          SKU: <code className="text-xs sm:text-sm bg-muted px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono">{sku}</code>
+        </div>
+        {hasMultipleTargets && (
+          <div className="ml-auto shrink-0">
+            <TabsList className="flex gap-0.5 sm:gap-1 border border-border rounded-md p-0.5 sm:p-1.5 md:p-2 bg-muted/50 h-auto">
+              {targetTlds.map(tld => (
+                <TabsTrigger
+                  key={tld}
+                  value={tld}
+                  className="cursor-pointer rounded-md px-2.5 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-[44px] touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
+                >
+                  .{tld}
+                </TabsTrigger>
+              ))}
+            </TabsList>
           </div>
+        )}
+      </div>
+
+      {/* Panel Layout - 2-column when targets: left=source, right=target(s) */}
+      <div className={`grid gap-4 sm:gap-6 min-w-0 ${
+        !hasTargets 
+          ? 'grid-cols-1' 
+          : 'grid-cols-1 lg:grid-cols-2'
+      }`}>
+        {/* SOURCE PANEL - always left */}
+        <div className={hasTargets ? '' : 'w-full'}>
+          <ProductPanel
+            product={sourceProduct}
+            isSource={true}
+            languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
+            hasDuplicates={hasSourceDuplicates}
+            allProducts={details.source}
+            selectedProductId={selectedSourceProductId}
+            onProductSelect={(productId) => setSelectedSourceProductId(productId)}
+            compactLayout={!hasTargets}
+          />
         </div>
 
-        {/* Panel Layout - Equal width distribution */}
-        <div className={`grid gap-4 sm:gap-6 min-w-0 ${
-          !hasTargets 
-            ? 'grid-cols-1' 
-            : totalPanels === 2 
-              ? 'grid-cols-1 lg:grid-cols-2' 
-              : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
-        }`}>
-          {/* SOURCE PANEL */}
-          <div className={hasTargets ? '' : 'w-full'}>
-            <ProductPanel
-              product={sourceProduct}
-              isSource={true}
-              languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
-              hasDuplicates={hasSourceDuplicates}
-              allProducts={details.source}
-              selectedProductId={selectedSourceProductId}
-              onProductSelect={(productId) => setSelectedSourceProductId(productId)}
-              compactLayout={!hasTargets}
-            />
+        {/* TARGET PANEL(S) - right side */}
+        {hasTargets && (
+          hasMultipleTargets ? (
+            /* Multiple targets: TabsContent only (TabsList is in header row) */
+            <div className="min-w-0">
+              {targetTlds.map(tld => {
+                const products = details.targets[tld]
+                if (products.length === 0) return null
+                const selectedProductId = selectedTargetProductIds[tld] || products[0].product_id
+                const product = products.find(p => p.product_id === selectedProductId) || products[0]
+                const hasDuplicates = products.length > 1
+                return (
+                  <TabsContent key={tld} value={tld} className="mt-0">
+                    <ProductPanel
+                      product={product}
+                      isSource={false}
+                      languages={details.shop_languages[tld] || []}
+                      hasDuplicates={hasDuplicates}
+                      allProducts={products}
+                      selectedProductId={selectedProductId}
+                      onProductSelect={(productId) => setSelectedTargetProductIds(prev => ({ ...prev, [tld]: productId }))}
+                    />
+                  </TabsContent>
+                )
+              })}
+            </div>
+          ) : (
+              /* Single target: single panel, no tabs */
+              (() => {
+                const tld = targetTlds[0]
+                const products = details.targets[tld]
+                const selectedProductId = selectedTargetProductIds[tld] || products[0].product_id
+                const product = products.find(p => p.product_id === selectedProductId) || products[0]
+                const hasDuplicates = products.length > 1
+                return (
+                  <ProductPanel
+                    product={product}
+                    isSource={false}
+                    languages={details.shop_languages[tld] || []}
+                    hasDuplicates={hasDuplicates}
+                    allProducts={products}
+                    selectedProductId={selectedProductId}
+                    onProductSelect={(productId) => setSelectedTargetProductIds(prev => ({ ...prev, [tld]: productId }))}
+                  />
+                )
+              })()
+            )
+          )}
+        </div>
+      </div>
+        </Tabs>
+      ) : (
+        <div className="w-full p-4 sm:p-6">
+          {/* Header: Back Button, SKU - no target tabs */}
+          <div className="flex flex-row items-center flex-wrap gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <Button variant="outline" onClick={handleBack} className="cursor-pointer min-h-[40px] sm:min-h-0 touch-manipulation shrink-0">
+              <ArrowLeft className="h-4 w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden sm:inline">Back to List</span>
+              <span className="sm:hidden">Back</span>
+            </Button>
+            <div className="text-xs sm:text-sm text-muted-foreground min-w-0">
+              SKU: <code className="text-xs sm:text-sm bg-muted px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono">{sku}</code>
+            </div>
           </div>
-
-          {/* TARGET PANELS */}
-          {Object.entries(details.targets)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([tld, products]) => {
-              if (products.length === 0) return null
-              
+          <div className={`grid gap-4 sm:gap-6 min-w-0 ${!hasTargets ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+            <div className={hasTargets ? '' : 'w-full'}>
+              <ProductPanel
+                product={sourceProduct}
+                isSource={true}
+                languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
+                hasDuplicates={hasSourceDuplicates}
+                allProducts={details.source}
+                selectedProductId={selectedSourceProductId}
+                onProductSelect={(productId) => setSelectedSourceProductId(productId)}
+                compactLayout={!hasTargets}
+              />
+            </div>
+            {hasTargets && (() => {
+              const tld = targetTlds[0]
+              const products = details.targets[tld]
               const selectedProductId = selectedTargetProductIds[tld] || products[0].product_id
               const product = products.find(p => p.product_id === selectedProductId) || products[0]
               const hasDuplicates = products.length > 1
-              
               return (
                 <ProductPanel
-                  key={`target-${tld}`}
                   product={product}
                   isSource={false}
                   languages={details.shop_languages[tld] || []}
@@ -273,9 +388,10 @@ export default function ProductDetailPage() {
                   onProductSelect={(productId) => setSelectedTargetProductIds(prev => ({ ...prev, [tld]: productId }))}
                 />
               )
-            })}
+            })()}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

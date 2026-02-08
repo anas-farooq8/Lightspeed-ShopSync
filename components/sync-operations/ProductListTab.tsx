@@ -52,7 +52,7 @@ interface Shop {
 }
 
 interface ProductListTabProps {
-  operation?: 'create' | 'null_sku'
+  operation?: 'create' | 'edit' | 'null_sku'
   shops: Shop[]
 }
 
@@ -60,6 +60,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const router = useRouter()
   const searchParams = useSearchParams()
   const isNullSku = operation === 'null_sku'
+  const isEdit = operation === 'edit'
+  const isCreate = operation === 'create'
   
   // Products and loading states
   const [products, setProducts] = useState<SyncProduct[]>([])
@@ -91,7 +93,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     const fetchProducts = async () => {
       // Get current tab from URL
       const currentTab = searchParams.get('tab') || 'create'
-      const expectedTab = isNullSku ? 'null_sku' : 'create'
+      const expectedTab = isNullSku ? 'null_sku' : isEdit ? 'edit' : 'create'
       
       // Only fetch if this component's operation matches the active tab
       if (currentTab !== expectedTab) {
@@ -117,6 +119,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       const search = searchParams.get('search') || ''
       const page = parseInt(searchParams.get('page') || '1')
       const missingIn = searchParams.get('missingIn') || 'all'
+      const existsIn = searchParams.get('existsIn') || 'all'
       const shopFilter = searchParams.get('shopFilter') || 'all'
       const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
       const sortBy = searchParams.get('sortBy') || 'created'
@@ -138,6 +141,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
         
         if (isNullSku) {
           if (shopFilter !== 'all') apiParams.append('shopTld', shopFilter)
+        } else if (isEdit) {
+          apiParams.append('missingIn', existsIn)
+          apiParams.append('onlyDuplicates', onlyDuplicates.toString())
         } else {
           apiParams.append('missingIn', missingIn)
           apiParams.append('onlyDuplicates', onlyDuplicates.toString())
@@ -172,13 +178,14 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     const params = new URLSearchParams()
     
     // Get current tab from URL
-    const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : 'create')
+    const currentTab = searchParams.get('tab') || (isNullSku ? 'null_sku' : isEdit ? 'edit' : 'create')
     params.set('tab', currentTab)
     
     // Get current values or use new ones
     const search = newParams.search !== undefined ? String(newParams.search) : searchParams.get('search') || ''
     const page = newParams.page !== undefined ? Number(newParams.page) : parseInt(searchParams.get('page') || '1')
     const missingIn = newParams.missingIn !== undefined ? String(newParams.missingIn) : searchParams.get('missingIn') || 'all'
+    const existsIn = newParams.existsIn !== undefined ? String(newParams.existsIn) : searchParams.get('existsIn') || 'all'
     const shopFilter = newParams.shopFilter !== undefined ? String(newParams.shopFilter) : searchParams.get('shopFilter') || 'all'
     const onlyDuplicates = newParams.onlyDuplicates !== undefined ? Boolean(newParams.onlyDuplicates) : searchParams.get('onlyDuplicates') === 'true'
     const sortBy = newParams.sortBy !== undefined ? String(newParams.sortBy) : searchParams.get('sortBy') || 'created'
@@ -187,7 +194,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     // Add non-default params to URL
     if (search) params.set('search', search)
     if (page > 1) params.set('page', page.toString())
-    if (!isNullSku && missingIn !== 'all') params.set('missingIn', missingIn)
+    if (isCreate && missingIn !== 'all') params.set('missingIn', missingIn)
+    if (isEdit && existsIn !== 'all') params.set('existsIn', existsIn)
     if (isNullSku && shopFilter !== 'all') params.set('shopFilter', shopFilter)
     if (!isNullSku && onlyDuplicates) params.set('onlyDuplicates', 'true')
     if (sortBy !== 'created') params.set('sortBy', sortBy)
@@ -240,6 +248,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const handleFilterChange = (value: string) => {
     if (isNullSku) {
       updateURL({ shopFilter: value, page: 1 })
+    } else if (isEdit) {
+      updateURL({ existsIn: value, page: 1 })
     } else {
       updateURL({ missingIn: value, page: 1 })
     }
@@ -281,6 +291,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const currentSortBy = searchParams.get('sortBy') || 'created'
   const currentSortOrder = searchParams.get('sortOrder') || 'desc'
   const currentMissingIn = searchParams.get('missingIn') || 'all'
+  const currentExistsIn = searchParams.get('existsIn') || 'all'
   const currentShopFilter = searchParams.get('shopFilter') || 'all'
   const currentOnlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
 
@@ -322,12 +333,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               {/* Filter - takes remaining space */}
               <div className="flex-1 min-w-0 sm:flex-initial sm:min-w-0">
                 <Select 
-                  value={isNullSku ? currentShopFilter : currentMissingIn} 
+                  value={isNullSku ? currentShopFilter : isEdit ? currentExistsIn : currentMissingIn} 
                   onValueChange={handleFilterChange} 
                   disabled={isRefreshing}
                 >
                   <SelectTrigger className="w-full sm:w-[280px] h-9 sm:h-10 cursor-pointer min-w-0">
-                  <SelectValue placeholder={isNullSku ? "Filter by shop..." : "Missing in..."} />
+                  <SelectValue placeholder={isNullSku ? "Filter by shop..." : isEdit ? "Exists in..." : "Missing in..."} />
                 </SelectTrigger>
                 <SelectContent>
                   {isNullSku ? (
@@ -336,6 +347,15 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                       {shops.map((shop) => (
                         <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
                           {shop.shop_name} (.{shop.tld}) - {getShopRoleLabel(shop.role) || 'Target'}
+                        </SelectItem>
+                      ))}
+                    </>
+                  ) : isEdit ? (
+                    <>
+                      <SelectItem value="all" className="cursor-pointer">Exists in all shops</SelectItem>
+                      {sortShopsSourceFirstThenByTld(shops.filter(shop => shop.role === 'target')).map((shop) => (
+                        <SelectItem key={shop.shop_id} value={shop.tld} className="cursor-pointer">
+                          Exists in {shop.shop_name} (.{shop.tld}) - Target
                         </SelectItem>
                       ))}
                     </>

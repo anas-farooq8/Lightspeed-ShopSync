@@ -2,6 +2,7 @@
 
 import { useEffect, useState, memo } from 'react'
 import { Star, Package, X } from 'lucide-react'
+import { getCachedImages, setCachedImages, type ProductImage as CachedProductImage } from '@/lib/product-images-cache'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,13 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
       setImages([])
       return
     }
+    const cached = getCachedImages(imagesLink, shopTld)
+    if (cached) {
+      setImages(cached)
+      setLoading(false)
+      setError(null)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -49,6 +57,7 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
           const sorted = [...(Array.isArray(data) ? data : [])].sort(
             (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
           )
+          setCachedImages(imagesLink, shopTld, sorted as CachedProductImage[])
           setImages(sorted)
         }
       })

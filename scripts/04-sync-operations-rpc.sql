@@ -43,6 +43,9 @@
 --     - p_missing_in='be'   → missing in shop 'be' only
 --     - p_missing_in=NULL   → missing in at least one target
 --   EDIT: Products that exist in at least one target
+--     - p_missing_in='all'  → exists in ALL targets
+--     - p_missing_in='be'   → exists in shop 'be' only
+--     - p_missing_in=NULL   → exists in at least one target (default)
 --
 -- PAGINATION:
 --   Groups by SKU before pagination. All products with same SKU stay on same page.
@@ -53,7 +56,7 @@ DROP FUNCTION IF EXISTS get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, TEX
 
 CREATE OR REPLACE FUNCTION get_sync_operations(
   p_operation TEXT,              -- 'create' | 'edit'
-  p_missing_in TEXT DEFAULT NULL, -- 'all' | shop TLD | NULL
+  p_missing_in TEXT DEFAULT NULL, -- For CREATE: 'all' | shop TLD | NULL; For EDIT: 'all' | shop TLD | NULL (exists in)
   p_search TEXT DEFAULT NULL,
   p_only_duplicates BOOLEAN DEFAULT FALSE,
   p_sort_by TEXT DEFAULT 'created',
@@ -147,9 +150,16 @@ BEGIN
             WHERE t.v->>'status' = 'not_exists'
           ))
         ))
-        OR (p_operation = 'edit' AND EXISTS (
-          SELECT 1 FROM jsonb_each(pss.targets) AS t(k, v)
-          WHERE t.v->>'status' IN ('exists_single', 'exists_multiple')
+        OR (p_operation = 'edit' AND (
+          (p_missing_in = 'all' AND NOT EXISTS (
+            SELECT 1 FROM jsonb_each(pss.targets) AS t(k, v)
+            WHERE t.v->>'status' = 'not_exists'
+          ))
+          OR (p_missing_in != 'all' AND p_missing_in IS NOT NULL AND pss.targets->p_missing_in->>'status' IN ('exists_single', 'exists_multiple'))
+          OR (p_missing_in IS NULL AND EXISTS (
+            SELECT 1 FROM jsonb_each(pss.targets) AS t(k, v)
+            WHERE t.v->>'status' IN ('exists_single', 'exists_multiple')
+          ))
         ))
       )
   ),

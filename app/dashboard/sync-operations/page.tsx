@@ -83,8 +83,7 @@ export default function SyncOperationsPage() {
             </TabsTrigger>
             <TabsTrigger
               value="edit"
-              className="flex-1 cursor-pointer rounded-md px-2 py-1.5 sm:px-5 sm:py-2.5 md:px-10 md:py-4 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-0 touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=inactive]:text-muted-foreground/60 disabled:opacity-50"
-              disabled
+              className="flex-1 cursor-pointer rounded-md px-2 py-1.5 sm:px-5 sm:py-2.5 md:px-10 md:py-4 text-xs sm:text-sm md:text-base font-medium transition-all duration-200 ease-out min-h-[36px] sm:min-h-[40px] md:min-h-0 touch-manipulation data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm hover:data-[state=active]:bg-red-700 data-[state=inactive]:text-muted-foreground hover:data-[state=inactive]:text-foreground/80"
             >
               Edit
             </TabsTrigger>
@@ -104,9 +103,7 @@ export default function SyncOperationsPage() {
             )}
             {activeTab === 'edit' && (
               <div key="edit" className="animate-in fade-in-50 slide-in-from-bottom-2 duration-200 ease-out">
-                <div className="text-center py-8 sm:py-12 text-sm sm:text-base text-muted-foreground px-4">
-                  Edit tab - Coming soon
-                </div>
+                <ProductListTab operation="edit" shops={shops} />
               </div>
             )}
             {activeTab === 'null_sku' && (

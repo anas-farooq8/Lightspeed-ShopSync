@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     // Filters
     const operation = searchParams.get('operation') || 'create' // create, edit, null_sku
     const missingIn = searchParams.get('missingIn') || 'all' // all (default), or specific shop TLD (for create)
+    const existsIn = searchParams.get('existsIn') || 'all' // all (default), or specific shop TLD (for edit)
     const shopTld = searchParams.get('shopTld') || '' // For null_sku operation
     const search = searchParams.get('search') || ''
     const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     // Call optimized RPC function for CREATE and EDIT operations
     const { data, error } = await supabase.rpc('get_sync_operations', {
       p_operation: operation,
-      p_missing_in: operation === 'create' ? missingIn : null,
+      p_missing_in: operation === 'create' ? missingIn : operation === 'edit' ? existsIn : null,
       p_search: search || null,
       p_only_duplicates: onlyDuplicates,
       p_sort_by: sortBy,
