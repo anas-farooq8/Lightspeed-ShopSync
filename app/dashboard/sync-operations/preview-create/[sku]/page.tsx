@@ -33,6 +33,32 @@ function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
   return (a.src || '') === (b.src || '')
 }
 
+/** Normalize HTML so Quill output and source content compare equal when semantically the same */
+function normalizeHtmlForComparison(html: string): string {
+  if (!html || typeof html !== 'string') return ''
+  let s = html.trim()
+  if (!s) return ''
+  // Remove class, style, data-* attributes (Quill and CMS add these)
+  s = s.replace(/\s+class="[^"]*"/gi, '').replace(/\s+class='[^']*'/gi, '')
+  s = s.replace(/\s+style="[^"]*"/gi, '').replace(/\s+style='[^']*'/gi, '')
+  s = s.replace(/\s+data-[a-z-]+="[^"]*"/gi, '').replace(/\s+data-[a-z-]+='[^']*'/gi, '')
+  // Empty blocks and br-only paragraphs
+  s = s.replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '')
+  s = s.replace(/<p>\s*<\/p>/gi, '')
+  s = s.replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, '')
+  s = s.replace(/<div>\s*<\/div>/gi, '')
+  // Any empty tag
+  s = s.replace(/<(\w+)>\s*<\/\1>/gi, '')
+  // Whitespace between tags
+  s = s.replace(/>\s+</g, '><')
+  // Collapse multiple spaces/newlines to single space inside text (between tags we already collapsed)
+  s = s.replace(/\s+/g, ' ')
+  // Normalize <br>, <br/>, <br />
+  s = s.replace(/<br\s*\/?>\s*/gi, '<br>')
+  // Trim again and remove space-only text nodes (optional: we collapsed to single space so "> <" becomes "><" in next step - but we already did >\s+< so ">  \n  <" is "><". So space is only inside text. Leave it.)
+  return s.trim()
+}
+
 
 export default function PreviewCreatePage() {
   const params = useParams()
@@ -166,14 +192,14 @@ export default function PreviewCreatePage() {
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
 
-    const sourceDefaultLang = data.shop_languages[sourceProduct.shop_tld]?.find(l => l.is_default)?.code || 'nl'
+    const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.shop_tld] ?? []
     
     const newTargetData: Record<string, EditableTargetData> = {}
     const newActiveLanguages: Record<string, string> = {}
 
     targetShopTlds.forEach(tld => {
-      const targetLanguages = data.shop_languages[tld] || []
+      const targetLanguages = data.shops[tld]?.languages ?? []
       const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
       
       const content_by_language: Record<string, ProductContent> = {}
@@ -241,7 +267,7 @@ export default function PreviewCreatePage() {
     // Store initial content for comparison
     const initialContent: Record<string, Record<string, string>> = {}
     targetShopTlds.forEach(tld => {
-      const targetLanguages = data.shop_languages[tld] || []
+      const targetLanguages = data.shops[tld]?.languages ?? []
       const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang]
       initialContent[tld] = {}
       targetLanguages.forEach(lang => {
@@ -262,35 +288,12 @@ export default function PreviewCreatePage() {
         sourceValue = initialContentRef.current[tld]?.[langCode] || ''
       } else {
         const sourceProduct = details?.source.find(p => p.product_id === selectedSourceProductId)
-        const sourceDefaultLang = details?.shop_languages[sourceProduct?.shop_tld || 'nl']?.find(l => l.is_default)?.code || 'nl'
+        const sourceDefaultLang = details?.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code || 'nl'
         sourceValue = sourceProduct?.content_by_language?.[sourceDefaultLang]?.[field] || ''
       }
       
-      // Normalize HTML content for comparison (ReactQuill can add extra formatting)
-      const normalizeHtml = (html: string) => {
-        if (!html) return ''
-        return html
-          .trim()
-          // Remove empty paragraphs with br
-          .replace(/<p><br\s*\/?><\/p>/gi, '')
-          // Remove empty paragraphs
-          .replace(/<p>\s*<\/p>/gi, '')
-          // Remove empty tags
-          .replace(/<(\w+)>\s*<\/\1>/gi, '')
-          // Normalize whitespace between tags
-          .replace(/>\s+</g, '><')
-          // Normalize multiple spaces to single space
-          .replace(/\s+/g, ' ')
-          // Normalize self-closing tags
-          .replace(/<br\s*\/?>/gi, '<br>')
-          // Remove trailing/leading whitespace in tags
-          .replace(/<(\w+)>\s+/gi, '<$1>')
-          .replace(/\s+<\/(\w+)>/gi, '</$1>')
-          .trim()
-      }
-      
-      const normalizedValue = field === 'content' ? normalizeHtml(value) : value
-      const normalizedSource = field === 'content' ? normalizeHtml(sourceValue) : sourceValue
+      const normalizedValue = field === 'content' ? normalizeHtmlForComparison(value) : value
+      const normalizedSource = field === 'content' ? normalizeHtmlForComparison(sourceValue) : sourceValue
       
       const isChanged = normalizedValue !== normalizedSource
       const fieldKey = `${langCode}.${field}`
@@ -412,7 +415,7 @@ export default function PreviewCreatePage() {
       const updated = { ...prev }
       if (!updated[tld]) return prev
       
-      const targetLanguages = details.shop_languages[tld] || []
+      const targetLanguages = details.shops[tld]?.languages ?? []
       const newVariant: EditableVariant = {
         variant_id: Date.now(),
         temp_id: `new-${Date.now()}`,
@@ -700,7 +703,7 @@ export default function PreviewCreatePage() {
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
     
-    const sourceDefaultLang = details.shop_languages[sourceProduct.shop_tld]?.find(l => l.is_default)?.code || 'nl'
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     const sourceValue = sourceProduct.content_by_language?.[sourceDefaultLang]?.[field]
     
     updateField(tld, langCode, field, sourceValue || '')
@@ -712,7 +715,7 @@ export default function PreviewCreatePage() {
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
     
-    const sourceDefaultLang = details.shop_languages[sourceProduct.shop_tld]?.find(l => l.is_default)?.code || 'nl'
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     
     setTargetData(prev => {
       const updated = { ...prev }
@@ -771,8 +774,8 @@ export default function PreviewCreatePage() {
       const sourceVariant = sourceProduct.variants.find(v => v.variant_id === variant.variant_id)
       if (!sourceVariant) return prev
       
-      const sourceDefaultLang = details.shop_languages[sourceProduct.shop_tld]?.find(l => l.is_default)?.code || 'nl'
-      const targetLanguages = details.shop_languages[tld] || []
+      const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+      const targetLanguages = details.shops[tld]?.languages ?? []
       
       const newVariants = [...updated[tld].variants]
       newVariants[variantIndex] = {
@@ -814,8 +817,8 @@ export default function PreviewCreatePage() {
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
     
-    const sourceDefaultLang = details.shop_languages[sourceProduct.shop_tld]?.find(l => l.is_default)?.code || 'nl'
-    const targetLanguages = details.shop_languages[tld] || []
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const targetLanguages = details.shops[tld]?.languages ?? []
     
     setTargetData(prev => {
       const updated = { ...prev }
@@ -918,7 +921,7 @@ export default function PreviewCreatePage() {
               <div>
                 <SourcePanel
                   product={sourceProduct}
-                  languages={details.shop_languages[sourceProduct.shop_tld] || []}
+                  languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
                   hasDuplicates={hasSourceDuplicates}
                   allProducts={details.source}
                   selectedProductId={selectedSourceProductId}
@@ -931,9 +934,9 @@ export default function PreviewCreatePage() {
                 <TabsContent key={tld} value={tld} className="mt-0">
                   <TargetPanel
                     shopTld={tld}
-                    shopName={details.targets[tld]?.[0]?.shop_name || tld}
-                    baseUrl={details.targets[tld]?.[0]?.base_url || ''}
-                    languages={details.shop_languages[tld] || []}
+                    shopName={details.shops?.[tld]?.name ?? details.targets[tld]?.[0]?.shop_name ?? tld}
+                    baseUrl={details.shops?.[tld]?.base_url ?? details.targets[tld]?.[0]?.base_url ?? ''}
+                    languages={details.shops[tld]?.languages ?? []}
                     data={targetData[tld]}
                     productImages={productImages[sourceProduct.shop_tld] || []}
                     activeLanguage={activeLanguages[tld] || ''}
@@ -981,7 +984,7 @@ export default function PreviewCreatePage() {
           <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
             <SourcePanel
               product={sourceProduct}
-              languages={details.shop_languages[sourceProduct.shop_tld] || []}
+              languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
               hasDuplicates={hasSourceDuplicates}
               allProducts={details.source}
               selectedProductId={selectedSourceProductId}
@@ -990,9 +993,9 @@ export default function PreviewCreatePage() {
             />
             <TargetPanel
               shopTld={sortedTargetShops[0]}
-              shopName={details.targets[sortedTargetShops[0]]?.[0]?.shop_name || sortedTargetShops[0]}
-              baseUrl={details.targets[sortedTargetShops[0]]?.[0]?.base_url || ''}
-              languages={details.shop_languages[sortedTargetShops[0]] || []}
+              shopName={details.shops?.[sortedTargetShops[0]]?.name ?? details.targets[sortedTargetShops[0]]?.[0]?.shop_name ?? sortedTargetShops[0]}
+              baseUrl={details.shops?.[sortedTargetShops[0]]?.base_url ?? details.targets[sortedTargetShops[0]]?.[0]?.base_url ?? ''}
+              languages={details.shops[sortedTargetShops[0]]?.languages ?? []}
               data={targetData[sortedTargetShops[0]]}
               productImages={productImages[sourceProduct?.shop_tld || ''] || []}
               activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}

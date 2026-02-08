@@ -9,6 +9,8 @@ interface LanguageContentTabsProps {
   baseUrl?: string
   onLanguageChange?: (language: string) => void
   className?: string
+  /** When false, slug/url is hidden (e.g. source panel on create-preview) */
+  showSlug?: boolean
 }
 
 export function LanguageContentTabs({
@@ -16,7 +18,8 @@ export function LanguageContentTabs({
   content,
   baseUrl,
   onLanguageChange,
-  className = ''
+  className = '',
+  showSlug = true
 }: LanguageContentTabsProps) {
   const sortedLanguages = [...languages].sort((a, b) => {
     if (a.is_default && !b.is_default) return -1
@@ -57,7 +60,7 @@ export function LanguageContentTabs({
         const langContent = content[lang.code] || {}
         return (
           <TabsContent key={lang.code} value={lang.code} className="space-y-4 mt-0">
-            {langContent.url && (
+            {showSlug && langContent.url && (
               <div className="min-w-0 overflow-hidden">
                 <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Slug:</label>
                 <div className="text-sm sm:text-base font-mono truncate" title={langContent.url}>

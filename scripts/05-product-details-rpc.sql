@@ -26,10 +26,10 @@
 --   p_sku:                  SKU to search (required, trimmed)
 --   p_preferred_product_id: Optional product ID to prioritize in source (must be > 0)
 --
--- Returns: TABLE(source JSONB, targets JSONB, shop_languages JSONB)
---   source:          Array of ALL source products with this SKU
---   targets:         Object keyed by TLD, each value array of products
---   shop_languages:  Languages config per shop
+-- Returns: TABLE(source JSONB, targets JSONB, shops JSONB)
+--   source:   Array of ALL source products with this SKU
+--   targets:  Object keyed by TLD, each value array of products
+--   shops:    Object keyed by TLD, each value { name, base_url, languages }
 --
 -- =====================================================
 
@@ -42,7 +42,7 @@ CREATE OR REPLACE FUNCTION get_product_details_by_sku(
 RETURNS TABLE (
     source JSONB,
     targets JSONB,
-    shop_languages JSONB
+    shops JSONB
 )
 LANGUAGE plpgsql
 STABLE
@@ -264,10 +264,21 @@ BEGIN
         ) target_groups
         ) AS targets,
         
-        -- SHOP LANGUAGES configuration
-        (SELECT jsonb_object_agg(tld, languages)
-        FROM all_shop_languages
-        ) AS shop_languages;
+        -- SHOPS: one object per TLD with name, base_url, languages
+        (SELECT COALESCE(
+            jsonb_object_agg(
+                s.tld,
+                jsonb_build_object(
+                    'name', s.name,
+                    'base_url', s.base_url,
+                    'languages', COALESCE(ash.languages, '[]'::jsonb)
+                )
+            ),
+            '{}'::jsonb
+        )
+        FROM all_shops s
+        LEFT JOIN all_shop_languages ash ON ash.tld = s.tld
+        ) AS shops;
 END;
 $$;
 
@@ -428,7 +439,7 @@ GRANT EXECUTE ON FUNCTION get_product_details_by_product_id(BIGINT) TO authentic
 --         "be": [{"shop_id": "uuid", "product_id": 54321, "sku": "SKU-001", ...}],
 --         "de": [{...}]
 --       },
---       "shop_languages":       {"nl": [...], "be": [...], "de": [...]}
+--       "shops": {"nl": {"name": "...", "base_url": "...", "languages": [...]}, "be": {...}, "de": {...}}
 --     }
 --
 -- By Product ID (NULL SKU tab):

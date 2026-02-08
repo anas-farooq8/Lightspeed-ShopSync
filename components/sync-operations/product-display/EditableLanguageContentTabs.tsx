@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,12 +52,51 @@ export function EditableLanguageContentTabs({
 
   const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
+  const contentWrapperRef = useRef<HTMLDivElement>(null)
+
+  const toolbarTitles: Record<string, string> = {
+    'ql-bold': 'Bold',
+    'ql-italic': 'Italic',
+    'ql-underline': 'Underline',
+    'ql-strike': 'Strikethrough',
+    'ql-list': 'List',
+    'ql-ordered': 'Ordered list',
+    'ql-bullet': 'Bullet list',
+    'ql-color': 'Text color',
+    'ql-background': 'Highlight',
+    'ql-link': 'Insert link',
+    'ql-image': 'Insert image',
+    'ql-clean': 'Clear formatting',
+    'ql-header': 'Heading',
+  }
+
+  useEffect(() => {
+    const el = contentWrapperRef.current
+    if (!el) return
+    el.querySelectorAll('.ql-toolbar').forEach((toolbar) => {
+      toolbar.querySelectorAll('button, .ql-picker-label, .ql-picker-item').forEach((btn) => {
+      const el = btn as HTMLElement
+      if (el.hasAttribute('title')) return
+      for (const [cls, title] of Object.entries(toolbarTitles)) {
+        if (el.classList.contains(cls) || el.closest(`.${cls}`)) {
+          el.setAttribute('title', title)
+          break
+        }
+      }
+      if (!el.getAttribute('title')) {
+        if (el.classList.contains('ql-picker-label')) el.setAttribute('title', (el.parentElement?.classList.contains('ql-header') ? 'Heading' : el.textContent?.trim() || 'Options'))
+        else if (el.classList.contains('ql-picker-item')) el.setAttribute('title', el.textContent?.trim() || '')
+      }
+      })
+    })
+  }, [activeLanguage, content])
 
   if (sortedLanguages.length === 0) return null
 
   const hasLanguageChanges = Array.from(dirtyFields).some(f => f.startsWith(`${activeLanguage}.`))
 
   return (
+    <div ref={contentWrapperRef} className="w-full min-w-0">
     <Tabs value={activeLanguage} onValueChange={setActiveLanguage} className="w-full min-w-0">
       <div className="flex items-center justify-between mb-2 sm:mb-3">
         <TabsList className="flex-1 h-9 sm:h-10 flex p-0.5 sm:p-1 items-stretch gap-0">
@@ -181,10 +220,12 @@ export function EditableLanguageContentTabs({
                   </Button>
                 )}
               </div>
-              <div className={cn(
-                "rounded-md overflow-hidden border",
-                dirtyFields.has(`${lang.code}.content`) ? 'border-amber-500' : 'border-border'
-              )}>
+              <div
+                className={cn(
+                  "rounded-md overflow-hidden border",
+                  dirtyFields.has(`${lang.code}.content`) ? 'border-amber-500' : 'border-border'
+                )}
+              >
                 <ReactQuill
                   value={langContent.content || ''}
                   onChange={(value) => onUpdateField(lang.code, 'content', value)}
@@ -210,5 +251,6 @@ export function EditableLanguageContentTabs({
         )
       })}
     </Tabs>
+    </div>
   )
 }

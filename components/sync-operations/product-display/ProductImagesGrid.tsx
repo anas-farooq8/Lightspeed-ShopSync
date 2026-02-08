@@ -89,9 +89,9 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
   return (
     <>
       <div className={cn("grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3", className)}>
-        {images.map((img) => {
+        {images.map((img, index) => {
           const src = img.src ?? img.thumb
-          const isPrimary = img.sortOrder === 1
+          const isPrimary = index === 0
           return (
             <div
               key={img.id}

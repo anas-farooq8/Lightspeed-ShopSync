@@ -146,7 +146,7 @@ export interface SyncLog {
 export interface ProductDetails {
   source: ProductData
   targets: ProductData[]
-  shop_languages: Record<string, Language[]>
+  shops: Record<string, { name: string; base_url: string; languages: Language[] }>
 }
 
 /**

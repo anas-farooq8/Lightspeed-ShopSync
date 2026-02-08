@@ -120,7 +120,7 @@ export default function ProductDetailPage() {
     : null
   const activeTargetTab = selectedTargetTab ?? defaultTargetTab ?? targetTlds[0]
   
-  if (!details.shop_languages || !sourceProduct?.shop_tld) {
+  if (!details.shops || !sourceProduct?.shop_tld) {
     return (
       <div className="w-full h-full p-4 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-4">
@@ -155,7 +155,7 @@ export default function ProductDetailPage() {
                 <ProductPanel
                   product={sourceProduct}
                   isSource={true}
-                  languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
+                  languages={details.shops?.[sourceProduct.shop_tld]?.languages ?? []}
                   hasDuplicates={hasSourceDuplicates}
                   allProducts={details.source}
                   selectedProductId={selectedSourceProductId}
@@ -177,7 +177,7 @@ export default function ProductDetailPage() {
                         <ProductPanel
                           product={product}
                           isSource={false}
-                          languages={details.shop_languages[tld] || []}
+                          languages={details.shops?.[tld]?.languages ?? []}
                           hasDuplicates={hasDuplicates}
                           allProducts={products}
                           selectedProductId={selectedProductId}
@@ -202,7 +202,7 @@ export default function ProductDetailPage() {
               <ProductPanel
                 product={sourceProduct}
                 isSource={true}
-                languages={(details.shop_languages && sourceProduct?.shop_tld) ? (details.shop_languages[sourceProduct.shop_tld] || []) : []}
+                languages={details.shops?.[sourceProduct.shop_tld]?.languages ?? []}
                 hasDuplicates={hasSourceDuplicates}
                 allProducts={details.source}
                 selectedProductId={selectedSourceProductId}
@@ -220,7 +220,7 @@ export default function ProductDetailPage() {
                 <ProductPanel
                   product={product}
                   isSource={false}
-                  languages={details.shop_languages[tld] || []}
+                  languages={details.shops?.[tld]?.languages ?? []}
                   hasDuplicates={hasDuplicates}
                   allProducts={products}
                   selectedProductId={selectedProductId}

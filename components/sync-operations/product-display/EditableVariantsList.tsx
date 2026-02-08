@@ -134,7 +134,7 @@ export function EditableVariantsList({
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex gap-2">
                   <Input
-                    value={variant.sku}
+                    value={variant.sku ?? ''}
                     onChange={(e) => onUpdateVariant(idx, 'sku', e.target.value)}
                     placeholder="SKU"
                     className="h-8 text-xs flex-1 cursor-text"

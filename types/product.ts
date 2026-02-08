@@ -58,10 +58,17 @@ export interface ProductData {
   languages?: Language[]
 }
 
+export interface ShopInfo {
+  name: string
+  base_url: string
+  languages: Language[]
+}
+
 export interface ProductDetails {
   source: ProductData[]
   targets: Record<string, ProductData[]>
-  shop_languages: Record<string, Language[]>
+  /** Per-TLD shop info: name, base_url, languages */
+  shops: Record<string, ShopInfo>
 }
 
 export interface ProductImage {

@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import type { TargetShopInfo } from './ProductListTab'
+import type { TargetShopInfo } from '../product-list/ProductListTab'
 
 interface TargetShop {
   tld: string

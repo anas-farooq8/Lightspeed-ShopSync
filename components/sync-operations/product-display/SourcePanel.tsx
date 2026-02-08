@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package, ExternalLink } from 'lucide-react'
+import { Package, ExternalLink, Star } from 'lucide-react'
 import { ProductImagesGrid } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LanguageContentTabs } from '@/components/sync-operations/product-display/LanguageContentTabs'
 import { VariantsList } from '@/components/sync-operations/product-display/VariantsList'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
+import { getVisibilityOption } from '@/lib/constants/visibility'
 import { toSafeExternalHref } from '@/lib/utils'
 import type { ProductData, Language, ProductImage } from '@/types/product'
 
@@ -42,6 +43,7 @@ export function SourcePanel({
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
 
   const content = product.content_by_language || {}
+  const visibilityInfo = getVisibilityOption(product.visibility)
 
   return (
     <Card className="border-border/50 flex flex-col h-fit overflow-hidden">
@@ -90,6 +92,15 @@ export function SourcePanel({
           </div>
           <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-2 sm:gap-x-6 gap-y-2 sm:gap-y-4 text-[13px] sm:text-sm md:text-base">
             <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
+              <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Visibility</span>
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <visibilityInfo.Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${visibilityInfo.iconClassName}`} />
+                <span className={`font-medium ${visibilityInfo.labelClassName || visibilityInfo.iconClassName}`}>
+                  {visibilityInfo.label}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
               <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Price</span>
               <div className="font-medium">€{defaultVariant?.price_excl?.toFixed(2) || '0.00'}</div>
             </div>
@@ -97,7 +108,7 @@ export function SourcePanel({
               <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Variants</span>
               <div className="font-medium">{product.variant_count}</div>
             </div>
-            <div className="flex flex-col items-start sm:items-center justify-center sm:text-center col-span-2">
+            <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
               <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Created</span>
               <div className="font-medium">
                 {new Date(product.ls_created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -113,6 +124,7 @@ export function SourcePanel({
               content={content}
               baseUrl={product.base_url}
               onLanguageChange={setActiveLanguage}
+              showSlug={false}
             />
           </div>
         )}
@@ -126,20 +138,30 @@ export function SourcePanel({
           {productImages.length > 0 && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                {productImages.map(img => (
-                  <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden border border-border bg-muted">
-                    {img.title && (
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                        <div className="relative px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg">
-                          {img.title}
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]" />
-                        </div>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {[...productImages]
+                  .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+                  .map((img, index) => {
+                    const isDefault = index === 0
+                    return (
+                      <div key={img.id} className="group relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-lg overflow-hidden border border-border bg-muted">
+                        {img.title && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            <div className="relative px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg">
+                              {img.title}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]" />
+                            </div>
+                          </div>
+                        )}
+                        <img src={img.src || img.thumb} alt={img.title || ''} className="w-full h-full object-cover" />
+                        {isDefault && (
+                          <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
+                            <Star className="h-3 w-3 fill-white text-white shrink-0" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <img src={img.src || img.thumb} alt={img.title || ''} className="w-full h-full object-cover" />
-                  </div>
-                ))}
+                    )
+                  })}
               </div>
             </div>
           )}
