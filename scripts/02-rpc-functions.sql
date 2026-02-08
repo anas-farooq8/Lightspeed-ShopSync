@@ -168,7 +168,7 @@ GRANT EXECUTE ON FUNCTION get_dashboard_kpis() TO authenticated;
 -- Characteristics:
 --   - Uses GROUP BY for efficiency (better than DISTINCT)
 --   - Window function (COUNT(*) OVER()) eliminates separate count query
---   - Leverages expression index on DATE(started_at)
+--   - Leverages expression index on (started_at AT TIME ZONE 'UTC')::date
 --   - Type-safe enum handling with ::text cast
 --   - Supports NULL filters for "all" queries
 --
@@ -220,12 +220,12 @@ BEGIN
   
   RETURN QUERY
   SELECT 
-    DATE(started_at) as log_date,
+    (started_at AT TIME ZONE 'UTC')::date as log_date,
     COUNT(*) OVER() as total_count
   FROM sync_logs
   WHERE (p_shop_id IS NULL OR shop_id = p_shop_id)
     AND (p_status IS NULL OR status::text = p_status)
-  GROUP BY DATE(started_at)
+  GROUP BY (started_at AT TIME ZONE 'UTC')::date
   ORDER BY log_date DESC
   LIMIT p_limit
   OFFSET p_offset;

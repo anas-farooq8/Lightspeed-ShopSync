@@ -88,11 +88,12 @@ function ProductImagesGridInner({ imagesLink, shopTld, className }: ProductImage
               key={img.id}
               className="group relative"
             >
-              {/* Title on hover - tooltip above image with caret */}
+              {/* Title on hover - tooltip above image with bottom arrow (screenshot style) */}
               {img.title && (
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none flex flex-col items-center">
-                  <div className="relative px-3 py-2 rounded-lg bg-gray-800 text-white text-xs sm:text-sm font-medium shadow-lg whitespace-nowrap max-w-[calc(100vw-2rem)] overflow-hidden text-ellipsis after:content-[''] after:absolute after:top-full after:left-1/2 after:-translate-x-1/2 after:w-0 after:h-0 after:border-[6px] after:border-solid after:border-transparent after:border-t-gray-800">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="relative px-3.5 py-2 rounded bg-[#2d2d2d] text-white text-sm font-medium whitespace-nowrap shadow-lg">
                     {img.title}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-[6px] border-solid border-transparent border-t-[#2d2d2d]" />
                   </div>
                 </div>
               )}

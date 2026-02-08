@@ -275,8 +275,9 @@ create table sync_logs (
 CREATE INDEX idx_sync_logs_started_at ON sync_logs(started_at DESC);
 -- For shop-specific queries
 CREATE INDEX idx_sync_logs_shop_started ON sync_logs(shop_id, started_at DESC);
--- For the GROUP BY DATE query (critical for performance)
-CREATE INDEX idx_sync_logs_started_date ON sync_logs(DATE(started_at) DESC);
+-- For the GROUP BY date query (critical for performance)
+-- Uses (started_at AT TIME ZONE 'UTC')::date because DATE() is not IMMUTABLE on timestamptz
+CREATE INDEX idx_sync_logs_started_date ON sync_logs(((started_at AT TIME ZONE 'UTC')::date) DESC);
 -- For combined shop + status filters
 CREATE INDEX idx_sync_logs_shop_status_started ON sync_logs(shop_id, status, started_at DESC);
 
