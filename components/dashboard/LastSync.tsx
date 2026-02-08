@@ -64,29 +64,50 @@ export function LastSync() {
         <Card className="border-border/50 overflow-hidden">
           <CardContent className="p-0">
             <div className="divide-y divide-border">
-              {[1, 2].map((i) => (
-                <div key={i} className="p-3 sm:p-4 animate-pulse">
-                  <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                    <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted shrink-0" />
-                    <div className="flex-1 space-y-1">
-                      <div className="h-4 bg-muted rounded w-1/3" />
-                      <div className="h-3 bg-muted rounded w-1/4" />
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="p-3 sm:p-4 animate-pulse min-w-0 overflow-hidden">
+                  {/* Shop Header - matches flex flex-col sm:flex-row sm:items-center sm:justify-between */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-1 overflow-hidden">
+                        {/* Shop name (e.g. VerpakkingenXL) */}
+                        <div className="h-4 sm:h-[1.0625rem] bg-muted rounded w-3/4 sm:w-2/3 max-w-full" />
+                        {/* Source (e.g. source · .nl) */}
+                        <div className="h-3 bg-muted rounded w-24" />
+                      </div>
                     </div>
-                    <div className="h-4 bg-muted rounded w-16" />
+                    <div className="h-4 bg-muted rounded w-16 shrink-0 self-start sm:self-center" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                    <div className="space-y-1">
-                      <div className="h-3 bg-muted rounded w-16" />
-                      <div className="h-4 bg-muted rounded w-full" />
+                  {/* Sync Details - matches space-y-2 sm:space-y-3 with 3 sections */}
+                  <div className="space-y-2 sm:space-y-3 text-xs sm:text-sm min-w-0">
+                    {/* Started & Completed */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 min-w-0">
+                      <div>
+                        <div className="h-3 bg-muted rounded w-14 mb-0.5" />
+                        <div className="h-4 bg-muted rounded w-full" />
+                      </div>
+                      <div>
+                        <div className="h-3 bg-muted rounded w-20 mb-0.5" />
+                        <div className="h-4 bg-muted rounded w-full" />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="h-3 bg-muted rounded w-20" />
-                      <div className="h-4 bg-muted rounded w-full" />
+                    {/* Products & Variants */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 min-w-0">
+                      <div>
+                        <div className="h-3 bg-muted rounded w-16 mb-0.5" />
+                        <div className="h-4 bg-muted rounded w-full" />
+                      </div>
+                      <div>
+                        <div className="h-3 bg-muted rounded w-14 mb-0.5" />
+                        <div className="h-4 bg-muted rounded w-full" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <div className="h-3 bg-muted rounded w-24" />
-                    <div className="h-4 bg-muted rounded w-32" />
+                    {/* Duration */}
+                    <div>
+                      <div className="h-3 bg-muted rounded w-14 mb-0.5" />
+                      <div className="h-4 bg-muted rounded w-12" />
+                    </div>
                   </div>
                 </div>
               ))}

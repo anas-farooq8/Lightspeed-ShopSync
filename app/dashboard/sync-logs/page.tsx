@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { SyncLog } from '@/types/database'
-import { SyncLogCard } from '@/components/dashboard/SyncLogCard'
+import { SyncLogCard, SyncLogCardSkeleton } from '@/components/dashboard/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RefreshCw, AlertCircle, Filter, ChevronDown, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
 
 const ITEMS_PER_DATE = 20
@@ -179,18 +178,50 @@ export default function SyncLogsPage() {
   return (
     <div className="w-full h-full p-4 sm:p-5 md:p-6">
       <div className="max-w-full mx-auto min-w-0">
-        {/* Global Loading Shimmer */}
-        <LoadingShimmer show={isFilterLoading} position="top" />
-        
         <SyncLogsPageHeader />
 
         {loading && syncLogs.length === 0 ? (
-          <div className="flex items-center justify-center min-h-[calc(100vh-220px)] sm:min-h-[calc(100vh-200px)]">
-            <div className="text-center px-4">
-              <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-spin mx-auto mb-2" />
-              <p className="text-xs sm:text-sm text-muted-foreground">Loading sync logs...</p>
+          <>
+            {/* Filter row skeleton - matches SelectTrigger flex-1 min-w-0 sm:flex-initial sm:w-[180px] */}
+            <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="h-9 sm:h-10 bg-muted rounded-md flex-1 min-w-[140px] sm:flex-initial sm:w-[180px] animate-pulse" />
+              <div className="h-9 sm:h-10 bg-muted rounded-md flex-1 min-w-[140px] sm:flex-initial sm:w-[180px] animate-pulse" />
             </div>
-          </div>
+
+            {/* Date groups skeleton - first expanded (latest), rest collapsed */}
+            <div className="space-y-2 sm:space-y-3">
+              {[1, 2, 3].map((i) => {
+                const isExpanded = i === 1
+                return (
+                  <div key={i} className="border rounded-lg overflow-hidden min-w-0">
+                    {/* Date header skeleton */}
+                    <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-muted/50 flex items-center justify-between gap-2 min-h-[44px] animate-pulse">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
+                        )}
+                        <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+                        <div className="h-4 bg-muted rounded w-24" />
+                      </div>
+                      <div className="h-3 bg-muted rounded w-12 shrink-0" />
+                    </div>
+
+                    {/* Logs list skeleton - only first (latest) expanded */}
+                    {isExpanded && (
+                      <div className="p-3 sm:p-4 space-y-2 sm:space-y-3">
+                        <SyncLogCardSkeleton />
+                        <SyncLogCardSkeleton />
+                        <SyncLogCardSkeleton />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
         ) : (
           <>
             <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">

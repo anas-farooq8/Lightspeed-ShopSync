@@ -50,26 +50,26 @@ export function StatsCards() {
           )}
         >
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="border-border/50 animate-pulse">
+            <Card key={i} className="border-border/50 animate-pulse min-w-0 overflow-hidden">
               <CardHeader className="py-2 px-3 sm:px-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted" />
-                  <div className="flex-1 space-y-1">
-                    <div className="h-4 bg-muted rounded w-2/3" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="h-4 w-4 sm:h-5 sm:w-5 rounded bg-muted shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1 overflow-hidden">
+                    <div className="h-4 bg-muted rounded w-2/3 max-w-[200px]" />
+                    <div className="h-3 bg-muted rounded w-1/2 max-w-[140px]" />
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-1 pb-2 px-3 sm:px-4">
                 <div className="mb-1.5 sm:mb-2">
-                  <div className="h-6 sm:h-8 bg-muted rounded w-1/3" />
+                  <div className="h-6 sm:h-8 bg-muted rounded w-1/4 min-w-[48px] max-w-[80px]" />
                   <div className="h-3 bg-muted rounded w-24 mt-1" />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1 sm:space-y-1.5">
                   {[1, 2, 3, 4].map((j) => (
-                    <div key={j} className="flex justify-between">
-                      <div className="h-3 bg-muted rounded w-1/2" />
-                      <div className="h-3 bg-muted rounded w-12" />
+                    <div key={j} className="flex justify-between gap-2 min-w-0">
+                      <div className="h-3 bg-muted rounded flex-1 min-w-0 max-w-full" />
+                      <div className="h-3 bg-muted rounded w-10 shrink-0" />
                     </div>
                   ))}
                 </div>
