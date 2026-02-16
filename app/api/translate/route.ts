@@ -73,10 +73,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(results)
   } catch (error) {
     console.error('Translation API error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
       {
-        error: 'Translation failed',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       },
       { status: 500 }
     )

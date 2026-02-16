@@ -55,6 +55,7 @@ export default function PreviewCreatePage() {
   const [loading, setLoading] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop translation errors
   const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
   
   // Generate unique session ID for translation cache (cleared on unmount)
@@ -233,6 +234,7 @@ export default function PreviewCreatePage() {
 
       // Deduplicate and call translation API once
     let translationResults: any[] = []
+    let translationError: string | null = null
     if (allTranslationItems.length > 0) {
       setTranslating(true)
       try {
@@ -245,20 +247,26 @@ export default function PreviewCreatePage() {
         console.log(`✓ Translation complete`)
       } catch (error) {
         console.error('Translation failed:', error)
-        setError(`Translation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your Google Cloud API key configuration in the .env file.`)
-        setLoading(false)
-        setTranslating(false)
-        return
+        translationError = error instanceof Error ? error.message : 'Unknown error'
+        // Don't return early - continue to show source panel and target panels with error
       } finally {
         setTranslating(false)
       }
     }
 
     // Apply translations to each shop
+    const newTargetErrors: Record<string, string> = {}
     let resultIndex = 0
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
       const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
+      
+      // If translation failed, mark this shop with error and skip initialization
+      if (translationError) {
+        newTargetErrors[tld] = translationError
+        newActiveLanguages[tld] = defaultLang
+        return
+      }
       
       // Get translation results for this shop
       const shopItemCount = targetLanguages.reduce((count, lang) => {
@@ -364,6 +372,7 @@ export default function PreviewCreatePage() {
 
     setTargetData(newTargetData)
     setActiveLanguages(newActiveLanguages)
+    setTargetErrors(newTargetErrors) // Set per-shop translation errors
 
     if (options?.preserveExisting) {
       const anyDirty = Object.values(newTargetData).some(
@@ -1449,6 +1458,7 @@ export default function PreviewCreatePage() {
                     resettingField={resettingField}
                     retranslatingField={retranslatingField}
                     translating={translating}
+                    error={targetErrors[tld]}
                     sourceImages={productImages[sourceProduct.shop_tld] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
@@ -1512,6 +1522,7 @@ export default function PreviewCreatePage() {
               resettingField={resettingField}
               retranslatingField={retranslatingField}
               translating={translating}
+              error={targetErrors[sortedTargetShops[0]]}
               sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}

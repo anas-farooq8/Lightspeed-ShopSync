@@ -24,6 +24,7 @@ interface TargetPanelProps {
   resettingField?: string | null
   retranslatingField?: string | null
   translating?: boolean
+  error?: string | null
   /** Pre-fetched source images (create-preview: same metadata for all targets, no extra fetch). */
   sourceImages?: ProductImageMeta[] | null
   onLanguageChange: (lang: string) => void
@@ -66,6 +67,7 @@ export function TargetPanel({
   resettingField,
   retranslatingField,
   translating = false,
+  error = null,
   sourceImages,
   onLanguageChange,
   onUpdateField,
@@ -87,7 +89,7 @@ export function TargetPanel({
   onResetVisibility,
   onResetProductImage
 }: TargetPanelProps) {
-  if (!data) {
+  if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
     return (
       <Card className="border-border/50 flex flex-col h-fit overflow-hidden relative">
@@ -98,6 +100,45 @@ export function TargetPanel({
         </CardContent>
       </Card>
     )
+  }
+
+  if (error) {
+    // Show error state when translation failed
+    return (
+      <Card className="border-border/50 flex flex-col h-fit overflow-hidden relative border-destructive/50">
+        <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2 sm:mb-3 min-w-0">
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2 flex-wrap mb-1 sm:mb-2">
+                <span className="truncate">{shopName || 'Shop'}</span>
+                <Badge variant="outline" className="text-xs sm:text-sm shrink-0">.{shopTld}</Badge>
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary">Target</Badge>
+                <Badge variant="destructive" className="text-xs">Translation Failed</Badge>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-8 flex flex-col items-center justify-center min-h-[300px]">
+          <div className="flex flex-col items-center gap-4 max-w-md text-center">
+            <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+              <Package className="h-6 w-6 text-destructive" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-2 text-destructive">Translation Error</h3>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // After the checks above, data must be defined
+  if (!data) {
+    return null // Shouldn't happen, but satisfies TypeScript
   }
 
   const shopUrl = toSafeExternalHref(baseUrl)

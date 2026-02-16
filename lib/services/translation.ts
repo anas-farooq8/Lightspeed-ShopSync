@@ -121,7 +121,7 @@ async function translateWithGoogle(
   const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY
 
   if (!apiKey) {
-    throw new Error('GOOGLE_TRANSLATE_API_KEY is not configured')
+    throw new Error('GOOGLE_TRANSLATE_API_KEY is not configured in .env file')
   }
 
   // Prepare texts: convert plain newlines to <br> for plain text fields
@@ -131,22 +131,36 @@ async function translateWithGoogle(
   const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    if (appUrl) {
+      headers['Referer'] = appUrl
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
-        q: preparedTexts, // Send ALL prepared texts in one batch
+        q: preparedTexts,
         target: targetLang,
         source: sourceLang,
-        format: 'html', // Preserve HTML tags (including our <br> tags)
+        format: 'html',
       }),
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Google Translation API error: ${response.status} - ${error}`)
+      let errorDetails = ''
+      try {
+        const errorData = await response.json()
+        errorDetails = errorData.error?.message || JSON.stringify(errorData)
+      } catch {
+        errorDetails = await response.text()
+      }
+      
+      throw new Error(`Google Translation API error (${response.status}): ${errorDetails}`)
     }
 
     const data = await response.json()
