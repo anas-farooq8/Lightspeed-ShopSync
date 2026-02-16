@@ -47,13 +47,14 @@ const QL_TOOLBAR_TITLES: Record<string, string> = {
 }
 
 interface EditableLanguageContentTabsProps {
+  shopTld: string
   languages: Language[]
   content: Record<string, ProductContent>
   dirtyFields: Set<string>
   translationMeta?: TranslationMetaByLang
   sourceDefaultLang?: string
-  resettingField?: string | null // "lang:field" or "lang:all"
-  retranslatingField?: string | null // "lang:field" or "lang:all"
+  resettingField?: string | null // "tld:lang:field" or "tld:lang:all"
+  retranslatingField?: string | null // "tld:lang:field" or "tld:lang:all"
   onUpdateField: (lang: string, field: keyof ProductContent, value: string) => void
   onResetField: (lang: string, field: keyof ProductContent) => void
   onResetLanguage: (lang: string) => void
@@ -62,6 +63,7 @@ interface EditableLanguageContentTabsProps {
 }
 
 export function EditableLanguageContentTabs({
+  shopTld,
   languages,
   content,
   dirtyFields,
@@ -112,8 +114,8 @@ export function EditableLanguageContentTabs({
   if (sortedLanguages.length === 0) return null
 
   const hasLanguageChanges = Array.from(dirtyFields).some(f => f.startsWith(`${activeLanguage}.`))
-  const isResettingLanguage = resettingField === `${activeLanguage}:all`
-  const isRetranslatingLanguage = retranslatingField === `${activeLanguage}:all`
+  const isResettingLanguage = resettingField === `${shopTld}:${activeLanguage}:all`
+  const isRetranslatingLanguage = retranslatingField === `${shopTld}:${activeLanguage}:all`
   const canRetranslate = activeLanguage !== sourceDefaultLang && onRetranslateField
   
   const getOriginBadge = (origin: TranslationOrigin | undefined) => {
@@ -205,14 +207,14 @@ export function EditableLanguageContentTabs({
         const canRetranslate = lang.code !== sourceDefaultLang && onRetranslateField
         
         // Loading states for each field
-        const isResettingTitle = resettingField === `${lang.code}:title`
-        const isRetranslatingTitle = retranslatingField === `${lang.code}:title`
-        const isResettingFulltitle = resettingField === `${lang.code}:fulltitle`
-        const isRetranslatingFulltitle = retranslatingField === `${lang.code}:fulltitle`
-        const isResettingDescription = resettingField === `${lang.code}:description`
-        const isRetranslatingDescription = retranslatingField === `${lang.code}:description`
-        const isResettingContent = resettingField === `${lang.code}:content`
-        const isRetranslatingContent = retranslatingField === `${lang.code}:content`
+        const isResettingTitle = resettingField === `${shopTld}:${lang.code}:title`
+        const isRetranslatingTitle = retranslatingField === `${shopTld}:${lang.code}:title`
+        const isResettingFulltitle = resettingField === `${shopTld}:${lang.code}:fulltitle`
+        const isRetranslatingFulltitle = retranslatingField === `${shopTld}:${lang.code}:fulltitle`
+        const isResettingDescription = resettingField === `${shopTld}:${lang.code}:description`
+        const isRetranslatingDescription = retranslatingField === `${shopTld}:${lang.code}:description`
+        const isResettingContent = resettingField === `${shopTld}:${lang.code}:content`
+        const isRetranslatingContent = retranslatingField === `${shopTld}:${lang.code}:content`
         
         return (
           <TabsContent key={lang.code} value={lang.code} className="space-y-3">

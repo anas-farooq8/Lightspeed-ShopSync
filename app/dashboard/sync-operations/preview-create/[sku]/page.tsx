@@ -1079,11 +1079,97 @@ export default function PreviewCreatePage() {
     })
   }
 
-  const resetShop = async (tld: string) => {
+  const resetShop = (tld: string) => {
     if (!details || !selectedSourceProductId) return
     
-    // Re-initialize with fresh translations (calls API)
-    await initializeTargetData(details, selectedSourceProductId, [tld], undefined, { preserveExisting: true })
+    const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
+    if (!sourceProduct) return
+    
+    const targetLanguages = details.shops[tld]?.languages ?? []
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      
+      // Reset all language content from original translated/copied cache
+      const resetContentByLanguage: Record<string, ProductContent> = {}
+      const resetTranslationMeta: any = {}
+      
+      targetLanguages.forEach(lang => {
+        const originalContent = originalTranslatedContentRef.current[tld]?.[lang.code] || {}
+        const originalMeta = originalTranslationMetaRef.current[tld]?.[lang.code] || {}
+        
+        resetContentByLanguage[lang.code] = {
+          title: originalContent.title || '',
+          fulltitle: originalContent.fulltitle || '',
+          description: originalContent.description || '',
+          content: originalContent.content || ''
+        }
+        
+        resetTranslationMeta[lang.code] = originalMeta
+        
+        // Reset content editor state
+        if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+        contentEditorReadyRef.current[tld][lang.code] = false
+        
+        // Reset initial content ref for content field
+        if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+        initialContentRef.current[tld][lang.code] = originalContent.content || ''
+      })
+      
+      // Reset variants to original source variants
+      const resetVariants = sourceProduct.variants.map(v => ({
+        ...v,
+        sku: v.sku || '',
+        originalSku: v.sku || '',
+        originalPrice: v.price_excl,
+        originalTitle: Object.fromEntries(
+          targetLanguages.map(lang => [
+            lang.code,
+            v.content_by_language?.[sourceDefaultLang]?.title || ''
+          ])
+        ),
+        content_by_language: Object.fromEntries(
+          targetLanguages.map(lang => [
+            lang.code,
+            { title: v.content_by_language?.[sourceDefaultLang]?.title || '' }
+          ])
+        )
+      }))
+      
+      const sourceImages = updated[tld].images
+      const firstImage = sourceImages[0]
+      const resetProductImage: ImageInfo | null = sourceProduct.product_image
+        ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
+        : firstImage
+          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
+          : null
+      
+      updated[tld] = {
+        ...updated[tld],
+        content_by_language: resetContentByLanguage,
+        translationMeta: resetTranslationMeta,
+        variants: resetVariants,
+        visibility: updated[tld].originalVisibility,
+        productImage: resetProductImage,
+        originalProductImage: resetProductImage,
+        dirty: false,
+        dirtyFields: new Set(),
+        dirtyVariants: new Set(),
+        orderChanged: false,
+        removedImageIds: new Set()
+      }
+      
+      return updated
+    })
+    
+    // Reset isDirty if no other shops have changes
+    const anyDirty = Object.entries(targetData).some(([shopTld, td]) => {
+      if (shopTld === tld) return false // Skip the shop we just reset
+      return td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+    })
+    setIsDirty(anyDirty)
   }
 
   const retranslateField = async (tld: string, langCode: string, field: keyof ProductContent) => {

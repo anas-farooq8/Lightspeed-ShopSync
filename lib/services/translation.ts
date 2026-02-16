@@ -28,23 +28,11 @@ interface CacheEntry {
 const translationCache = new Map<string, CacheEntry>()
 
 /**
- * Normalize text before hashing to ensure consistent cache hits
- * NOTE: This is only for cache key generation, NOT for the actual text sent to Google
- */
-function normalizeText(text: string): string {
-  return text
-    .trim()
-    .replace(/\r\n/g, '\n') // Normalize line endings
-    .replace(/\s+/g, ' ') // Normalize multiple spaces (only for hashing)
-    .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
-}
-
-/**
- * Generate SHA-256 hash of normalized text
+ * Generate SHA-256 hash of text content
+ * Uses the text as-is to ensure exact matching
  */
 function hashText(text: string): string {
-  const normalized = normalizeText(text)
-  return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex')
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex')
 }
 
 /**
@@ -75,42 +63,14 @@ function getCacheKey(
 }
 
 /**
- * Prepare text for translation by preserving newlines
- * Converts plain text newlines to <br> tags so Google Translate preserves them
- */
-function prepareTextForTranslation(text: string): string {
-  // Check if text already contains HTML tags
-  const hasHtmlTags = /<[^>]+>/g.test(text)
-  
-  if (hasHtmlTags) {
-    // Already HTML, return as-is (Quill content, etc.)
-    return text
-  }
-  
-  // Plain text: convert newlines to <br> tags to preserve line breaks
-  // Replace \r\n or \n with <br> but preserve the structure
-  return text.replace(/\r?\n/g, '<br>')
-}
-
-/**
- * Clean up translated text by removing artifacts
- * Removes extra spaces around <br> tags that Google might add
- */
-function cleanTranslatedText(text: string, originalWasPlainText: boolean): string {
-  if (!originalWasPlainText) {
-    // Was already HTML, return as-is
-    return text
-  }
-  
-  // Clean up <br> tags - remove extra spaces Google might add
-  return text
-    .replace(/\s*<br\s*\/?>\s*/gi, '<br>') // Normalize <br> tags
-    .replace(/<br>\s*<br>/gi, '<br><br>') // Preserve double line breaks
-}
-
-/**
  * Translate text using Google Cloud Translation API
  * Returns translated text or throws error
+ * 
+ * Google Translate API batching:
+ * - Our API receives multiple items in a single request
+ * - We send ALL texts to Google in ONE API call (batch request)
+ * - Google processes them together and returns all translations
+ * - This is much more efficient than making separate API calls per field
  */
 async function translateWithGoogle(
   texts: string[],
@@ -123,12 +83,6 @@ async function translateWithGoogle(
     throw new Error('GOOGLE_TRANSLATE_API_KEY is not configured')
   }
 
-  // Track which texts were plain text vs HTML
-  const plainTextFlags = texts.map(text => !/<[^>]+>/g.test(text))
-  
-  // Prepare texts for translation (convert newlines to <br> for plain text)
-  const preparedTexts = texts.map(text => prepareTextForTranslation(text))
-
   // Google Cloud Translation API endpoint
   const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`
 
@@ -139,10 +93,10 @@ async function translateWithGoogle(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        q: preparedTexts,
+        q: texts, // Send ALL texts in one batch
         target: targetLang,
         source: sourceLang,
-        format: 'html', // Preserve HTML formatting (including our <br> tags)
+        format: 'html', // Preserve HTML tags and formatting (including newlines in HTML)
       }),
     })
 
@@ -157,10 +111,7 @@ async function translateWithGoogle(
       throw new Error('Invalid response from Google Translation API')
     }
 
-    // Clean up translated texts
-    return data.data.translations.map((t: any, index: number) => 
-      cleanTranslatedText(t.translatedText, plainTextFlags[index])
-    )
+    return data.data.translations.map((t: any) => t.translatedText)
   } catch (error) {
     console.error('Translation error:', error)
     throw error
@@ -320,41 +271,8 @@ export async function translateBatch(
   })
 
   console.log(
-    `✓ Translation complete: ${cacheHits.length} cache hits, ${cacheMisses.length} API calls`
+    `✓ Translation complete: ${cacheHits.length} from cache, ${cacheMisses.length} items translated via ${batchGroups.size} Google API ${batchGroups.size === 1 ? 'call' : 'calls'}`
   )
 
   return allResults
-}
-
-/**
- * Clear translation cache for a specific session
- * Called when user navigates away or refreshes
- */
-export function clearTranslationCache(sessionId?: string): void {
-  if (sessionId) {
-    // Clear only entries for this session
-    let cleared = 0
-    for (const [key, value] of translationCache.entries()) {
-      if (value.sessionId === sessionId) {
-        translationCache.delete(key)
-        cleared++
-      }
-    }
-    console.log(`✓ Cleared translation cache for session (${cleared} entries)`)
-  } else {
-    // Clear entire cache
-    const size = translationCache.size
-    translationCache.clear()
-    console.log(`✓ Cleared entire translation cache (${size} entries)`)
-  }
-}
-
-/**
- * Get cache statistics (for debugging)
- */
-export function getCacheStats() {
-  return {
-    size: translationCache.size,
-    entries: Array.from(translationCache.keys()).slice(0, 10), // First 10 keys
-  }
 }

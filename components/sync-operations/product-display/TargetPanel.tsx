@@ -237,6 +237,7 @@ export function TargetPanel({
         {languages.length > 0 && (
           <div className="border-t border-border/50 pt-3 sm:pt-4">
             <EditableLanguageContentTabs
+              shopTld={shopTld}
               languages={languages}
               content={data.content_by_language}
               dirtyFields={data.dirtyFields}

@@ -353,24 +353,6 @@ export function getOriginLabel(origin: TranslationOrigin | undefined): string {
 }
 
 /**
- * Get badge variant for translation origin
- */
-export function getOriginBadgeVariant(
-  origin: TranslationOrigin | undefined
-): 'default' | 'secondary' | 'outline' {
-  switch (origin) {
-    case 'copied':
-      return 'secondary'
-    case 'translated':
-      return 'default'
-    case 'manual':
-      return 'outline'
-    default:
-      return 'secondary'
-  }
-}
-
-/**
  * Determine the most prominent origin for a language (for tab badges)
  * Uses metadata as source of truth, not dirty flags
  */
