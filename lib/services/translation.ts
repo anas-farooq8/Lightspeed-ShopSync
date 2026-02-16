@@ -29,12 +29,13 @@ const translationCache = new Map<string, CacheEntry>()
 
 /**
  * Normalize text before hashing to ensure consistent cache hits
+ * NOTE: This is only for cache key generation, NOT for the actual text sent to Google
  */
 function normalizeText(text: string): string {
   return text
     .trim()
     .replace(/\r\n/g, '\n') // Normalize line endings
-    .replace(/\s+/g, ' ') // Normalize multiple spaces
+    .replace(/\s+/g, ' ') // Normalize multiple spaces (only for hashing)
     .replace(/<p>\s*<\/p>/g, '') // Remove empty paragraphs
 }
 
@@ -48,16 +49,63 @@ function hashText(text: string): string {
 
 /**
  * Generate cache key from translation parameters
- * Includes sessionId to isolate cache per user session
+ * Option 3 (Hybrid): Supports both shared and shop-specific cache
+ * 
+ * @param sessionId - Unique session identifier
+ * @param sourceLang - Source language code
+ * @param targetLang - Target language code
+ * @param field - Field name
+ * @param contentHash - Hash of content
+ * @param shopTld - Optional shop TLD for shop-specific override
  */
 function getCacheKey(
   sessionId: string,
   sourceLang: string,
   targetLang: string,
   field: string,
-  contentHash: string
+  contentHash: string,
+  shopTld?: string
 ): string {
+  // Shop-specific override key (for re-translations)
+  if (shopTld) {
+    return `${sessionId}:${shopTld}:${sourceLang}:${targetLang}:${field}:${contentHash}`
+  }
+  // Shared cache key (for initial translations)
   return `${sessionId}:${sourceLang}:${targetLang}:${field}:${contentHash}`
+}
+
+/**
+ * Prepare text for translation by preserving newlines
+ * Converts plain text newlines to <br> tags so Google Translate preserves them
+ */
+function prepareTextForTranslation(text: string): string {
+  // Check if text already contains HTML tags
+  const hasHtmlTags = /<[^>]+>/g.test(text)
+  
+  if (hasHtmlTags) {
+    // Already HTML, return as-is (Quill content, etc.)
+    return text
+  }
+  
+  // Plain text: convert newlines to <br> tags to preserve line breaks
+  // Replace \r\n or \n with <br> but preserve the structure
+  return text.replace(/\r?\n/g, '<br>')
+}
+
+/**
+ * Clean up translated text by removing artifacts
+ * Removes extra spaces around <br> tags that Google might add
+ */
+function cleanTranslatedText(text: string, originalWasPlainText: boolean): string {
+  if (!originalWasPlainText) {
+    // Was already HTML, return as-is
+    return text
+  }
+  
+  // Clean up <br> tags - remove extra spaces Google might add
+  return text
+    .replace(/\s*<br\s*\/?>\s*/gi, '<br>') // Normalize <br> tags
+    .replace(/<br>\s*<br>/gi, '<br><br>') // Preserve double line breaks
 }
 
 /**
@@ -75,6 +123,12 @@ async function translateWithGoogle(
     throw new Error('GOOGLE_TRANSLATE_API_KEY is not configured')
   }
 
+  // Track which texts were plain text vs HTML
+  const plainTextFlags = texts.map(text => !/<[^>]+>/g.test(text))
+  
+  // Prepare texts for translation (convert newlines to <br> for plain text)
+  const preparedTexts = texts.map(text => prepareTextForTranslation(text))
+
   // Google Cloud Translation API endpoint
   const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`
 
@@ -85,10 +139,10 @@ async function translateWithGoogle(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        q: texts,
+        q: preparedTexts,
         target: targetLang,
         source: sourceLang,
-        format: 'html', // Preserve HTML formatting
+        format: 'html', // Preserve HTML formatting (including our <br> tags)
       }),
     })
 
@@ -103,7 +157,10 @@ async function translateWithGoogle(
       throw new Error('Invalid response from Google Translation API')
     }
 
-    return data.data.translations.map((t: any) => t.translatedText)
+    // Clean up translated texts
+    return data.data.translations.map((t: any, index: number) => 
+      cleanTranslatedText(t.translatedText, plainTextFlags[index])
+    )
   } catch (error) {
     console.error('Translation error:', error)
     throw error
@@ -111,14 +168,22 @@ async function translateWithGoogle(
 }
 
 /**
- * Process translation batch with caching
+ * Process translation batch with caching (Hybrid Strategy - Option 3)
  * Returns translations for all items (from cache or API)
+ * 
+ * Cache lookup priority:
+ * 1. Check shop-specific override (if shopTld provided)
+ * 2. Fall back to shared cache
+ * 3. Call API if no cache hit
+ * 
  * @param items - Array of items to translate
  * @param sessionId - Unique session identifier (cleared on page refresh/navigation)
+ * @param shopTld - Optional shop TLD for shop-specific override
  */
 export async function translateBatch(
   items: TranslationItem[],
-  sessionId: string
+  sessionId: string,
+  shopTld?: string
 ): Promise<TranslationResult[]> {
   if (items.length === 0) {
     return []
@@ -140,15 +205,19 @@ export async function translateBatch(
     }
 
     const contentHash = hashText(item.text)
-    const cacheKey = getCacheKey(
-      sessionId,
-      item.sourceLang,
-      item.targetLang,
-      item.field,
-      contentHash
-    )
-
-    const cached = translationCache.get(cacheKey)
+    
+    // Try shop-specific override first (if shopTld provided)
+    let cached: CacheEntry | undefined
+    if (shopTld) {
+      const shopKey = getCacheKey(sessionId, item.sourceLang, item.targetLang, item.field, contentHash, shopTld)
+      cached = translationCache.get(shopKey)
+    }
+    
+    // Fall back to shared cache
+    if (!cached) {
+      const sharedKey = getCacheKey(sessionId, item.sourceLang, item.targetLang, item.field, contentHash)
+      cached = translationCache.get(sharedKey)
+    }
     
     if (cached) {
       // Cache hit
@@ -203,12 +272,16 @@ export async function translateBatch(
       groupItems.forEach((item, index) => {
         const translatedText = translatedTexts[index] || ''
         const contentHash = hashText(item.text)
+        
+        // For re-translations with shopTld: store in shop-specific override
+        // For initial translations: store in shared cache
         const cacheKey = getCacheKey(
           sessionId,
           item.sourceLang,
           item.targetLang,
           item.field,
-          contentHash
+          contentHash,
+          shopTld // Will be undefined for initial translations, defined for re-translations
         )
 
         // Store in cache with session ID

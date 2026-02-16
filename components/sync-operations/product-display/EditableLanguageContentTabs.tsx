@@ -169,6 +169,7 @@ export function EditableLanguageContentTabs({
               onClick={() => onResetLanguage(activeLanguage)}
               disabled={isResettingLanguage || isRetranslatingLanguage}
               className="text-xs cursor-pointer"
+              title="Reset all fields to original translated values"
             >
               {isResettingLanguage ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -184,7 +185,8 @@ export function EditableLanguageContentTabs({
               size="sm"
               onClick={() => onRetranslateLanguage(activeLanguage)}
               disabled={isResettingLanguage || isRetranslatingLanguage}
-              className="text-xs cursor-pointer"
+              className="text-xs cursor-pointer text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+              title="Re-translate all fields from source language"
             >
               {isRetranslatingLanguage ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -200,9 +202,17 @@ export function EditableLanguageContentTabs({
       {sortedLanguages.map(lang => {
         const langContent = content[lang.code] || {}
         const langMeta = translationMeta?.[lang.code]
+        const canRetranslate = lang.code !== sourceDefaultLang && onRetranslateField
+        
+        // Loading states for each field
         const isResettingTitle = resettingField === `${lang.code}:title`
         const isRetranslatingTitle = retranslatingField === `${lang.code}:title`
-        const canRetranslateTitle = lang.code !== sourceDefaultLang && onRetranslateField
+        const isResettingFulltitle = resettingField === `${lang.code}:fulltitle`
+        const isRetranslatingFulltitle = retranslatingField === `${lang.code}:fulltitle`
+        const isResettingDescription = resettingField === `${lang.code}:description`
+        const isRetranslatingDescription = retranslatingField === `${lang.code}:description`
+        const isResettingContent = resettingField === `${lang.code}:content`
+        const isRetranslatingContent = retranslatingField === `${lang.code}:content`
         
         return (
           <TabsContent key={lang.code} value={lang.code} className="space-y-3">
@@ -224,6 +234,7 @@ export function EditableLanguageContentTabs({
                       onClick={() => onResetField(lang.code, 'title')}
                       disabled={isResettingTitle || isRetranslatingTitle}
                       className="h-6 text-xs px-2 cursor-pointer"
+                      title="Reset to original value"
                     >
                       {isResettingTitle ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -232,14 +243,14 @@ export function EditableLanguageContentTabs({
                       )}
                     </Button>
                   )}
-                  {canRetranslateTitle && (
+                  {canRetranslate && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => onRetranslateField(lang.code, 'title')}
                       disabled={isResettingTitle || isRetranslatingTitle}
-                      className="h-6 text-xs px-2 cursor-pointer"
-                      title="Re-translate this field"
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      title="Re-translate this field from source"
                     >
                       {isRetranslatingTitle ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -271,16 +282,40 @@ export function EditableLanguageContentTabs({
                     </span>
                   )}
                 </div>
-                {dirtyFields.has(`${lang.code}.fulltitle`) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onResetField(lang.code, 'fulltitle')}
-                    className="h-6 text-xs px-2 cursor-pointer"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {dirtyFields.has(`${lang.code}.fulltitle`) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onResetField(lang.code, 'fulltitle')}
+                      disabled={isResettingFulltitle || isRetranslatingFulltitle}
+                      className="h-6 text-xs px-2 cursor-pointer"
+                      title="Reset to original value"
+                    >
+                      {isResettingFulltitle ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                  {canRetranslate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRetranslateField(lang.code, 'fulltitle')}
+                      disabled={isResettingFulltitle || isRetranslatingFulltitle}
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      title="Re-translate this field from source"
+                    >
+                      {isRetranslatingFulltitle ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
               <Input
                 value={langContent.fulltitle || ''}
@@ -303,16 +338,40 @@ export function EditableLanguageContentTabs({
                     </span>
                   )}
                 </div>
-                {dirtyFields.has(`${lang.code}.description`) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onResetField(lang.code, 'description')}
-                    className="h-6 text-xs px-2 cursor-pointer"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {dirtyFields.has(`${lang.code}.description`) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onResetField(lang.code, 'description')}
+                      disabled={isResettingDescription || isRetranslatingDescription}
+                      className="h-6 text-xs px-2 cursor-pointer"
+                      title="Reset to original value"
+                    >
+                      {isResettingDescription ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                  {canRetranslate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRetranslateField(lang.code, 'description')}
+                      disabled={isResettingDescription || isRetranslatingDescription}
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      title="Re-translate this field from source"
+                    >
+                      {isRetranslatingDescription ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
               <Textarea
                 value={langContent.description || ''}
@@ -335,17 +394,40 @@ export function EditableLanguageContentTabs({
                     </span>
                   )}
                 </div>
-                {dirtyFields.has(`${lang.code}.content`) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onResetField(lang.code, 'content')}
-                    className="h-6 text-xs px-2 cursor-pointer"
-                    title="Reset to original content"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                )}
+                <div className="flex items-center gap-1">
+                  {dirtyFields.has(`${lang.code}.content`) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onResetField(lang.code, 'content')}
+                      disabled={isResettingContent || isRetranslatingContent}
+                      className="h-6 text-xs px-2 cursor-pointer"
+                      title="Reset to original value"
+                    >
+                      {isResettingContent ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                  {canRetranslate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRetranslateField(lang.code, 'content')}
+                      disabled={isResettingContent || isRetranslatingContent}
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      title="Re-translate this field from source"
+                    >
+                      {isRetranslatingContent ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
               <div
                 className={cn(

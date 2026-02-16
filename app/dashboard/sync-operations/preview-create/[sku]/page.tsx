@@ -27,7 +27,8 @@ import {
   callTranslationAPI,
   deduplicateTranslationItems,
   reconstructResults,
-  getBaseValueForField
+  getBaseValueForField,
+  getBaseValuesForLanguage
 } from '@/lib/utils/translation'
 import type { ProductDetails, ProductData, ProductImage, ImageInfo, EditableVariant, EditableTargetData, ProductContent, TranslatableField, TranslationOrigin } from '@/types/product'
 
@@ -52,6 +53,7 @@ export default function PreviewCreatePage() {
 
   const [details, setDetails] = useState<ProductDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [translating, setTranslating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
   
@@ -229,9 +231,10 @@ export default function PreviewCreatePage() {
       allTranslationItems.push(...translationItems)
     })
 
-    // Deduplicate and call translation API once
+      // Deduplicate and call translation API once
     let translationResults: any[] = []
     if (allTranslationItems.length > 0) {
+      setTranslating(true)
       try {
         const { uniqueItems, indexMap } = deduplicateTranslationItems(allTranslationItems)
         console.log(`⏳ Translating ${uniqueItems.length} unique items (${allTranslationItems.length} total)`)
@@ -244,7 +247,10 @@ export default function PreviewCreatePage() {
         console.error('Translation failed:', error)
         setError(`Translation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your Google Cloud API key configuration in the .env file.`)
         setLoading(false)
+        setTranslating(false)
         return
+      } finally {
+        setTranslating(false)
       }
     }
 
@@ -1073,10 +1079,11 @@ export default function PreviewCreatePage() {
     })
   }
 
-  const resetShop = (tld: string) => {
+  const resetShop = async (tld: string) => {
     if (!details || !selectedSourceProductId) return
     
-    initializeTargetData(details, selectedSourceProductId, [tld], undefined, { preserveExisting: true })
+    // Re-initialize with fresh translations (calls API)
+    await initializeTargetData(details, selectedSourceProductId, [tld], undefined, { preserveExisting: true })
   }
 
   const retranslateField = async (tld: string, langCode: string, field: keyof ProductContent) => {
@@ -1109,7 +1116,8 @@ export default function PreviewCreatePage() {
         sourceDefaultLang,
         langCode,
         field as TranslatableField,
-        sessionId
+        sessionId,
+        tld // Shop-specific override for re-translation
       )
 
       setTargetData(prev => {
@@ -1197,10 +1205,14 @@ export default function PreviewCreatePage() {
     const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
 
     try {
-      const results = await Promise.all(
-        translatableFields.map(field => 
-          getBaseValueForField(sourceContent, sourceDefaultLang, langCode, field, sessionId)
-        )
+      // Use batch translation - ONE API call instead of 4
+      const results = await getBaseValuesForLanguage(
+        sourceContent,
+        sourceDefaultLang,
+        langCode,
+        translatableFields,
+        sessionId,
+        tld
       )
 
       setTargetData(prev => {
@@ -1215,8 +1227,8 @@ export default function PreviewCreatePage() {
         const newContent: ProductContent = {}
         const newLangMeta: any = {}
         
-        translatableFields.forEach((field, index) => {
-          const { value } = results[index]
+        translatableFields.forEach((field) => {
+          const { value } = results[field]
           newContent[field] = value
           newLangMeta[field] = 'translated'
         })
@@ -1350,6 +1362,7 @@ export default function PreviewCreatePage() {
                     sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
                     resettingField={resettingField}
                     retranslatingField={retranslatingField}
+                    translating={translating}
                     sourceImages={productImages[sourceProduct.shop_tld] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
@@ -1412,6 +1425,7 @@ export default function PreviewCreatePage() {
               sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
               resettingField={resettingField}
               retranslatingField={retranslatingField}
+              translating={translating}
               sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}

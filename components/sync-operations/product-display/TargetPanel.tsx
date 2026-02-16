@@ -2,11 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2 } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/visibility'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, cn } from '@/lib/utils'
 import type { Language, ImageInfo, EditableTargetData, ProductContent } from '@/types/product'
 
@@ -22,6 +23,7 @@ interface TargetPanelProps {
   sourceDefaultLang?: string
   resettingField?: string | null
   retranslatingField?: string | null
+  translating?: boolean
   /** Pre-fetched source images (create-preview: same metadata for all targets, no extra fetch). */
   sourceImages?: ProductImageMeta[] | null
   onLanguageChange: (lang: string) => void
@@ -63,6 +65,7 @@ export function TargetPanel({
   sourceDefaultLang,
   resettingField,
   retranslatingField,
+  translating = false,
   sourceImages,
   onLanguageChange,
   onUpdateField,
@@ -84,7 +87,18 @@ export function TargetPanel({
   onResetVisibility,
   onResetProductImage
 }: TargetPanelProps) {
-  if (!data) return null
+  if (!data) {
+    // Show loading state when data is being initialized (same style as main page loading)
+    return (
+      <Card className="border-border/50 flex flex-col h-fit overflow-hidden relative">
+        <LoadingShimmer show={true} position="top" />
+        <CardContent className="p-8 flex flex-col items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground">Translating content...</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const shopUrl = toSafeExternalHref(baseUrl)
   const visibilityChanged = data.visibility !== data.originalVisibility
@@ -92,7 +106,15 @@ export function TargetPanel({
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
 
   return (
-    <Card className="border-border/50 flex flex-col h-fit overflow-hidden">
+    <Card className="border-border/50 flex flex-col h-fit overflow-hidden relative">
+      {translating && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Translating content...</p>
+          </div>
+        </div>
+      )}
       <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-2 sm:mb-3 min-w-0">
           <div className="flex-1 min-w-0 overflow-hidden">

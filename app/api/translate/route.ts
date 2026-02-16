@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic'
 interface TranslateRequestBody {
   items: TranslationItem[]
   sessionId: string
+  shopTld?: string // Optional: for shop-specific override (re-translations)
 }
 
 export async function POST(request: NextRequest) {
@@ -64,8 +65,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Process translations with session-based caching
-    const results = await translateBatch(body.items, body.sessionId)
+    // Process translations with hybrid caching (Option 3)
+    // Initial translations: shared cache (shopTld = undefined)
+    // Re-translations: shop-specific override (shopTld provided)
+    const results = await translateBatch(body.items, body.sessionId, body.shopTld)
 
     return NextResponse.json(results)
   } catch (error) {
