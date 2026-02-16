@@ -163,15 +163,33 @@ export default function PreviewCreatePage() {
     }
   }
 
-  const initializeTargetData = (data: ProductDetails, sourceProductId: number, targetShopTlds: string[], sourceImagesOverride?: ProductImage[]) => {
+  const initializeTargetData = (
+    data: ProductDetails,
+    sourceProductId: number,
+    targetShopTlds: string[],
+    sourceImagesOverride?: ProductImage[],
+    options?: { preserveExisting?: boolean }
+  ) => {
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
 
     const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.shop_tld] ?? []
     
-    const newTargetData: Record<string, EditableTargetData> = {}
-    const newActiveLanguages: Record<string, string> = {}
+    const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
+      ? { ...targetData }
+      : {}
+    const newActiveLanguages: Record<string, string> = options?.preserveExisting
+      ? { ...activeLanguages }
+      : {}
+
+    // Start from existing initial content when preserving, otherwise from scratch
+    const initialContent: Record<string, Record<string, string>> = options?.preserveExisting
+      ? { ...initialContentRef.current }
+      : {}
+    if (!options?.preserveExisting) {
+      contentEditorReadyRef.current = {}
+    }
 
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
@@ -233,23 +251,33 @@ export default function PreviewCreatePage() {
       }
 
       newActiveLanguages[tld] = defaultLang
-    })
 
-    setTargetData(newTargetData)
-    setActiveLanguages(newActiveLanguages)
-    setIsDirty(false)
-    contentEditorReadyRef.current = {}
-
-    const initialContent: Record<string, Record<string, string>> = {}
-    targetShopTlds.forEach(tld => {
-      const targetLanguages = data.shops[tld]?.languages ?? []
+      // Reset initial content + editor-ready state for this shop
       const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang]
       initialContent[tld] = {}
       targetLanguages.forEach(lang => {
         initialContent[tld][lang.code] = sourceContent?.content || ''
       })
+      if (!contentEditorReadyRef.current[tld]) {
+        contentEditorReadyRef.current[tld] = {}
+      } else {
+        contentEditorReadyRef.current[tld] = {}
+      }
     })
+
     initialContentRef.current = initialContent
+
+    setTargetData(newTargetData)
+    setActiveLanguages(newActiveLanguages)
+
+    if (options?.preserveExisting) {
+      const anyDirty = Object.values(newTargetData).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+    } else {
+      setIsDirty(false)
+    }
   }
 
   const updateField = (tld: string, langCode: string, field: keyof ProductContent, value: string) => {
@@ -268,19 +296,25 @@ export default function PreviewCreatePage() {
 
       let isChanged: boolean
       if (field === 'content') {
-        const ready = contentEditorReadyRef.current[tld]?.[langCode]
+        if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+        const ready = contentEditorReadyRef.current[tld][langCode]
         if (!ready) {
-          if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+          // First change from the editor: treat as normalization
+          // and update our baseline to the normalized HTML.
           contentEditorReadyRef.current[tld][langCode] = true
+          if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+          initialContentRef.current[tld][langCode] = value
+          sourceValue = value
           isChanged = false
         } else {
+          sourceValue = initialContentRef.current[tld]?.[langCode] || ''
           isChanged = value !== sourceValue
         }
       } else {
         isChanged = value !== sourceValue
       }
+
       const fieldKey = `${langCode}.${field}`
-      
       const newDirtyFields = new Set(updated[tld].dirtyFields)
       if (isChanged) {
         newDirtyFields.add(fieldKey)
@@ -303,12 +337,14 @@ export default function PreviewCreatePage() {
         dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || visibilityChanged || productImageChanged,
         dirtyFields: newDirtyFields
       }
+
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       
       return updated
     })
-    
-    const anyDirty = Object.values(targetData).some(td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0)
-    setIsDirty(anyDirty)
   }
 
   const updateVariant = (tld: string, variantIndex: number, field: 'sku' | 'price_excl', value: string | number) => {
@@ -850,8 +886,7 @@ export default function PreviewCreatePage() {
   const resetShop = (tld: string) => {
     if (!details || !selectedSourceProductId) return
     
-    initializeTargetData(details, selectedSourceProductId, [tld])
-    setIsDirty(false)
+    initializeTargetData(details, selectedSourceProductId, [tld], undefined, { preserveExisting: true })
   }
 
   if (loading) {
