@@ -95,6 +95,19 @@ export interface EditableVariant {
   removed?: boolean
 }
 
+// Translation types
+export type TranslationOrigin = 'copied' | 'translated' | 'manual'
+
+export type TranslatableField = 'title' | 'fulltitle' | 'description' | 'content'
+
+export type LanguageTranslationMeta = {
+  [field in TranslatableField]?: TranslationOrigin
+}
+
+export type TranslationMetaByLang = {
+  [langCode: string]: LanguageTranslationMeta
+}
+
 export interface EditableTargetData {
   content_by_language: Record<string, ProductContent>
   variants: EditableVariant[]
@@ -111,4 +124,5 @@ export interface EditableTargetData {
   originalProductImage: ImageInfo | null
   orderChanged: boolean
   imageOrderChanged: boolean
+  translationMeta?: TranslationMetaByLang
 }

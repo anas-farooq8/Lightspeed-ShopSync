@@ -19,12 +19,17 @@ interface TargetPanelProps {
   activeLanguage: string
   imagesLink: string | null | undefined
   sourceShopTld: string
+  sourceDefaultLang?: string
+  resettingField?: string | null
+  retranslatingField?: string | null
   /** Pre-fetched source images (create-preview: same metadata for all targets, no extra fetch). */
   sourceImages?: ProductImageMeta[] | null
   onLanguageChange: (lang: string) => void
   onUpdateField: (lang: string, field: keyof ProductContent, value: string) => void
   onResetField: (lang: string, field: keyof ProductContent) => void
   onResetLanguage: (lang: string) => void
+  onRetranslateField?: (lang: string, field: keyof ProductContent) => void
+  onRetranslateLanguage?: (lang: string) => void
   onResetShop: () => void
   onUpdateVariant: (idx: number, field: 'sku' | 'price_excl', value: string | number) => void
   onUpdateVariantTitle: (idx: number, lang: string, title: string) => void
@@ -55,11 +60,16 @@ export function TargetPanel({
   activeLanguage,
   imagesLink,
   sourceShopTld,
+  sourceDefaultLang,
+  resettingField,
+  retranslatingField,
   sourceImages,
   onLanguageChange,
   onUpdateField,
   onResetField,
   onResetLanguage,
+  onRetranslateField,
+  onRetranslateLanguage,
   onResetShop,
   onUpdateVariant,
   onUpdateVariantTitle,
@@ -208,9 +218,15 @@ export function TargetPanel({
               languages={languages}
               content={data.content_by_language}
               dirtyFields={data.dirtyFields}
+              translationMeta={data.translationMeta}
+              sourceDefaultLang={sourceDefaultLang}
+              resettingField={resettingField}
+              retranslatingField={retranslatingField}
               onUpdateField={onUpdateField}
               onResetField={onResetField}
               onResetLanguage={onResetLanguage}
+              onRetranslateField={onRetranslateField}
+              onRetranslateLanguage={onRetranslateLanguage}
             />
           </div>
         )}

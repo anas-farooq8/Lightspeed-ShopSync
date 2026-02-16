@@ -21,7 +21,15 @@ import { ProductHeader } from '@/components/sync-operations/product-display/Prod
 import { SourcePanel } from '@/components/sync-operations/product-display/SourcePanel'
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
-import type { ProductDetails, ProductData, ProductImage, ImageInfo, EditableVariant, EditableTargetData, ProductContent } from '@/types/product'
+import { 
+  prepareTranslationBatch, 
+  applyTranslationResults, 
+  callTranslationAPI,
+  deduplicateTranslationItems,
+  reconstructResults,
+  getBaseValueForField
+} from '@/lib/utils/translation'
+import type { ProductDetails, ProductData, ProductImage, ImageInfo, EditableVariant, EditableTargetData, ProductContent, TranslatableField, TranslationOrigin } from '@/types/product'
 
 function getVariantKey(v: EditableVariant): string | number {
   return v.temp_id ?? v.variant_id
@@ -47,15 +55,24 @@ export default function PreviewCreatePage() {
   const [error, setError] = useState<string | null>(null)
   const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
   
+  // Generate unique session ID for translation cache (cleared on unmount)
+  const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substring(7)}`)
+  
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
   const [activeTargetTld, setActiveTargetTld] = useState<string>('')
   const [targetData, setTargetData] = useState<Record<string, EditableTargetData>>({})
   const [activeLanguages, setActiveLanguages] = useState<Record<string, string>>({})
   const [isDirty, setIsDirty] = useState(false)
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
+  const [resettingField, setResettingField] = useState<string | null>(null) // "tld:lang:field"
+  const [retranslatingField, setRetranslatingField] = useState<string | null>(null) // "tld:lang:field"
   const initialContentRef = useRef<Record<string, Record<string, string>>>({})
   /** Tracks whether we've seen the first onChange for content (tld, lang). Ignore that one for dirty so Quill's mount normalization doesn't mark content changed. */
   const contentEditorReadyRef = useRef<Record<string, Record<string, boolean>>>({})
+  /** Stores the original translated/copied content for each shop, lang, field - used for reset */
+  const originalTranslatedContentRef = useRef<Record<string, Record<string, Record<string, string>>>>({})
+  /** Stores the original translation metadata for reset */
+  const originalTranslationMetaRef = useRef<Record<string, Record<string, Record<string, TranslationOrigin>>>>({})
 
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [selectingImageForVariant, setSelectingImageForVariant] = useState<number | null>(null)
@@ -163,7 +180,7 @@ export default function PreviewCreatePage() {
     }
   }
 
-  const initializeTargetData = (
+  const initializeTargetData = async (
     data: ProductDetails,
     sourceProductId: number,
     targetShopTlds: string[],
@@ -174,6 +191,7 @@ export default function PreviewCreatePage() {
     if (!sourceProduct) return
 
     const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.shop_tld] ?? []
     
     const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
@@ -191,18 +209,89 @@ export default function PreviewCreatePage() {
       contentEditorReadyRef.current = {}
     }
 
+    // Collect all translation items across all shops
+    const allTranslationItems: any[] = []
+    const shopTranslationMaps: Record<string, { langCodes: string[], copyLangCodes: string[] }> = {}
+
+    targetShopTlds.forEach(tld => {
+      const targetLanguages = data.shops[tld]?.languages ?? []
+      const { translationItems, copyLanguages } = prepareTranslationBatch(
+        sourceContent,
+        sourceDefaultLang,
+        targetLanguages
+      )
+
+      shopTranslationMaps[tld] = {
+        langCodes: targetLanguages.map(l => l.code),
+        copyLangCodes: copyLanguages
+      }
+
+      allTranslationItems.push(...translationItems)
+    })
+
+    // Deduplicate and call translation API once
+    let translationResults: any[] = []
+    if (allTranslationItems.length > 0) {
+      try {
+        const { uniqueItems, indexMap } = deduplicateTranslationItems(allTranslationItems)
+        console.log(`⏳ Translating ${uniqueItems.length} unique items (${allTranslationItems.length} total)`)
+        
+        const uniqueResults = await callTranslationAPI(uniqueItems, sessionId)
+        translationResults = reconstructResults(uniqueResults, indexMap)
+        
+        console.log(`✓ Translation complete`)
+      } catch (error) {
+        console.error('Translation failed:', error)
+        setError(`Translation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your Google Cloud API key configuration in the .env file.`)
+        setLoading(false)
+        return
+      }
+    }
+
+    // Apply translations to each shop
+    let resultIndex = 0
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
       const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
       
-      const content_by_language: Record<string, ProductContent> = {}
+      // Get translation results for this shop
+      const shopItemCount = targetLanguages.reduce((count, lang) => {
+        if (lang.code !== sourceDefaultLang) {
+          const fields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+          return count + fields.filter(f => sourceContent?.[f] && sourceContent[f]!.trim() !== '').length
+        }
+        return count
+      }, 0)
+      
+      const shopResults = translationResults.slice(resultIndex, resultIndex + shopItemCount)
+      resultIndex += shopItemCount
+
+      const { content_by_language, translationMeta } = applyTranslationResults(
+        sourceContent,
+        sourceDefaultLang,
+        targetLanguages,
+        shopResults
+      )
+
+      // Store original translated/copied content and metadata for reset functionality
+      if (!originalTranslatedContentRef.current[tld]) {
+        originalTranslatedContentRef.current[tld] = {}
+      }
+      if (!originalTranslationMetaRef.current[tld]) {
+        originalTranslationMetaRef.current[tld] = {}
+      }
       targetLanguages.forEach(lang => {
-        const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang]
-        content_by_language[lang.code] = {
-          title: sourceContent?.title || '',
-          fulltitle: sourceContent?.fulltitle || '',
-          description: sourceContent?.description || '',
-          content: sourceContent?.content || ''
+        originalTranslatedContentRef.current[tld][lang.code] = {
+          title: content_by_language[lang.code]?.title || '',
+          fulltitle: content_by_language[lang.code]?.fulltitle || '',
+          description: content_by_language[lang.code]?.description || '',
+          content: content_by_language[lang.code]?.content || ''
+        }
+        originalTranslationMetaRef.current[tld][lang.code] = {
+          title: translationMeta[lang.code]?.title || 'copied',
+          fulltitle: translationMeta[lang.code]?.fulltitle || 'copied',
+          description: translationMeta[lang.code]?.description || 'copied',
+          content: translationMeta[lang.code]?.content || 'copied'
         }
       })
 
@@ -247,16 +336,16 @@ export default function PreviewCreatePage() {
         productImage: initialProductImage,
         originalProductImage: initialProductImage,
         orderChanged: false,
-        imageOrderChanged: false
+        imageOrderChanged: false,
+        translationMeta
       }
 
       newActiveLanguages[tld] = defaultLang
 
       // Reset initial content + editor-ready state for this shop
-      const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang]
       initialContent[tld] = {}
       targetLanguages.forEach(lang => {
-        initialContent[tld][lang.code] = sourceContent?.content || ''
+        initialContent[tld][lang.code] = content_by_language[lang.code]?.content || ''
       })
       if (!contentEditorReadyRef.current[tld]) {
         contentEditorReadyRef.current[tld] = {}
@@ -322,6 +411,22 @@ export default function PreviewCreatePage() {
         newDirtyFields.delete(fieldKey)
       }
       
+      // Update translation metadata when field is edited
+      const translatableField = field as TranslatableField
+      const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+      let newTranslationMeta = updated[tld].translationMeta
+      
+      if (translatableFields.includes(translatableField) && isChanged) {
+        // Mark as manually edited
+        newTranslationMeta = {
+          ...newTranslationMeta,
+          [langCode]: {
+            ...newTranslationMeta?.[langCode],
+            [translatableField]: 'manual'
+          }
+        }
+      }
+      
       const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
       const productImageChanged = !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       
@@ -335,7 +440,8 @@ export default function PreviewCreatePage() {
           }
         },
         dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || visibilityChanged || productImageChanged,
-        dirtyFields: newDirtyFields
+        dirtyFields: newDirtyFields,
+        translationMeta: newTranslationMeta
       }
 
       const anyDirty = Object.values(updated).some(
@@ -719,31 +825,89 @@ export default function PreviewCreatePage() {
     })
   }
 
-  const resetField = (tld: string, langCode: string, field: keyof ProductContent) => {
+  const resetField = async (tld: string, langCode: string, field: keyof ProductContent) => {
     if (!details || !selectedSourceProductId) return
 
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
 
+    const resetKey = `${tld}:${langCode}:${field}`
+    setResettingField(resetKey)
+
+    // Small delay for UX (show loading state)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Reset content editor state if resetting content field
     if (field === 'content') {
       if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
       contentEditorReadyRef.current[tld][langCode] = false
     }
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
-    const sourceValue = sourceProduct.content_by_language?.[sourceDefaultLang]?.[field]
-    updateField(tld, langCode, field, sourceValue || '')
+
+    // Get the ORIGINAL translated/copied value and metadata from when page loaded
+    const originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[field] || ''
+    const originalOrigin = originalTranslationMetaRef.current[tld]?.[langCode]?.[field] as TranslationOrigin
+
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+
+      const fieldKey = `${langCode}.${field}`
+      const newDirtyFields = new Set(updated[tld].dirtyFields)
+      newDirtyFields.delete(fieldKey)
+
+      // Restore ORIGINAL metadata (not current metadata)
+      const newTranslationMeta = {
+        ...updated[tld].translationMeta,
+        [langCode]: {
+          ...updated[tld].translationMeta?.[langCode],
+          [field]: originalOrigin
+        }
+      }
+
+      if (field === 'content') {
+        if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+        initialContentRef.current[tld][langCode] = originalValue
+      }
+
+      updated[tld] = {
+        ...updated[tld],
+        content_by_language: {
+          ...updated[tld].content_by_language,
+          [langCode]: {
+            ...updated[tld].content_by_language[langCode],
+            [field]: originalValue
+          }
+        },
+        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+        dirtyFields: newDirtyFields,
+        translationMeta: newTranslationMeta
+      }
+
+      return updated
+    })
+
+    setResettingField(null)
   }
 
-  const resetLanguage = (tld: string, langCode: string) => {
+  const resetLanguage = async (tld: string, langCode: string) => {
     if (!details || !selectedSourceProductId) return
 
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
 
+    const resetKey = `${tld}:${langCode}:all`
+    setResettingField(resetKey)
+
+    // Small delay for UX (show loading state)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
     contentEditorReadyRef.current[tld][langCode] = false
 
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    // Get ORIGINAL translated/copied values and metadata for all fields
+    const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+    const originalContent = originalTranslatedContentRef.current[tld]?.[langCode] || {}
+    const originalMeta = originalTranslationMetaRef.current[tld]?.[langCode] || {}
 
     setTargetData(prev => {
       const updated = { ...prev }
@@ -752,19 +916,45 @@ export default function PreviewCreatePage() {
       const newDirtyFields = new Set(
         Array.from(updated[tld].dirtyFields).filter(f => !f.startsWith(`${langCode}.`))
       )
+
+      // Build content from original translated values
+      const newContent: ProductContent = {
+        title: originalContent.title || '',
+        fulltitle: originalContent.fulltitle || '',
+        description: originalContent.description || '',
+        content: originalContent.content || ''
+      }
+
+      // Restore ORIGINAL metadata (not current metadata)
+      const newLangMeta: any = {}
+      translatableFields.forEach(field => {
+        newLangMeta[field] = originalMeta[field] || 'translated'
+      })
+
+      // Update initial content ref for content field
+      if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+      initialContentRef.current[tld][langCode] = newContent.content || ''
+
+      const newTranslationMeta = {
+        ...updated[tld].translationMeta,
+        [langCode]: newLangMeta
+      }
       
       updated[tld] = {
         ...updated[tld],
         content_by_language: {
           ...updated[tld].content_by_language,
-          [langCode]: { ...sourceProduct.content_by_language?.[sourceDefaultLang] }
+          [langCode]: newContent
         },
         dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
-        dirtyFields: newDirtyFields
+        dirtyFields: newDirtyFields,
+        translationMeta: newTranslationMeta
       }
       
       return updated
     })
+
+    setResettingField(null)
   }
 
   const resetVariant = (tld: string, variantIndex: number) => {
@@ -889,6 +1079,195 @@ export default function PreviewCreatePage() {
     initializeTargetData(details, selectedSourceProductId, [tld], undefined, { preserveExisting: true })
   }
 
+  const retranslateField = async (tld: string, langCode: string, field: keyof ProductContent) => {
+    if (!details || !selectedSourceProductId) return
+
+    const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
+    if (!sourceProduct) return
+
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
+    
+    // Can't re-translate copied content (same language)
+    if (langCode === sourceDefaultLang) {
+      alert('Cannot re-translate content in the same language as source.')
+      return
+    }
+
+    const retranslateKey = `${tld}:${langCode}:${field}`
+    setRetranslatingField(retranslateKey)
+
+    // Reset content editor state if re-translating content field
+    if (field === 'content') {
+      if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+      contentEditorReadyRef.current[tld][langCode] = false
+    }
+
+    try {
+      const { value, origin } = await getBaseValueForField(
+        sourceContent,
+        sourceDefaultLang,
+        langCode,
+        field as TranslatableField,
+        sessionId
+      )
+
+      setTargetData(prev => {
+        const updated = { ...prev }
+        if (!updated[tld]) return prev
+
+        const fieldKey = `${langCode}.${field}`
+        const newDirtyFields = new Set(updated[tld].dirtyFields)
+        newDirtyFields.delete(fieldKey)
+
+        // Mark as translated
+        const newTranslationMeta = {
+          ...updated[tld].translationMeta,
+          [langCode]: {
+            ...updated[tld].translationMeta?.[langCode],
+            [field]: 'translated' as const
+          }
+        }
+
+        if (field === 'content') {
+          if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+          initialContentRef.current[tld][langCode] = value
+        }
+
+        // Update original refs with new translation
+        if (!originalTranslatedContentRef.current[tld]) originalTranslatedContentRef.current[tld] = {}
+        if (!originalTranslatedContentRef.current[tld][langCode]) {
+          originalTranslatedContentRef.current[tld][langCode] = {
+            title: '', fulltitle: '', description: '', content: ''
+          }
+        }
+        originalTranslatedContentRef.current[tld][langCode][field] = value
+
+        if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
+        if (!originalTranslationMetaRef.current[tld][langCode]) {
+          originalTranslationMetaRef.current[tld][langCode] = {}
+        }
+        originalTranslationMetaRef.current[tld][langCode][field] = 'translated'
+
+        updated[tld] = {
+          ...updated[tld],
+          content_by_language: {
+            ...updated[tld].content_by_language,
+            [langCode]: {
+              ...updated[tld].content_by_language[langCode],
+              [field]: value
+            }
+          },
+          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+          dirtyFields: newDirtyFields,
+          translationMeta: newTranslationMeta
+        }
+
+        return updated
+      })
+    } catch (error) {
+      console.error('Failed to re-translate field:', error)
+      alert(`Re-translation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setRetranslatingField(null)
+    }
+  }
+
+  const retranslateLanguage = async (tld: string, langCode: string) => {
+    if (!details || !selectedSourceProductId) return
+
+    const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
+    if (!sourceProduct) return
+
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    
+    // Can't re-translate copied content (same language)
+    if (langCode === sourceDefaultLang) {
+      alert('Cannot re-translate content in the same language as source.')
+      return
+    }
+
+    const retranslateKey = `${tld}:${langCode}:all`
+    setRetranslatingField(retranslateKey)
+
+    if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+    contentEditorReadyRef.current[tld][langCode] = false
+
+    const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
+    const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+
+    try {
+      const results = await Promise.all(
+        translatableFields.map(field => 
+          getBaseValueForField(sourceContent, sourceDefaultLang, langCode, field, sessionId)
+        )
+      )
+
+      setTargetData(prev => {
+        const updated = { ...prev }
+        if (!updated[tld]) return prev
+        
+        const newDirtyFields = new Set(
+          Array.from(updated[tld].dirtyFields).filter(f => !f.startsWith(`${langCode}.`))
+        )
+
+        // Build new content and metadata
+        const newContent: ProductContent = {}
+        const newLangMeta: any = {}
+        
+        translatableFields.forEach((field, index) => {
+          const { value } = results[index]
+          newContent[field] = value
+          newLangMeta[field] = 'translated'
+        })
+
+        // Update initial content ref for content field
+        if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+        initialContentRef.current[tld][langCode] = newContent.content || ''
+
+        // Update original refs with new translations
+        if (!originalTranslatedContentRef.current[tld]) originalTranslatedContentRef.current[tld] = {}
+        originalTranslatedContentRef.current[tld][langCode] = {
+          title: newContent.title || '',
+          fulltitle: newContent.fulltitle || '',
+          description: newContent.description || '',
+          content: newContent.content || ''
+        }
+
+        if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
+        originalTranslationMetaRef.current[tld][langCode] = {
+          title: 'translated',
+          fulltitle: 'translated',
+          description: 'translated',
+          content: 'translated'
+        }
+
+        const newTranslationMeta = {
+          ...updated[tld].translationMeta,
+          [langCode]: newLangMeta
+        }
+        
+        updated[tld] = {
+          ...updated[tld],
+          content_by_language: {
+            ...updated[tld].content_by_language,
+            [langCode]: newContent
+          },
+          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+          dirtyFields: newDirtyFields,
+          translationMeta: newTranslationMeta
+        }
+        
+        return updated
+      })
+    } catch (error) {
+      console.error('Failed to re-translate language:', error)
+      alert(`Re-translation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setRetranslatingField(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center">
@@ -968,11 +1347,16 @@ export default function PreviewCreatePage() {
                     activeLanguage={activeLanguages[tld] || ''}
                     imagesLink={sourceProduct.images_link}
                     sourceShopTld={sourceProduct.shop_tld}
+                    sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
+                    resettingField={resettingField}
+                    retranslatingField={retranslatingField}
                     sourceImages={productImages[sourceProduct.shop_tld] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
                     onResetField={(lang, field) => resetField(tld, lang, field)}
                     onResetLanguage={(lang) => resetLanguage(tld, lang)}
+                    onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
+                    onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
                     onResetShop={() => resetShop(tld)}
                     onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
                     onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
@@ -1025,11 +1409,16 @@ export default function PreviewCreatePage() {
               activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
               imagesLink={sourceProduct?.images_link}
               sourceShopTld={sourceProduct?.shop_tld}
+              sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
+              resettingField={resettingField}
+              retranslatingField={retranslatingField}
               sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
               onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}
               onResetLanguage={(lang) => resetLanguage(sortedTargetShops[0], lang)}
+              onRetranslateField={(lang, field) => retranslateField(sortedTargetShops[0], lang, field)}
+              onRetranslateLanguage={(lang) => retranslateLanguage(sortedTargetShops[0], lang)}
               onResetShop={() => resetShop(sortedTargetShops[0])}
               onUpdateVariant={(idx, field, val) => updateVariant(sortedTargetShops[0], idx, field, val)}
               onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(sortedTargetShops[0], idx, lang, title)}
