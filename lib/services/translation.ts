@@ -63,6 +63,47 @@ function getCacheKey(
 }
 
 /**
+ * Prepare text for translation by converting plain newlines to HTML breaks
+ * Google Translate preserves <br> tags but not plain \n newlines
+ */
+function prepareTextForTranslation(text: string, field: string): string {
+  // content field is already HTML (from Quill editor)
+  // Only remove \r\n between tags (not other spaces which are part of content)
+  if (field === 'content') {
+    return text.replace(/>\r?\n\s*</g, '><').trim()
+  }
+  
+  // For plain text fields (title, fulltitle, description):
+  // Convert newlines to <br> so Google preserves them
+  return text.replace(/\r?\n/g, '<br>')
+}
+
+/**
+ * Clean translated text by restoring newlines for plain text fields
+ */
+function cleanTranslatedText(text: string, field: string): string {
+  // content field: restore \r\n between tags and remove Google's added spaces
+  if (field === 'content') {
+    return text
+      // Remove space after opening block-level tags (p, h1-h6, li, ul, ol, div)
+      .replace(/(<(?:p|h[1-6]|li|ul|ol|div)(?:\s[^>]*)?>)\s+/gi, '$1')
+      // Remove space before punctuation that comes right after closing inline tags
+      .replace(/(<\/(?:a|strong|em|span|b|i|u)>)\s+([.,;:!?])/gi, '$1$2')
+      // Add \r\n between tags for formatting
+      .replace(/></g, '>\r\n<')
+      .trim()
+  }
+  
+  // For plain text fields: convert <br> back to \r\n (same as source format)
+  // Also trim any extra spaces that Google might have added at line starts
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')      // First normalize to \n
+    .split('\n')
+    .map(line => line.trim())           // Trim spaces from each line
+    .join('\r\n')                       // Join with \r\n for consistency with source
+}
+
+/**
  * Translate text using Google Cloud Translation API
  * Returns translated text or throws error
  * 
@@ -73,7 +114,7 @@ function getCacheKey(
  * - This is much more efficient than making separate API calls per field
  */
 async function translateWithGoogle(
-  texts: string[],
+  items: TranslationItem[],
   targetLang: string,
   sourceLang: string = 'nl'
 ): Promise<string[]> {
@@ -82,6 +123,9 @@ async function translateWithGoogle(
   if (!apiKey) {
     throw new Error('GOOGLE_TRANSLATE_API_KEY is not configured')
   }
+
+  // Prepare texts: convert plain newlines to <br> for plain text fields
+  const preparedTexts = items.map(item => prepareTextForTranslation(item.text, item.field))
 
   // Google Cloud Translation API endpoint
   const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`
@@ -93,10 +137,10 @@ async function translateWithGoogle(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        q: texts, // Send ALL texts in one batch
+        q: preparedTexts, // Send ALL prepared texts in one batch
         target: targetLang,
         source: sourceLang,
-        format: 'html', // Preserve HTML tags and formatting (including newlines in HTML)
+        format: 'html', // Preserve HTML tags (including our <br> tags)
       }),
     })
 
@@ -111,7 +155,10 @@ async function translateWithGoogle(
       throw new Error('Invalid response from Google Translation API')
     }
 
-    return data.data.translations.map((t: any) => t.translatedText)
+    // Clean texts: convert <br> back to newlines for plain text fields
+    return data.data.translations.map((t: any, index: number) => 
+      cleanTranslatedText(t.translatedText, items[index].field)
+    )
   } catch (error) {
     console.error('Translation error:', error)
     throw error
@@ -206,15 +253,12 @@ export async function translateBatch(
     const [sourceLang, targetLang] = groupKey.split(':')
     
     try {
-      // Extract texts to translate
-      const textsToTranslate = groupItems.map((item) => item.text)
-      
-      // Call Google Translation API
+      // Call Google Translation API with full items (need field info for newline handling)
       console.log(
-        `⏳ Translating ${textsToTranslate.length} texts: ${sourceLang} → ${targetLang}`
+        `⏳ Translating ${groupItems.length} texts: ${sourceLang} → ${targetLang}`
       )
       const translatedTexts = await translateWithGoogle(
-        textsToTranslate,
+        groupItems,
         targetLang,
         sourceLang
       )
