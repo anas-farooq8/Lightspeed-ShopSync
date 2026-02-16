@@ -65,6 +65,8 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
         return <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 shrink-0" />
       case 'error':
         return <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 shrink-0" />
+      case 'running':
+        return <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 shrink-0" />
       default:
         return <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 shrink-0" />
     }
@@ -76,6 +78,8 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
         return <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100 text-xs">Success</Badge>
       case 'error':
         return <Badge variant="destructive" className="text-xs">Error</Badge>
+      case 'running':
+        return <Badge variant="outline" className="border-blue-300 text-blue-800 bg-blue-50 text-xs">Running</Badge>
       default:
         return <Badge variant="outline" className="text-xs">Unknown</Badge>
     }

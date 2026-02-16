@@ -246,6 +246,7 @@ export default function SyncLogsPage() {
                 <SelectContent>
                   <SelectItem value="all" className="cursor-pointer">All Status</SelectItem>
                   <SelectItem value="success" className="cursor-pointer">Success</SelectItem>
+                  <SelectItem value="running" className="cursor-pointer">Running</SelectItem>
                   <SelectItem value="error" className="cursor-pointer">Error</SelectItem>
                 </SelectContent>
               </Select>

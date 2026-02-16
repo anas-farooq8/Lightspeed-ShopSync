@@ -204,9 +204,9 @@ BEGIN
     RAISE EXCEPTION 'Invalid offset. Must be >= 0, got: %', COALESCE(p_offset::TEXT, 'NULL');
   END IF;
   
-  -- Validate status if provided (only completed statuses: success, error)
-  IF p_status IS NOT NULL AND p_status NOT IN ('success', 'error') THEN
-    RAISE EXCEPTION 'Invalid status. Must be ''success'' or ''error'', got: %', p_status;
+  -- Validate status if provided (only completed statuses: success, error, running)
+  IF p_status IS NOT NULL AND p_status NOT IN ('success', 'error', 'running') THEN
+    RAISE EXCEPTION 'Invalid status. Must be ''success'' or ''error'' or ''running'', got: %', p_status;
   END IF;
   
   -- Validate shop_id exists when provided

@@ -44,14 +44,16 @@ export function TargetShopSelectionDialog({
 
   const handleToggle = useCallback((tld: string, canSelect: boolean) => {
     if (!canSelect) return
-    
-    const newSelection = new Set(selectedShops)
-    if (newSelection.has(tld)) {
-      newSelection.delete(tld)
-    } else {
-      newSelection.add(tld)
-    }
-    setSelectedShops(newSelection)
+
+    setSelectedShops((prev) => {
+      const next = new Set(prev)
+      if (next.has(tld)) {
+        next.delete(tld)
+      } else {
+        next.add(tld)
+      }
+      return next
+    })
   }, [])
 
   const handleConfirm = useCallback(() => {
