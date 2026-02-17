@@ -49,8 +49,22 @@ export interface CreateProductResult {
   success: boolean
   productId?: number
   createdVariants?: Array<{ variantId: number; sku: string }>
+  /** For DB sync - variant index mapping */
+  createdVariantsForDb?: Array<{ variantId: number; sku: string; index: number }>
   error?: string
   details?: any
+}
+
+/**
+ * Sanitize variant title for Lightspeed API.
+ * API returns "Invalid variant title" for empty/invalid titles - use SKU as fallback.
+ */
+function sanitizeVariantTitle(title: string | undefined | null, sku: string): string {
+  const trimmed = (title ?? '').toString().trim()
+  if (trimmed.length > 0) {
+    return trimmed
+  }
+  return sku || 'Variant'
 }
 
 /**
@@ -146,7 +160,10 @@ export async function createProduct(
             continue
           }
 
-          const variantTitle = variant.content_by_language[defaultLanguage]?.title || ''
+          const variantTitle = sanitizeVariantTitle(
+            variant.content_by_language[defaultLanguage]?.title,
+            variant.sku
+          )
 
           if (variant.is_default && !autoDefaultUsed) {
             // Update auto-created default variant
@@ -157,6 +174,7 @@ export async function createProduct(
                 isDefault: true,
                 sortOrder: variant.sort_order,
                 sku: variant.sku,
+                articleCode: variant.sku,
                 priceExcl: variant.price_excl,
                 title: variantTitle,
                 image: {
@@ -179,6 +197,7 @@ export async function createProduct(
                 isDefault: variant.is_default,
                 sortOrder: variant.sort_order,
                 sku: variant.sku,
+                articleCode: variant.sku,
                 priceExcl: variant.price_excl,
                 title: variantTitle,
                 image: {
@@ -225,7 +244,10 @@ export async function createProduct(
         continue
       }
 
-      const variantTitle = variant.content_by_language[defaultLanguage]?.title || ''
+      const variantTitle = sanitizeVariantTitle(
+        variant.content_by_language[defaultLanguage]?.title,
+        variant.sku
+      )
 
       if (variant.is_default && !autoDefaultUsed) {
         // Update auto-created default variant (no image)
@@ -236,6 +258,7 @@ export async function createProduct(
             isDefault: true,
             sortOrder: variant.sort_order,
             sku: variant.sku,
+            articleCode: variant.sku,
             priceExcl: variant.price_excl,
             title: variantTitle,
           }
@@ -254,6 +277,7 @@ export async function createProduct(
             isDefault: variant.is_default,
             sortOrder: variant.sort_order,
             sku: variant.sku,
+            articleCode: variant.sku,
             priceExcl: variant.price_excl,
             title: variantTitle,
           }
@@ -310,7 +334,10 @@ export async function createProduct(
             continue
           }
 
-          const variantTitle = variant.content_by_language[lang]?.title
+          const variantTitle = sanitizeVariantTitle(
+            variant.content_by_language[lang]?.title,
+            variant.sku
+          )
           
           if (variantTitle) {
             await targetClient.updateVariant(variantId, {
@@ -331,13 +358,18 @@ export async function createProduct(
     console.log(`[CREATE] Product ID: ${productId}`)
     console.log(`[CREATE] Variants created: ${createdVariants.size}`)
 
+    // Return createdVariants with index for DB sync mapping
+    const createdVariantsList = Array.from(variantIdMap.entries()).map(([index, variantId]) => ({
+      variantId,
+      sku: variants[index].sku,
+      index,
+    }))
+
     return {
       success: true,
       productId,
-      createdVariants: Array.from(variantIdMap.entries()).map(([index, variantId]) => ({
-        variantId,
-        sku: variants[index].sku,
-      })),
+      createdVariants: createdVariantsList.map(({ variantId, sku }) => ({ variantId, sku })),
+      createdVariantsForDb: createdVariantsList,
     }
   } catch (error) {
     console.error('[CREATE] ✗✗✗ Product creation failed:', error)

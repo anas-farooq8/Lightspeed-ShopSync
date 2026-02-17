@@ -264,12 +264,14 @@ BEGIN
         ) target_groups
         ) AS targets,
         
-        -- SHOPS: one object per TLD with name, base_url, languages
+        -- SHOPS: one object per TLD with id, name, role, base_url, languages
         (SELECT COALESCE(
             jsonb_object_agg(
                 s.tld,
                 jsonb_build_object(
+                    'id', s.id,
                     'name', s.name,
+                    'role', s.role,
                     'base_url', s.base_url,
                     'languages', COALESCE(ash.languages, '[]'::jsonb)
                 )

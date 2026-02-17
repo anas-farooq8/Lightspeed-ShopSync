@@ -59,7 +59,9 @@ export interface ProductData {
 }
 
 export interface ShopInfo {
+  id: string
   name: string
+  role: string
   base_url: string
   languages: Language[]
 }

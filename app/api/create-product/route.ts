@@ -9,9 +9,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
 import { createProduct, type VariantInfo, type ImageInfo } from '@/lib/services/create-product'
+import { syncCreatedProductToDb } from '@/lib/services/sync-created-product-to-db'
 
 interface CreateProductRequest {
   targetShopTld: string
+  shopId: string
   sourceProductData: {
     visibility: string
     content_by_language: Record<string, {
@@ -40,12 +42,12 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: CreateProductRequest = await request.json()
-    const { targetShopTld, sourceProductData } = body
+    const { targetShopTld, shopId, sourceProductData } = body
 
     // Validate request
-    if (!targetShopTld || !sourceProductData) {
+    if (!targetShopTld || !shopId || !sourceProductData) {
       return NextResponse.json(
-        { error: 'Missing required fields: targetShopTld, sourceProductData' },
+        { error: 'Missing required fields: targetShopTld, shopId, sourceProductData' },
         { status: 400 }
       )
     }
@@ -94,8 +96,34 @@ export async function POST(request: NextRequest) {
 
     console.log('[API] ✓ Product created successfully:', result.productId)
 
-    // TODO: Log the sync operation to sync_logs table
-    // This would track the create operation for audit purposes
+    // Sync to database
+    if (result.createdVariantsForDb) {
+      try {
+        await syncCreatedProductToDb({
+          supabase,
+          shopId,
+          productId: result.productId!,
+          visibility: sourceProductData.visibility,
+          contentByLanguage: sourceProductData.content_by_language,
+          variants: sourceProductData.variants,
+          createdVariantsForDb: result.createdVariantsForDb,
+          images: sourceProductData.images,
+        })
+        console.log('[API] ✓ Product synced to database')
+      } catch (dbError) {
+        console.error('[API] Database sync failed (product was created in Lightspeed):', dbError)
+        return NextResponse.json(
+          {
+            success: true,
+            productId: result.productId,
+            createdVariants: result.createdVariants,
+            warning: 'Product created in Lightspeed but database sync failed. Run full sync to update.',
+            message: `Product created successfully in target shop`,
+          },
+          { status: 200 }
+        )
+      }
+    }
 
     return NextResponse.json({
       success: true,

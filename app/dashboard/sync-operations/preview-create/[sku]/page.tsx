@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Package, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Package, Loader2, CheckCircle2, XCircle, Store } from 'lucide-react'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { 
   AlertDialog, 
@@ -88,6 +88,7 @@ export default function PreviewCreatePage() {
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [selectingImageForVariant, setSelectingImageForVariant] = useState<number | null>(null)
   const [selectingProductImage, setSelectingProductImage] = useState(false)
+  const [showCreateConfirmation, setShowCreateConfirmation] = useState(false)
 
   const sortedTargetShops = useMemo(
     () => [...selectedTargetShops].sort((a, b) => a.localeCompare(b)),
@@ -113,24 +114,28 @@ export default function PreviewCreatePage() {
     }
   }, [isDirty, navigateBack])
 
-  const handleCreateProduct = useCallback(async () => {
+  const handleCreateClick = useCallback(() => {
+    if (!sourceProduct || !details) return
+    const data = targetData[activeTargetTld]
+    if (!data) {
+      alert('No data available for this shop')
+      return
+    }
+    setShowCreateConfirmation(true)
+  }, [sourceProduct, details, activeTargetTld, targetData])
+
+  const handleConfirmCreate = useCallback(async () => {
     if (!sourceProduct || !details) return
 
     const tld = activeTargetTld
     const data = targetData[tld]
     
     if (!data) {
-      alert('No data available for this shop')
+      setShowCreateConfirmation(false)
       return
     }
 
-    // Confirm creation
-    const shopName = details.shops?.[tld]?.name ?? tld
-    const confirmMessage = `Create product in ${shopName}?\n\nThis will create a new product with ${data.variants.length} variant(s).`
-    if (!confirm(confirmMessage)) {
-      return
-    }
-
+    setShowCreateConfirmation(false)
     setCreating(true)
     setCreateErrors(prev => {
       const updated = { ...prev }
@@ -164,6 +169,11 @@ export default function PreviewCreatePage() {
       console.log('[UI] Creating product in shop:', tld)
       console.log('[UI] Product data:', sourceProductData)
 
+      const shopId = details.shops?.[tld]?.id
+      if (!shopId) {
+        throw new Error(`Shop ID not found for ${tld}`)
+      }
+
       // Call API
       const response = await fetch('/api/create-product', {
         method: 'POST',
@@ -172,6 +182,7 @@ export default function PreviewCreatePage() {
         },
         body: JSON.stringify({
           targetShopTld: tld,
+          shopId,
           sourceProductData
         })
       })
@@ -186,9 +197,6 @@ export default function PreviewCreatePage() {
 
       // Mark as success
       setCreateSuccess(prev => ({ ...prev, [tld]: true }))
-
-      // Show success message
-      alert(`✓ Product created successfully in ${shopName}!\n\nProduct ID: ${result.productId}\nVariants: ${result.createdVariants?.length || 0}`)
 
       // If all shops are done, navigate back after a delay
       const allShopsCreated = sortedTargetShops.every(
@@ -205,11 +213,30 @@ export default function PreviewCreatePage() {
       console.error('[UI] Failed to create product:', err)
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
       setCreateErrors(prev => ({ ...prev, [tld]: errorMessage }))
-      alert(`✗ Failed to create product in ${shopName}\n\n${errorMessage}`)
     } finally {
       setCreating(false)
     }
   }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack])
+
+  // Create confirmation dialog content
+  const createConfirmationContent = useMemo(() => {
+    if (!details || !sourceProduct) return null
+    const tld = activeTargetTld
+    const data = targetData[tld]
+    if (!data) return null
+
+    const shopName = details.shops?.[tld]?.name ?? tld
+    const imageCount = data.images.filter(img => !data.removedImageIds.has(img.id)).length
+    const variantCount = data.variants.length
+
+    return {
+      shopName,
+      shopTld: tld,
+      variantCount,
+      imageCount,
+      sku: data.variants[0]?.sku || sourceProduct.sku || sku
+    }
+  }, [details, sourceProduct, activeTargetTld, targetData, sku])
 
   useEffect(() => {
     async function fetchProductDetails() {
@@ -1621,6 +1648,56 @@ export default function PreviewCreatePage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Create Product Confirmation */}
+      <AlertDialog open={showCreateConfirmation} onOpenChange={setShowCreateConfirmation}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-red-600" />
+              Confirm Product Creation
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-1 text-left">
+                {createConfirmationContent ? (
+                  <>
+                    <p className="text-foreground font-medium">
+                      Are you sure you want to create this product in the following shop?
+                    </p>
+                    <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                      <div className="flex items-center gap-2 font-medium">
+                        <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                          {createConfirmationContent.shopTld.toUpperCase()}
+                        </span>
+                        <span>{createConfirmationContent.shopName}</span>
+                      </div>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• {createConfirmationContent.variantCount} variant{createConfirmationContent.variantCount !== 1 ? 's' : ''}</li>
+                        <li>• {createConfirmationContent.imageCount} image{createConfirmationContent.imageCount !== 1 ? 's' : ''}</li>
+                        <li>• SKU: {createConfirmationContent.sku}</li>
+                      </ul>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      This will create a new product in your Lightspeed store. The operation cannot be undone automatically.
+                    </p>
+                  </>
+                ) : (
+                  <p>Loading...</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCreate}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Yes, Create Product
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {hasMultipleTargets ? (
         <Tabs value={activeTargetTld} onValueChange={setActiveTargetTld} className="w-full min-w-0">
           <div className="w-full p-4 sm:p-6">
@@ -1844,7 +1921,7 @@ export default function PreviewCreatePage() {
               {createSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
             </Button>
             <Button
-              onClick={handleCreateProduct}
+              onClick={handleCreateClick}
               disabled={creating || createSuccess[activeTargetTld]}
               className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
             >

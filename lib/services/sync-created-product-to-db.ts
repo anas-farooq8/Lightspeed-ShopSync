@@ -1,0 +1,127 @@
+/**
+ * Sync created product to Supabase database
+ *
+ * After successfully creating a product in Lightspeed, inserts the new product
+ * and variants into our Supabase tables so the sync operations view stays in sync.
+ */
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { VariantInfo, ImageInfo } from './create-product'
+
+interface SyncCreatedProductInput {
+  supabase: SupabaseClient
+  shopId: string
+  productId: number
+  visibility: string
+  contentByLanguage: Record<string, {
+    title: string
+    fulltitle?: string
+    description?: string
+    content?: string
+  }>
+  variants: VariantInfo[]
+  createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }>
+  images: ImageInfo[]
+}
+
+/**
+ * Insert newly created product and variants into Supabase
+ */
+export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Promise<void> {
+  const {
+    supabase,
+    shopId,
+    productId,
+    visibility,
+    contentByLanguage,
+    variants,
+    createdVariantsForDb,
+    images,
+  } = input
+
+  const now = new Date().toISOString()
+
+  // Product image: use first variant's image or first product image
+  const firstVariant = variants[0]
+  const productImage = firstVariant?.image ?? (images[0] ? {
+    src: images[0].src,
+    thumb: images[0].thumb,
+    title: images[0].title,
+  } : null)
+
+  // Insert product
+  const { error: productError } = await supabase.from('products').insert({
+    shop_id: shopId,
+    lightspeed_product_id: productId,
+    visibility,
+    image: productImage,
+    images_link: null, // Not available from create flow
+    ls_created_at: now,
+    ls_updated_at: now,
+  })
+
+  if (productError) {
+    console.error('[DB] Failed to insert product:', productError)
+    throw new Error(`Failed to sync product to database: ${productError.message}`)
+  }
+
+  // Insert product_content for each language
+  const productContentRows = Object.entries(contentByLanguage).map(([langCode, content]) => ({
+    shop_id: shopId,
+    lightspeed_product_id: productId,
+    language_code: langCode,
+    title: content.title ?? null,
+    fulltitle: content.fulltitle ?? null,
+    description: content.description ?? null,
+    content: content.content ?? null,
+  }))
+
+  const { error: contentError } = await supabase.from('product_content').insert(productContentRows)
+
+  if (contentError) {
+    console.error('[DB] Failed to insert product content:', contentError)
+    throw new Error(`Failed to sync product content: ${contentError.message}`)
+  }
+
+  // Insert variants
+  for (const { variantId, index } of createdVariantsForDb) {
+    const variant = variants[index]
+    if (!variant) continue
+
+    const { error: variantError } = await supabase.from('variants').insert({
+      shop_id: shopId,
+      lightspeed_variant_id: variantId,
+      lightspeed_product_id: productId,
+      sku: variant.sku,
+      is_default: variant.is_default,
+      sort_order: variant.sort_order ?? index,
+      price_excl: variant.price_excl,
+      image: variant.image,
+    })
+
+    if (variantError) {
+      console.error('[DB] Failed to insert variant:', variantError)
+      throw new Error(`Failed to sync variant: ${variantError.message}`)
+    }
+
+    // Insert variant_content for each language
+    const variantContentRows = Object.keys(contentByLanguage).map((langCode) => {
+      const title = variant.content_by_language?.[langCode]?.title ?? variant.sku
+      return {
+        shop_id: shopId,
+        lightspeed_variant_id: variantId,
+        language_code: langCode,
+        title: title || variant.sku,
+      }
+    })
+
+    const { error: variantContentError } = await supabase.from('variant_content').insert(variantContentRows)
+
+    if (variantContentError) {
+      console.error('[DB] Failed to insert variant content:', variantContentError)
+      throw new Error(`Failed to sync variant content: ${variantContentError.message}`)
+    }
+  }
+
+  console.log('[DB] ✓ Product and variants synced to database')
+}

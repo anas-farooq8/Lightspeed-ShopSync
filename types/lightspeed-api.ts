@@ -33,6 +33,7 @@ export interface CreateVariantPayload {
     isDefault: boolean
     sortOrder: number
     sku: string
+    articleCode: string // same as sku
     priceExcl: number
     title?: string
     image?: {
@@ -48,6 +49,7 @@ export interface UpdateVariantPayload {
     isDefault?: boolean
     sortOrder?: number
     sku?: string
+    articleCode?: string // same as sku
     priceExcl?: number
     title?: string
     image?: {
