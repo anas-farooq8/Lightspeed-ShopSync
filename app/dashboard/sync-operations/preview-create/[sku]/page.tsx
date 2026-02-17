@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Package, Loader2 } from 'lucide-react'
+import { Package, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { 
   AlertDialog, 
@@ -47,6 +47,7 @@ function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
 export default function PreviewCreatePage() {
   const params = useParams()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const sku = decodeURIComponent((params.sku as string) || '')
   const { navigating, navigateBack } = useProductNavigation()
 
@@ -59,6 +60,11 @@ export default function PreviewCreatePage() {
   const [error, setError] = useState<string | null>(null)
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop translation errors
   const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
+  
+  // Create product states
+  const [creating, setCreating] = useState(false)
+  const [createSuccess, setCreateSuccess] = useState<Record<string, boolean>>({})
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({})
 
   /** Runtime-only translation memo (like productImages/targetData — gone on refresh/navigate). Used for reset, re-translate reuse. */
   const translationMemoRef = useRef(new Map<string, string>())
@@ -88,19 +94,6 @@ export default function PreviewCreatePage() {
     [selectedTargetShops]
   )
 
-  const handleBack = useCallback(() => {
-    if (isDirty) {
-      setShowCloseConfirmation(true)
-    } else {
-      navigateBack()
-    }
-  }, [isDirty, navigateBack])
-
-  const handleCreateProduct = useCallback(() => {
-    console.log('Create product in shop:', activeTargetTld)
-    console.log('Data:', targetData[activeTargetTld])
-  }, [activeTargetTld, targetData])
-
   // Compute values after data is loaded (using useMemo with dependencies)
   const sourceProduct = useMemo(() => 
     details?.source.find(p => p.product_id === selectedSourceProductId) || details?.source[0],
@@ -111,6 +104,112 @@ export default function PreviewCreatePage() {
     [details]
   )
   const hasMultipleTargets = sortedTargetShops.length > 1
+
+  const handleBack = useCallback(() => {
+    if (isDirty) {
+      setShowCloseConfirmation(true)
+    } else {
+      navigateBack()
+    }
+  }, [isDirty, navigateBack])
+
+  const handleCreateProduct = useCallback(async () => {
+    if (!sourceProduct || !details) return
+
+    const tld = activeTargetTld
+    const data = targetData[tld]
+    
+    if (!data) {
+      alert('No data available for this shop')
+      return
+    }
+
+    // Confirm creation
+    const shopName = details.shops?.[tld]?.name ?? tld
+    const confirmMessage = `Create product in ${shopName}?\n\nThis will create a new product with ${data.variants.length} variant(s).`
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
+    setCreating(true)
+    setCreateErrors(prev => {
+      const updated = { ...prev }
+      delete updated[tld]
+      return updated
+    })
+    setCreateSuccess(prev => {
+      const updated = { ...prev }
+      delete updated[tld]
+      return updated
+    })
+
+    try {
+      // Prepare data for API
+      const sourceProductData = {
+        visibility: data.visibility,
+        content_by_language: data.content_by_language,
+        variants: data.variants.map(v => ({
+          sku: v.sku || '',
+          is_default: v.is_default,
+          sort_order: v.sort_order || 0,
+          price_excl: v.price_excl,
+          image: v.image,
+          content_by_language: v.content_by_language
+        })),
+        images: data.images
+          .filter(img => !data.removedImageIds.has(img.id))
+          .sort((a, b) => a.sort_order - b.sort_order)
+      }
+
+      console.log('[UI] Creating product in shop:', tld)
+      console.log('[UI] Product data:', sourceProductData)
+
+      // Call API
+      const response = await fetch('/api/create-product', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          targetShopTld: tld,
+          sourceProductData
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create product')
+      }
+
+      console.log('[UI] ✓ Product created successfully:', result)
+
+      // Mark as success
+      setCreateSuccess(prev => ({ ...prev, [tld]: true }))
+
+      // Show success message
+      alert(`✓ Product created successfully in ${shopName}!\n\nProduct ID: ${result.productId}\nVariants: ${result.createdVariants?.length || 0}`)
+
+      // If all shops are done, navigate back after a delay
+      const allShopsCreated = sortedTargetShops.every(
+        shop => createSuccess[shop] || shop === tld
+      )
+      
+      if (allShopsCreated) {
+        setTimeout(() => {
+          navigateBack()
+        }, 1500)
+      }
+
+    } catch (err) {
+      console.error('[UI] Failed to create product:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      setCreateErrors(prev => ({ ...prev, [tld]: errorMessage }))
+      alert(`✗ Failed to create product in ${shopName}\n\n${errorMessage}`)
+    } finally {
+      setCreating(false)
+    }
+  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack])
 
   useEffect(() => {
     async function fetchProductDetails() {
@@ -1711,20 +1810,48 @@ export default function PreviewCreatePage() {
       </Dialog>
 
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50">
-        <div className="w-full flex items-center justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateProduct}
-            className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
-          >
-            Create Products
-          </Button>
+        <div className="w-full flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
+          {/* Status indicators */}
+          <div className="flex items-center gap-2 text-sm">
+            {creating && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Creating product...</span>
+              </div>
+            )}
+            {!creating && createSuccess[activeTargetTld] && (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Product created successfully</span>
+              </div>
+            )}
+            {!creating && createErrors[activeTargetTld] && (
+              <div className="flex items-center gap-2 text-destructive">
+                <XCircle className="h-4 w-4" />
+                <span>Creation failed</span>
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              disabled={creating}
+              className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
+            >
+              {createSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
+            </Button>
+            <Button
+              onClick={handleCreateProduct}
+              disabled={creating || createSuccess[activeTargetTld]}
+              className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
+            >
+              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {createSuccess[activeTargetTld] ? '✓ Created' : 'Create Product'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

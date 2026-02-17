@@ -1,0 +1,220 @@
+/**
+ * Lightspeed eCom API Client
+ * 
+ * Handles all API requests to Lightspeed eCom API
+ * Base URL: https://api.webshopapp.com/{language}/
+ * Authentication: HTTP Basic Auth (API key + secret)
+ */
+
+import type {
+  LightspeedConfig,
+  CreateProductPayload,
+  UpdateProductPayload,
+  CreateVariantPayload,
+  UpdateVariantPayload,
+  CreateProductImagePayload,
+  UpdateProductImagePayload,
+  LightspeedProduct,
+  LightspeedVariant,
+  LightspeedProductImage
+} from '@/types/lightspeed-api'
+
+export class LightspeedAPIClient {
+  private config: LightspeedConfig
+  private baseUrl = 'https://api.webshopapp.com'
+
+  constructor(config: LightspeedConfig) {
+    this.config = config
+  }
+
+  /**
+   * Get Basic Auth header
+   */
+  private getAuthHeader(): string {
+    const credentials = `${this.config.apiKey}:${this.config.apiSecret}`
+    return `Basic ${Buffer.from(credentials).toString('base64')}`
+  }
+
+  /**
+   * Make authenticated request to Lightspeed API
+   */
+  private async request<T>(
+    endpoint: string,
+    method: 'POST' | 'PUT',
+    body?: any,
+    language?: string
+  ): Promise<T> {
+    if (!language) {
+      throw new Error('Language code is required for API requests')
+    }
+
+    const url = `${this.baseUrl}/${language}${endpoint}`
+
+    const headers: Record<string, string> = {
+      'Authorization': this.getAuthHeader(),
+      'Content-Type': 'application/json',
+    }
+
+    const options: RequestInit = {
+      method,
+      headers,
+    }
+
+    if (body) {
+      options.body = JSON.stringify(body)
+    }
+
+    try {
+      const response = await fetch(url, options)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(
+          `Lightspeed API error (${response.status}): ${errorText}`
+        )
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Lightspeed API request failed: ${method} ${url}`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Create a new product
+   */
+  async createProduct(
+    payload: CreateProductPayload,
+    language: string
+  ): Promise<{ product: LightspeedProduct }> {
+    return this.request<{ product: LightspeedProduct }>(
+      '/products.json',
+      'POST',
+      payload,
+      language
+    )
+  }
+
+  /**
+   * Update an existing product
+   */
+  async updateProduct(
+    productId: number,
+    payload: UpdateProductPayload,
+    language: string
+  ): Promise<{ product: LightspeedProduct }> {
+    return this.request<{ product: LightspeedProduct }>(
+      `/products/${productId}.json`,
+      'PUT',
+      payload,
+      language
+    )
+  }
+
+  /**
+   * Get variants for a product
+   */
+  async getVariants(productId: number, language: string): Promise<{ variants: LightspeedVariant[] }> {
+    const url = `${this.baseUrl}/${language}/variants.json?product=${productId}`
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      }
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Lightspeed API error (${response.status}): ${errorText}`)
+    }
+
+    return await response.json()
+  }
+
+  /**
+   * Create a new variant
+   */
+  async createVariant(
+    payload: CreateVariantPayload,
+    language: string
+  ): Promise<{ variant: LightspeedVariant }> {
+    return this.request<{ variant: LightspeedVariant }>(
+      '/variants.json',
+      'POST',
+      payload,
+      language
+    )
+  }
+
+  /**
+   * Update an existing variant
+   */
+  async updateVariant(
+    variantId: number,
+    payload: UpdateVariantPayload,
+    language: string
+  ): Promise<{ variant: LightspeedVariant }> {
+    return this.request<{ variant: LightspeedVariant }>(
+      `/variants/${variantId}.json`,
+      'PUT',
+      payload,
+      language
+    )
+  }
+
+  /**
+   * Create a product image
+   */
+  async createProductImage(
+    productId: number,
+    payload: CreateProductImagePayload,
+    language: string
+  ): Promise<{ productImage: LightspeedProductImage }> {
+    return this.request<{ productImage: LightspeedProductImage }>(
+      `/products/${productId}/images.json`,
+      'POST',
+      payload,
+      language
+    )
+  }
+
+  /**
+   * Update product image sortOrder
+   */
+  async updateProductImage(
+    productId: number,
+    imageId: number,
+    payload: UpdateProductImagePayload,
+    language: string
+  ): Promise<{ productImage: LightspeedProductImage }> {
+    return this.request<{ productImage: LightspeedProductImage }>(
+      `/products/${productId}/images/${imageId}.json`,
+      'PUT',
+      payload,
+      language
+    )
+  }
+}
+
+/**
+ * Get Lightspeed API client for a specific shop
+ */
+export function getLightspeedClient(shopTld: string): LightspeedAPIClient {
+  const apiKey = process.env[`LIGHTSPEED_API_KEY_${shopTld.toUpperCase()}`]
+  const apiSecret = process.env[`LIGHTSPEED_API_SECRET_${shopTld.toUpperCase()}`]
+
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      `Missing Lightspeed API credentials for shop: ${shopTld}. ` +
+      `Please set LIGHTSPEED_API_KEY_${shopTld.toUpperCase()} and LIGHTSPEED_API_SECRET_${shopTld.toUpperCase()}`
+    )
+  }
+
+  return new LightspeedAPIClient({
+    apiKey,
+    apiSecret,
+    shopTld,
+  })
+}
