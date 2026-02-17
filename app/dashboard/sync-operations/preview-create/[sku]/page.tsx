@@ -393,9 +393,8 @@ export default function PreviewCreatePage() {
       if (field === 'content') {
         sourceValue = initialContentRef.current[tld]?.[langCode] || ''
       } else {
-        const sourceProduct = details?.source.find(p => p.product_id === selectedSourceProductId)
-        const sourceDefaultLang = details?.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code || 'nl'
-        sourceValue = sourceProduct?.content_by_language?.[sourceDefaultLang]?.[field] || ''
+        // Use the original translated value for this specific language
+        sourceValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[field] || ''
       }
 
       let isChanged: boolean
@@ -414,6 +413,11 @@ export default function PreviewCreatePage() {
           sourceValue = initialContentRef.current[tld]?.[langCode] || ''
           isChanged = value !== sourceValue
         }
+      } else if (field === 'description') {
+        // Normalize line endings for textarea comparison (browser might convert \n to \r\n or vice versa)
+        const normalizedValue = value.replace(/\r\n/g, '\n')
+        const normalizedSource = sourceValue.replace(/\r\n/g, '\n')
+        isChanged = normalizedValue !== normalizedSource
       } else {
         isChanged = value !== sourceValue
       }
@@ -478,6 +482,7 @@ export default function PreviewCreatePage() {
       const newValue = field === 'price_excl' ? parseFloat(value as string) || 0 : value
       
       newVariants[variantIndex] = { ...variant, [field]: newValue }
+      const updatedVariant = newVariants[variantIndex]
       
       const isChanged = field === 'sku' 
         ? newValue !== variant.originalSku
@@ -488,9 +493,9 @@ export default function PreviewCreatePage() {
       if (isChanged) {
         newDirtyVariants.add(key)
       } else {
-        const variantTitle = variant.content_by_language[activeLanguages[tld] || 'nl']?.title || ''
-        const originalTitle = variant.originalTitle?.[activeLanguages[tld] || 'nl'] || ''
-        if (variantTitle === originalTitle && variant.sku === variant.originalSku && variant.price_excl === variant.originalPrice) {
+        const variantTitle = updatedVariant.content_by_language[activeLanguages[tld] || 'nl']?.title || ''
+        const originalTitle = updatedVariant.originalTitle?.[activeLanguages[tld] || 'nl'] || ''
+        if (variantTitle === originalTitle && updatedVariant.sku === updatedVariant.originalSku && updatedVariant.price_excl === updatedVariant.originalPrice) {
           newDirtyVariants.delete(key)
         }
       }
@@ -522,6 +527,7 @@ export default function PreviewCreatePage() {
           [langCode]: { title }
         }
       }
+      const updatedVariant = newVariants[variantIndex]
       
       const originalTitle = variant.originalTitle?.[langCode] || ''
       const isChanged = title !== originalTitle
@@ -531,7 +537,7 @@ export default function PreviewCreatePage() {
       if (isChanged) {
         newDirtyVariants.add(key)
       } else {
-        if (variant.sku === variant.originalSku && variant.price_excl === variant.originalPrice && title === originalTitle) {
+        if (updatedVariant.sku === updatedVariant.originalSku && updatedVariant.price_excl === updatedVariant.originalPrice && title === originalTitle) {
           newDirtyVariants.delete(key)
         }
       }
