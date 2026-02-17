@@ -1,27 +1,49 @@
-/**
- * Create Product API Endpoint
- * POST /api/create-product
- * 
- * Creates a new product in the target Lightspeed shop
- */
-
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
 import { createProduct, type VariantInfo, type ImageInfo } from '@/lib/services/create-product'
 import { syncCreatedProductToDb } from '@/lib/services/sync-created-product-to-db'
+import { HTTP_STATUS } from '@/lib/api/constants'
+import { handleRouteError } from '@/lib/api/errors'
+import { isRequireUserFailure, requireUser } from '@/lib/api/auth'
+
+/**
+ * Create Product API
+ *
+ * Method: POST
+ * Path: /api/create-product
+ *
+ * Description:
+ * - Creates a new product in the target Lightspeed shop and syncs it to the local database.
+ *
+ * Auth:
+ * - Required (Supabase user session).
+ *
+ * Request body:
+ * - targetShopTld: string
+ * - shopId: string
+ * - sourceProductData: { visibility, content_by_language, variants, images }
+ *
+ * Responses:
+ * - 200: Product created (with optional warning if DB sync failed).
+ * - 400: Validation error (missing required fields or content).
+ * - 401: Unauthorized (no valid Supabase user).
+ * - 500: Internal server error.
+ */
 
 interface CreateProductRequest {
   targetShopTld: string
   shopId: string
   sourceProductData: {
     visibility: string
-    content_by_language: Record<string, {
-      title: string
-      fulltitle?: string
-      description?: string
-      content?: string
-    }>
+    content_by_language: Record<
+      string,
+      {
+        title: string
+        fulltitle?: string
+        description?: string
+        content?: string
+      }
+    >
     variants: VariantInfo[]
     images: ImageInfo[]
   }
@@ -30,15 +52,13 @@ interface CreateProductRequest {
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const auth = await requireUser()
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+    if (isRequireUserFailure(auth)) {
+      return auth.response
     }
+
+    const { supabase } = auth
 
     // Parse request body
     const body: CreateProductRequest = await request.json()
@@ -48,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (!targetShopTld || !shopId || !sourceProductData) {
       return NextResponse.json(
         { error: 'Missing required fields: targetShopTld, shopId, sourceProductData' },
-        { status: 400 }
+        { status: HTTP_STATUS.BAD_REQUEST }
       )
     }
 
@@ -59,7 +79,7 @@ export async function POST(request: NextRequest) {
     if (availableLanguages.length === 0) {
       return NextResponse.json(
         { error: 'No content languages provided' },
-        { status: 400 }
+        { status: HTTP_STATUS.BAD_REQUEST }
       )
     }
 
@@ -90,7 +110,7 @@ export async function POST(request: NextRequest) {
           error: result.error || 'Failed to create product',
           details: result.details 
         },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
@@ -133,14 +153,9 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('[API] Unexpected error:', error)
-    
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    return handleRouteError(error, {
+      logMessage: '[API] Unexpected error in create-product route:',
+      includeErrorMessage: true,
+    })
   }
 }

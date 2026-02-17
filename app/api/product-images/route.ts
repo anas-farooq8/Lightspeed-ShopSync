@@ -1,16 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { FORCE_DYNAMIC, HTTP_STATUS } from '@/lib/api/constants'
+import { handleRouteError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = FORCE_DYNAMIC
 
 const FIELDS = 'id,sortOrder,title,thumb,src'
 
 /**
- * Fetches product images from Lightspeed API using images_link.
- * Uses Basic Auth with LIGHTSPEED_API_KEY_{TLD} and LIGHTSPEED_API_SECRET_{TLD}.
+ * Product Images API
  *
- * Query Parameters:
- * - link: The images API URL (images_link from product)
- * - shopTld: Shop TLD for credentials (nl, de, be)
+ * Method: GET
+ * Path: /api/product-images
+ *
+ * Description:
+ * - Fetches product images from the Lightspeed API using the product's `images_link` URL.
+ * - Uses Basic Auth credentials per shop TLD.
+ *
+ * Auth:
+ * - Not required (uses shop-level API credentials).
+ *
+ * Query parameters:
+ * - link: Images API URL (product `images_link`).
+ * - shopTld: Shop TLD (e.g. "nl", "de", "be") to select credentials.
+ *
+ * Responses:
+ * - 200: Array of product image records.
+ * - 400: Missing or invalid query parameters.
+ * - 500: Internal server error or Lightspeed API failure.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +37,17 @@ export async function GET(request: NextRequest) {
     if (!link || !shopTld) {
       return NextResponse.json(
         { error: 'Missing link or shopTld parameter' },
-        { status: 400 }
+        { status: HTTP_STATUS.BAD_REQUEST }
+      )
+    }
+
+    let url: URL
+    try {
+      url = new URL(link)
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid link URL' },
+        { status: HTTP_STATUS.BAD_REQUEST }
       )
     }
 
@@ -32,11 +58,10 @@ export async function GET(request: NextRequest) {
     if (!apiKey || !apiSecret) {
       return NextResponse.json(
         { error: `Missing API credentials for shop TLD=${shopTld}` },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
-    const url = new URL(link)
     url.searchParams.set('fields', FIELDS)
 
     const response = await fetch(url.toString(), {
@@ -59,10 +84,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(productImages)
   } catch (error) {
-    console.error('Product images fetch error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, {
+      logMessage: 'Product images fetch error:',
+    })
   }
 }

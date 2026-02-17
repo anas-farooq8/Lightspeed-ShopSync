@@ -1,8 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { FORCE_DYNAMIC, HTTP_STATUS } from '@/lib/api/constants'
+import { handleRouteError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = FORCE_DYNAMIC
 
+/**
+ * Shops API
+ *
+ * Method: GET
+ * Path: /api/shops
+ *
+ * Description:
+ * - Returns the list of shops used in the application (id, name, TLD, role).
+ *
+ * Auth:
+ * - Not required (relies on database security policies).
+ *
+ * Query parameters:
+ * - None.
+ *
+ * Responses:
+ * - 200: `{ shops: [...] }` with transformed shop data.
+ * - 500: Internal server error.
+ */
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -16,7 +37,7 @@ export async function GET() {
       console.error('Error fetching shops:', error)
       return NextResponse.json(
         { error: 'Failed to fetch shops', details: error.message },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
@@ -30,10 +51,8 @@ export async function GET() {
 
     return NextResponse.json({ shops: transformedShops })
   } catch (error) {
-    console.error('Unexpected error fetching shops:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, {
+      logMessage: '[API] Unexpected error fetching shops:',
+    })
   }
 }

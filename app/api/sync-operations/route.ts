@@ -1,17 +1,49 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import type { ProductSyncStatus } from '@/types/database'
+import { FORCE_DYNAMIC, HTTP_STATUS } from '@/lib/api/constants'
+import { handleRouteError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = FORCE_DYNAMIC
 
+/**
+ * Sync Operations API
+ *
+ * Method: GET
+ * Path: /api/sync-operations
+ *
+ * Description:
+ * - Returns paginated products and their sync status for create/edit/null-SKU operations.
+ *
+ * Auth:
+ * - Not required (relies on database security policies).
+ *
+ * Query parameters:
+ * - page: Page number (1-based, default 1).
+ * - pageSize: Page size (1–1000, default 100).
+ * - operation: "create" | "edit" | "null_sku" (default "create").
+ * - missingIn: Target shop filter for create/edit operations.
+ * - shopTld: Shop TLD filter for null_sku operation.
+ * - search: Free-text search across products.
+ * - onlyDuplicates: "true" to restrict to duplicated SKUs.
+ * - sortBy: "title" | "sku" | "variants" | "price" | "created".
+ * - sortOrder: "asc" | "desc".
+ *
+ * Responses:
+ * - 200: Paginated list of products and metadata.
+ * - 400: Invalid query parameters.
+ * - 500: Internal server error.
+ */
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const { searchParams } = new URL(request.url)
 
     // Pagination - pageSize from URL (50 for mobile, 100 default), 1-1000
-    const page = parseInt(searchParams.get('page') || '1')
-    const requestedSize = parseInt(searchParams.get('pageSize') || '100')
+    const rawPage = Number.parseInt(searchParams.get('page') || '1', 10)
+    const rawRequestedSize = Number.parseInt(searchParams.get('pageSize') || '100', 10)
+    const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage
+    const requestedSize = Number.isNaN(rawRequestedSize) ? 100 : rawRequestedSize
     const pageSize = Math.min(1000, Math.max(1, requestedSize))
 
     // Filters
@@ -25,6 +57,14 @@ export async function GET(request: NextRequest) {
     // Sorting
     const sortBy = searchParams.get('sortBy') || 'title' // title, sku, variants, price, created
     const sortOrder = searchParams.get('sortOrder') || 'asc' // asc, desc
+
+    const allowedOperations = new Set(['create', 'edit', 'null_sku'])
+    if (!allowedOperations.has(operation)) {
+      return NextResponse.json(
+        { error: 'Invalid operation parameter' },
+        { status: HTTP_STATUS.BAD_REQUEST }
+      )
+    }
 
     // NULL SKU operation - uses separate RPC function
     if (operation === 'null_sku') {
@@ -41,7 +81,7 @@ export async function GET(request: NextRequest) {
         console.error('Error fetching null SKU products:', error)
         return NextResponse.json(
           { error: 'Failed to fetch products', details: error.message },
-          { status: 500 }
+          { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
         )
       }
 
@@ -79,7 +119,7 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching sync operations:', error)
       return NextResponse.json(
         { error: 'Failed to fetch products', details: error.message },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
@@ -100,10 +140,8 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return handleRouteError(error, {
+      logMessage: '[API] Unexpected error in sync-operations route:',
+    })
   }
 }

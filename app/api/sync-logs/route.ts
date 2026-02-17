@@ -2,13 +2,38 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 import type { SyncLog } from '@/types/database'
+import { HTTP_STATUS } from '@/lib/api/constants'
+import { handleRouteError } from '@/lib/api/errors'
 
 const DATES_PER_PAGE = 20
 
+/**
+ * Sync Logs API
+ *
+ * Method: GET
+ * Path: /api/sync-logs
+ *
+ * Description:
+ * - Returns paginated synchronization logs grouped by date, with per-run metrics.
+ *
+ * Auth:
+ * - Not required (relies on database security policies).
+ *
+ * Query parameters:
+ * - page: Page number (1-based, default 1).
+ * - shop: Shop TLD filter or "all".
+ * - status: "running" | "success" | "error" or "all".
+ *
+ * Responses:
+ * - 200: Paginated sync logs with pagination metadata and shop list.
+ * - 400: Invalid query parameters.
+ * - 500: Internal server error.
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const rawPage = Number.parseInt(searchParams.get('page') || '1', 10)
+    const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage
     const shopFilter = searchParams.get('shop') || 'all'
     const statusFilter = searchParams.get('status') || 'all'
     
@@ -67,7 +92,7 @@ export async function GET(request: Request) {
       console.error('Error fetching pagination data:', paginationError)
       return NextResponse.json(
         { error: 'Failed to fetch sync logs' },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
@@ -128,7 +153,7 @@ export async function GET(request: Request) {
       console.error('Error fetching sync logs:', error)
       return NextResponse.json(
         { error: 'Failed to fetch sync logs' },
-        { status: 500 }
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
       )
     }
 
@@ -161,10 +186,9 @@ export async function GET(request: Request) {
       shops
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'An unexpected error occurred' },
-      { status: 500 }
-    )
+    return handleRouteError(error, {
+      logMessage: '[API] Unexpected error in sync-logs route:',
+      publicMessage: 'An unexpected error occurred',
+    })
   }
 }
