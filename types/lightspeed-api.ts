@@ -1,5 +1,8 @@
 /**
- * Lightspeed eCom API Types
+ * Lightspeed eCom API types.
+ *
+ * These interfaces describe request payloads and responses for the Lightspeed
+ * REST API and are consumed by `LightspeedAPIClient` in `lib/services`.
  */
 
 export interface LightspeedConfig {

@@ -1,6 +1,13 @@
 /**
- * Shared product types used across sync-operations pages
+ * Product domain types.
+ *
+ * Used by:
+ * - Sync-operations dashboard pages.
+ * - Product display and edit components.
+ * - Translation utilities for product content.
  */
+
+// Core product structures
 
 export interface Language {
   code: string
@@ -36,6 +43,9 @@ export interface Variant {
   content?: Record<string, VariantContent>
 }
 
+/**
+ * Complete product information used throughout the sync-operations UI.
+ */
 export interface ProductData {
   shop_id: string
   shop_name: string
@@ -58,6 +68,9 @@ export interface ProductData {
   languages?: Language[]
 }
 
+/**
+ * Per-shop metadata used in product detail views.
+ */
 export interface ShopInfo {
   id: string
   name: string
@@ -66,6 +79,9 @@ export interface ShopInfo {
   languages: Language[]
 }
 
+/**
+ * Aggregated product details for a given SKU (source + targets).
+ */
 export interface ProductDetails {
   source: ProductData[]
   targets: Record<string, ProductData[]>
@@ -73,6 +89,9 @@ export interface ProductDetails {
   shops: Record<string, ShopInfo>
 }
 
+/**
+ * Image associated with a product (full size + thumbnail).
+ */
 export interface ProductImage {
   src: string
   thumb?: string
@@ -82,6 +101,10 @@ export interface ProductImage {
 }
 
 // Editable types for preview-create page
+
+/**
+ * Editable variant state used on the preview-create screen.
+ */
 export interface EditableVariant {
   variant_id: number
   temp_id?: string
@@ -98,18 +121,31 @@ export interface EditableVariant {
 }
 
 // Translation types
+
+/**
+ * How a translated field value was produced.
+ */
 export type TranslationOrigin = 'copied' | 'translated' | 'manual'
 
 export type TranslatableField = 'title' | 'fulltitle' | 'description' | 'content'
 
+/**
+ * Per-field translation origin for a single language.
+ */
 export type LanguageTranslationMeta = {
   [field in TranslatableField]?: TranslationOrigin
 }
 
+/**
+ * Per-language translation metadata for a product or variant.
+ */
 export type TranslationMetaByLang = {
   [langCode: string]: LanguageTranslationMeta
 }
 
+/**
+ * Editable target-shop product state, including images and dirty tracking.
+ */
 export interface EditableTargetData {
   content_by_language: Record<string, ProductContent>
   variants: EditableVariant[]

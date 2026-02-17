@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
-import { createProduct, type VariantInfo, type ImageInfo } from '@/lib/services/create-product'
+import { createProduct } from '@/lib/services/create-product'
 import { syncCreatedProductToDb } from '@/lib/services/sync-created-product-to-db'
 import { HTTP_STATUS } from '@/lib/api/constants'
 import { handleRouteError } from '@/lib/api/errors'
 import { isRequireUserFailure, requireUser } from '@/lib/api/auth'
+import type { Language } from '@/types/product'
 
 /**
  * Create Product API
@@ -22,6 +23,7 @@ import { isRequireUserFailure, requireUser } from '@/lib/api/auth'
  * - targetShopTld: string
  * - shopId: string
  * - sourceProductData: { visibility, content_by_language, variants, images }
+ * - targetShopLanguages: Language[] (target shop's language configuration from product-details API)
  *
  * Responses:
  * - 200: Product created (with optional warning if DB sync failed).
@@ -35,18 +37,36 @@ interface CreateProductRequest {
   shopId: string
   sourceProductData: {
     visibility: string
-    content_by_language: Record<
-      string,
-      {
-        title: string
-        fulltitle?: string
-        description?: string
-        content?: string
-      }
-    >
-    variants: VariantInfo[]
-    images: ImageInfo[]
+    content_by_language: Record<string, {
+      title: string
+      fulltitle?: string
+      description?: string
+      content?: string
+    }>
+    variants: Array<{
+      sku: string
+      is_default: boolean
+      sort_order: number
+      price_excl: number
+      image: {
+        src: string
+        thumb?: string
+        title?: string
+        sort_order: number
+        id?: string
+      } | null
+      content_by_language: Record<string, { title?: string }>
+    }>
+    images: Array<{
+      src: string
+      thumb?: string
+      title?: string
+      sort_order: number
+      id: string
+    }>
   }
+  /** Target shop's language configuration from product-details API */
+  targetShopLanguages: Language[]
 }
 
 export async function POST(request: NextRequest) {
@@ -62,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: CreateProductRequest = await request.json()
-    const { targetShopTld, shopId, sourceProductData } = body
+    const { targetShopTld, shopId, sourceProductData, targetShopLanguages } = body
 
     // Validate request
     if (!targetShopTld || !shopId || !sourceProductData) {
@@ -72,22 +92,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[API] Creating product for target shop:', targetShopTld)
-
-    // Get default language from content
-    const availableLanguages = Object.keys(sourceProductData.content_by_language)
-    if (availableLanguages.length === 0) {
+    if (!targetShopLanguages || targetShopLanguages.length === 0) {
       return NextResponse.json(
-        { error: 'No content languages provided' },
+        { error: 'Missing target shop languages configuration' },
         { status: HTTP_STATUS.BAD_REQUEST }
       )
     }
 
-    // First language with content is considered default
-    const defaultLanguage = availableLanguages[0]
+    console.log('[API] Creating product for target shop:', targetShopTld)
+
+    // Get default language from target shop configuration
+    const defaultLanguageConfig = targetShopLanguages.find((lang: Language) => lang.is_default)
+    const defaultLanguage = defaultLanguageConfig?.code || targetShopLanguages[0]?.code
+    
+    if (!defaultLanguage) {
+      return NextResponse.json(
+        { error: 'Could not determine default language for target shop' },
+        { status: HTTP_STATUS.BAD_REQUEST }
+      )
+    }
+
+    // Get all target languages
+    const targetLanguageCodes = targetShopLanguages.map((lang: Language) => lang.code)
+    
+    // Validate that we have content for the required languages
+    const availableLanguages = Object.keys(sourceProductData.content_by_language)
+    const missingLanguages = targetLanguageCodes.filter((lang: string) => !availableLanguages.includes(lang))
+    
+    if (missingLanguages.length > 0) {
+      console.warn('[API] Missing content for languages:', missingLanguages.join(', '))
+    }
     
     console.log('[API] Default language:', defaultLanguage)
-    console.log('[API] All languages:', availableLanguages.join(', '))
+    console.log('[API] Target languages:', targetLanguageCodes.join(', '))
 
     // Get Lightspeed API client
     const lightspeedClient = getLightspeedClient(targetShopTld)
@@ -96,7 +133,7 @@ export async function POST(request: NextRequest) {
     const result = await createProduct({
       targetClient: lightspeedClient,
       defaultLanguage,
-      targetLanguages: availableLanguages,
+      targetLanguages: targetLanguageCodes,
       visibility: sourceProductData.visibility,
       content_by_language: sourceProductData.content_by_language,
       variants: sourceProductData.variants,

@@ -170,8 +170,14 @@ export default function PreviewCreatePage() {
       console.log('[UI] Product data:', sourceProductData)
 
       const shopId = details.shops?.[tld]?.id
+      const targetShopLanguages = details.shops?.[tld]?.languages
+      
       if (!shopId) {
         throw new Error(`Shop ID not found for ${tld}`)
+      }
+
+      if (!targetShopLanguages || targetShopLanguages.length === 0) {
+        throw new Error(`Language configuration not found for ${tld}`)
       }
 
       // Call API
@@ -183,7 +189,8 @@ export default function PreviewCreatePage() {
         body: JSON.stringify({
           targetShopTld: tld,
           shopId,
-          sourceProductData
+          sourceProductData,
+          targetShopLanguages
         })
       })
 

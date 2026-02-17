@@ -1,16 +1,25 @@
 /**
+ * Database-backed sync and dashboard types.
+ *
+ * These interfaces describe rows returned from database views / RPCs used
+ * by sync dashboards, stats, and log pages.
+ *
+ * Product detail shapes for UI editing are defined in `types/product.ts`.
+ */
+
+/**
  * Product Sync Status (Product-Level Sync)
- * 
+ *
  * Represents a product from the source shop (via its default variant)
  * and its sync status with all target shops (dynamically loaded from database).
- * 
+ *
  * Matching logic: Products matched by variant SKU
  * - First: match by DEFAULT variant SKU
  * - Fallback: match by NON-DEFAULT variant SKU (if not found in default)
  * - Then: not_exists
- * 
+ *
  * View only includes products with VALID SKUs (excludes NULL/empty)
- * 
+ *
  * Data Source:
  * - View: product_sync_status (direct view query)
  * - RPC: get_sync_operations() (filtered with pagination)
@@ -135,89 +144,4 @@ export interface SyncLog {
   products_deleted: number
   variants_deleted: number
   variants_filtered: number  // Orphaned variants filtered out
-}
-
-/**
- * Product Details Response
- * 
- * Comprehensive product data returned by get_product_details() RPC.
- * Includes source product, all matching target products, and language configuration.
- */
-export interface ProductDetails {
-  source: ProductData
-  targets: ProductData[]
-  shops: Record<string, { name: string; base_url: string; languages: Language[] }>
-}
-
-/**
- * Shop Language Configuration
- */
-export interface Language {
-  code: string
-  is_active: boolean
-  is_default: boolean
-}
-
-/**
- * Product Data (Full Detail)
- * 
- * Complete product information including all languages and variants.
- * Used for product detail page display.
- */
-export interface ProductData {
-  shop_id: string
-  shop_name: string
-  shop_tld: string
-  shop_role: 'source' | 'target'
-  base_url: string
-  product_id: number
-  default_variant_id: number
-  sku: string
-  matched_by_default_variant?: boolean  // Only for target products
-  visibility: string
-  product_image: {
-    src?: string
-    thumb?: string
-    title?: string
-  } | null
-  ls_created_at: string
-  content_by_language: Record<string, ProductContent>
-  variants: VariantData[]
-  variant_count: number
-}
-
-/**
- * Product Content (Language-Specific)
- */
-export interface ProductContent {
-  url?: string
-  title?: string
-  fulltitle?: string
-  description?: string
-  content?: string
-}
-
-/**
- * Variant Data (Full Detail)
- * 
- * Complete variant information including multi-language content.
- */
-export interface VariantData {
-  variant_id: number
-  sku: string
-  is_default: boolean
-  price_excl: number
-  image: {
-    src?: string
-    thumb?: string
-    title?: string
-  } | null
-  content_by_language: Record<string, VariantContent>
-}
-
-/**
- * Variant Content (Language-Specific)
- */
-export interface VariantContent {
-  title?: string
 }
