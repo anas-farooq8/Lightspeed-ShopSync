@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Language, ProductContent } from '@/types/product'
-import { toSafeExternalHref, cn } from '@/lib/utils'
+import { toSafeExternalHref, cn, sortLanguages, getDefaultLanguageCode } from '@/lib/utils'
 
 interface LanguageContentTabsProps {
   languages: Language[]
@@ -21,15 +21,8 @@ export function LanguageContentTabs({
   className = '',
   showSlug = true
 }: LanguageContentTabsProps) {
-  const sortedLanguages = useMemo(
-    () => [...languages].sort((a, b) => {
-      if (a.is_default && !b.is_default) return -1
-      if (!a.is_default && b.is_default) return 1
-      return a.code.localeCompare(b.code)
-    }),
-    [languages]
-  )
-  const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
+  const sortedLanguages = sortLanguages(languages)
+  const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
 
   useEffect(() => {

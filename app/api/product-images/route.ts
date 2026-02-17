@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { FORCE_DYNAMIC, HTTP_STATUS } from '@/lib/api/constants'
-import { handleRouteError } from '@/lib/api/errors'
+import { HTTP_STATUS, handleRouteError } from '@/lib/api'
 
-export const dynamic = FORCE_DYNAMIC
+export const dynamic = 'force-dynamic'
 
 const FIELDS = 'id,sortOrder,title,thumb,src'
 

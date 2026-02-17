@@ -144,6 +144,40 @@ export type TranslationMetaByLang = {
 }
 
 /**
+ * Types for sync-operations product list UI.
+ * Used by ProductListTab, ProductListTable, ProductCard, TargetShopSelectionDialog.
+ */
+export interface TargetShopInfo {
+  shop_id: string
+  shop_name: string
+  shop_tld: string
+  status: 'not_exists' | 'exists' | 'unknown'
+  match_type: 'default_variant' | 'non_default_variant' | 'no_match'
+  total_matches: number
+  default_matches: number
+  non_default_matches: number
+}
+
+export interface SyncProduct {
+  source_shop_id: string
+  source_shop_name: string
+  source_shop_tld: string
+  source_product_id: number
+  source_variant_id: number
+  default_sku: string
+  product_title: string
+  variant_title: string
+  product_image: unknown
+  price_excl: number
+  source_variant_count: number
+  ls_created_at: string
+  source_duplicate_count: number
+  source_has_duplicates: boolean
+  source_duplicate_product_ids: number[]
+  targets: Record<string, TargetShopInfo>
+}
+
+/**
  * Editable target-shop product state, including images and dirty tracking.
  */
 export interface EditableTargetData {

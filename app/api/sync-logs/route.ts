@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 import type { SyncLog } from '@/types/database'
-import { HTTP_STATUS } from '@/lib/api/constants'
-import { handleRouteError } from '@/lib/api/errors'
+import { HTTP_STATUS, handleRouteError } from '@/lib/api'
 
 const DATES_PER_PAGE = 20
 

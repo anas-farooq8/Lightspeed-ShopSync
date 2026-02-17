@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, Layers, CheckCircle2, XCircle, Plus } from 'lucide-react'
-import type { SyncProduct } from './ProductListTab'
+import type { SyncProduct } from '@/types/product'
+import { getImageUrl, sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface ProductCardProps {
   product: SyncProduct
@@ -17,8 +18,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick }: ProductCardProps) {
-  // Use src image for better quality in card view
-  const imageUrl = product.product_image?.src || product.product_image?.thumb || null
+  const imageUrl = getImageUrl(product.product_image as { src?: string; thumb?: string } | null)
 
   return (
     <Card
@@ -100,29 +100,28 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         {/* Shop Status Indicators (like table view) - Hidden for NULL SKU mode */}
         {!hideShopIndicators && (
           <div className="flex flex-wrap items-center justify-start gap-2 sm:gap-3 pt-1.5 sm:pt-2 border-t border-border/50">
-            {Object.entries(product.targets || {})
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([tld, targetInfo]) => {
-                const exists = targetInfo.status === 'exists'
-                const totalMatches = targetInfo.total_matches || 0
-                return (
-                  <div key={tld} className="flex flex-col items-center gap-1">
-                    <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
-                    {exists ? (
-                      <div className="relative">
-                        <CheckCircle2 className="h-6 w-6 text-green-600" />
-                        {totalMatches > 1 && (
-                          <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center leading-none">
-                            {totalMatches}
-                          </span>
-                        )}
-                      </div>
+            {sortShopsSourceFirstThenByTld(
+              Object.entries(product.targets || {}).map(([tld, info]) => ({ tld, role: 'target', ...info }))
+            ).map(({ tld, status, total_matches = 0 }) => {
+              const exists = status === 'exists'
+              return (
+              <div key={tld} className="flex flex-col items-center gap-1">
+                <span className="text-xs text-muted-foreground font-medium">.{tld}</span>
+                {exists ? (
+                  <div className="relative">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                        {total_matches > 1 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center leading-none">
+                            {total_matches}
+                      </span>
+                    )}
+                  </div>
                     ) : (
                       <XCircle className="h-6 w-6 text-red-600" />
                     )}
                   </div>
-                )
-              })}
+              )
+            })}
           </div>
         )}
 

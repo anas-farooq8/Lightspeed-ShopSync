@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Clock, CheckCircle2, XCircle, Store } from 'lucide-react'
 import { sortShopsSourceFirstThenByTld, formatDateTime, toSafeExternalHref } from '@/lib/utils'
 

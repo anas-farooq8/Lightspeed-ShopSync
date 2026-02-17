@@ -11,39 +11,12 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Search, LayoutGrid, List, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { ProductCard } from '@/components/sync-operations/product-list/ProductCard'
 import { ProductListTable } from '@/components/sync-operations/product-list/ProductListTable'
-import { TargetShopSelectionDialog } from '@/components/sync-operations/dialogs/TargetShopSelectionDialog'
+import { TargetShopSelectionDialog } from '@/components/sync-operations/dialogs'
 import { sortShopsSourceFirstThenByTld, getShopRoleLabel, cn } from '@/lib/utils'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
+import type { SyncProduct } from '@/types/product'
 
-export interface TargetShopInfo {
-  shop_id: string
-  shop_name: string
-  shop_tld: string
-  status: 'not_exists' | 'exists' | 'unknown'
-  match_type: 'default_variant' | 'non_default_variant' | 'no_match'
-  total_matches: number
-  default_matches: number
-  non_default_matches: number
-}
-
-export interface SyncProduct {
-  source_shop_id: string
-  source_shop_name: string
-  source_shop_tld: string
-  source_product_id: number
-  source_variant_id: number
-  default_sku: string
-  product_title: string
-  variant_title: string
-  product_image: any
-  price_excl: number
-  source_variant_count: number
-  ls_created_at: string
-  source_duplicate_count: number
-  source_has_duplicates: boolean
-  source_duplicate_product_ids: number[]
-  targets: Record<string, TargetShopInfo>
-}
+export type { SyncProduct, TargetShopInfo } from '@/types/product'
 
 interface Shop {
   shop_id: string

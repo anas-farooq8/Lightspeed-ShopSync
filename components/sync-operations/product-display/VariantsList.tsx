@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Package } from 'lucide-react'
 import type { Variant } from '@/types/product'
+import { sortVariants, getImageUrl } from '@/lib/utils'
 
 interface VariantsListProps {
   variants: Variant[]
@@ -10,21 +10,14 @@ interface VariantsListProps {
 }
 
 export function VariantsList({ variants, activeLanguage, showSku = true }: VariantsListProps) {
-  const sortedVariants = useMemo(() => [...variants].sort((a, b) => {
-    const sa = a.sort_order ?? 999999
-    const sb = b.sort_order ?? 999999
-    if (sa !== sb) return sa - sb
-    if (a.is_default && !b.is_default) return -1
-    if (!a.is_default && b.is_default) return 1
-    return a.variant_id - b.variant_id
-  }), [variants])
+  const sortedVariants = sortVariants(variants)
 
   return (
     <div className="space-y-2 sm:space-y-3">
       {sortedVariants.map(variant => {
         const variantContent = variant.content_by_language?.[activeLanguage] || variant.content?.[activeLanguage]
         const variantTitle = variantContent?.title || 'No title'
-        const variantImageUrl = variant.image?.thumb || variant.image?.src
+        const variantImageUrl = getImageUrl(variant.image)
         
         return (
           <div 

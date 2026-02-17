@@ -4,45 +4,32 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Package, Loader2, CheckCircle2, XCircle, Store } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { 
-  AlertDialog, 
-  AlertDialogAction, 
-  AlertDialogCancel, 
-  AlertDialogContent, 
-  AlertDialogDescription, 
-  AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle 
-} from '@/components/ui/alert-dialog'
+import { clearProductImagesCache } from '@/lib/cache/product-images-cache'
+import {
+  UnsavedChangesDialog,
+  CreateProductConfirmationDialog,
+  ImageSelectionDialog,
+} from '@/components/sync-operations/dialogs'
 import { ProductHeader } from '@/components/sync-operations/product-display/ProductHeader'
 import { SourcePanel } from '@/components/sync-operations/product-display/SourcePanel'
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
-import { 
-  prepareTranslationBatch, 
-  applyTranslationResults, 
+import {
+  prepareTranslationBatch,
+  applyTranslationResults,
   callTranslationAPI,
   deduplicateTranslationItems,
   reconstructResults,
   getBaseValueForField,
   getBaseValuesForLanguage,
   storeTranslationInMemo,
-  storeTranslationsInMemo
-} from '@/lib/utils/translation'
+  storeTranslationsInMemo,
+  isSameImageInfo,
+  getVariantKey,
+} from '@/lib/utils'
 import type { ProductDetails, ProductData, ProductImage, ImageInfo, EditableVariant, EditableTargetData, ProductContent, TranslatableField, TranslationOrigin } from '@/types/product'
-
-function getVariantKey(v: EditableVariant): string | number {
-  return v.temp_id ?? v.variant_id
-}
-
-function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
-  if (a === b) return true
-  if (!a || !b) return !a && !b
-  return (a.src || '') === (b.src || '')
-}
 
 export default function PreviewCreatePage() {
   const params = useParams()
@@ -295,6 +282,10 @@ export default function PreviewCreatePage() {
 
     fetchProductDetails()
   }, [sku, searchParams])
+
+  useEffect(() => {
+    return () => clearProductImagesCache()
+  }, [])
 
   const fetchProductImages = async (imagesLink: string, shopTld: string): Promise<ProductImage[]> => {
     try {
@@ -1638,72 +1629,18 @@ export default function PreviewCreatePage() {
     <div className="w-full h-full min-w-0 pb-20">
       <LoadingShimmer show={navigating} position="top" />
       
-      <AlertDialog open={showCloseConfirmation} onOpenChange={setShowCloseConfirmation}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved changes. Are you sure you want to leave? All changes will be lost.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Continue Editing</AlertDialogCancel>
-            <AlertDialogAction onClick={() => navigateBack()} className="bg-destructive hover:bg-destructive/90">
-              Discard Changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <UnsavedChangesDialog
+        open={showCloseConfirmation}
+        onOpenChange={setShowCloseConfirmation}
+        onDiscard={navigateBack}
+      />
 
-      {/* Create Product Confirmation */}
-      <AlertDialog open={showCreateConfirmation} onOpenChange={setShowCreateConfirmation}>
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Store className="h-5 w-5 text-red-600" />
-              Confirm Product Creation
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 pt-1 text-left">
-                {createConfirmationContent ? (
-                  <>
-                    <p className="text-foreground font-medium">
-                      Are you sure you want to create this product in the following shop?
-                    </p>
-                    <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
-                      <div className="flex items-center gap-2 font-medium">
-                        <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                          {createConfirmationContent.shopTld.toUpperCase()}
-                        </span>
-                        <span>{createConfirmationContent.shopName}</span>
-                      </div>
-                      <ul className="text-sm text-muted-foreground space-y-1">
-                        <li>• {createConfirmationContent.variantCount} variant{createConfirmationContent.variantCount !== 1 ? 's' : ''}</li>
-                        <li>• {createConfirmationContent.imageCount} image{createConfirmationContent.imageCount !== 1 ? 's' : ''}</li>
-                        <li>• SKU: {createConfirmationContent.sku}</li>
-                      </ul>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      This will create a new product in your Lightspeed store. The operation cannot be undone automatically.
-                    </p>
-                  </>
-                ) : (
-                  <p>Loading...</p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmCreate}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Yes, Create Product
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CreateProductConfirmationDialog
+        open={showCreateConfirmation}
+        onOpenChange={setShowCreateConfirmation}
+        content={createConfirmationContent}
+        onConfirm={handleConfirmCreate}
+      />
 
       {hasMultipleTargets ? (
         <Tabs value={activeTargetTld} onValueChange={setActiveTargetTld} className="w-full min-w-0">
@@ -1844,54 +1781,27 @@ export default function PreviewCreatePage() {
         </div>
       )}
 
-      {/* Image Selection Dialog (variant or product image) */}
-      <Dialog open={showImageDialog} onOpenChange={(open) => {
-        if (!open) {
-          setShowImageDialog(false)
-          setSelectingImageForVariant(null)
-          setSelectingProductImage(false)
-        }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4">
-            {/* Variants can remove image; product image can only be replaced (not removed). */}
-            {!selectingProductImage && (
-              <div
-                onClick={() => {
-                  if (selectingImageForVariant !== null) selectVariantImage(activeTargetTld, selectingImageForVariant, null)
-                }}
-                className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <div className="text-center text-muted-foreground text-sm">
-                  <Package className="h-8 w-8 mx-auto mb-2" />
-                  <p>No Image</p>
-                </div>
-              </div>
-            )}
-
-            {dialogImages.map(img => (
-              <div
-                key={img.id}
-                onClick={() => {
-                  if (selectingProductImage) selectProductImage(activeTargetTld, img)
-                  else if (selectingImageForVariant !== null) selectVariantImage(activeTargetTld, selectingImageForVariant, img)
-                }}
-                className="aspect-square rounded-lg overflow-hidden border-2 border-border hover:border-primary cursor-pointer transition-colors"
-              >
-                <img src={img.src || img.thumb} alt={img.title || ''} className="w-full h-full object-cover" />
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImageDialog(false)} className="cursor-pointer">
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImageSelectionDialog
+        open={showImageDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowImageDialog(false)
+            setSelectingImageForVariant(null)
+            setSelectingProductImage(false)
+          }
+        }}
+        title={selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}
+        images={dialogImages}
+        showNoImageOption={!selectingProductImage}
+        onSelectImage={(img) => {
+          const productImg = img as ProductImage | null
+          if (selectingProductImage) {
+            selectProductImage(activeTargetTld, productImg)
+          } else if (selectingImageForVariant !== null) {
+            selectVariantImage(activeTargetTld, selectingImageForVariant, productImg)
+          }
+        }}
+      />
 
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-lg z-50">
         <div className="w-full flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">

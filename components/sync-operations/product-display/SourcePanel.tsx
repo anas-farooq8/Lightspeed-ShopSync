@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, ExternalLink } from 'lucide-react'
@@ -6,8 +6,8 @@ import { LanguageContentTabs } from '@/components/sync-operations/product-displa
 import { VariantsList } from '@/components/sync-operations/product-display/VariantsList'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
 import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
-import { getVisibilityOption } from '@/lib/constants/visibility'
-import { toSafeExternalHref } from '@/lib/utils'
+import { getVisibilityOption } from '@/lib/constants/product-ui'
+import { toSafeExternalHref, formatDateShort, sortLanguages, getDefaultLanguageCode, getImageUrl } from '@/lib/utils'
 import type { ProductData, Language } from '@/types/product'
 
 interface SourcePanelProps {
@@ -30,17 +30,10 @@ export function SourcePanel({
   onProductSelect,
   sourceImages
 }: SourcePanelProps) {
-  const sortedLanguages = useMemo(
-    () => [...languages].sort((a, b) => {
-      if (a.is_default && !b.is_default) return -1
-      if (!a.is_default && b.is_default) return 1
-      return a.code.localeCompare(b.code)
-    }),
-    [languages]
-  )
-  const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
+  const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
-  const imageUrl = product.product_image?.src || product.product_image?.thumb
+  const sortedLanguages = sortLanguages(languages)
+  const imageUrl = getImageUrl(product.product_image)
   const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
@@ -114,7 +107,7 @@ export function SourcePanel({
             <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
               <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Created</span>
               <div className="font-medium">
-                {new Date(product.ls_created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {formatDateShort(product.ls_created_at)}
               </div>
             </div>
           </div>

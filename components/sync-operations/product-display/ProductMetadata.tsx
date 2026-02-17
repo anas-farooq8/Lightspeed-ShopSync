@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Package, ExternalLink } from 'lucide-react'
-import { getVisibilityOption } from '@/lib/constants/visibility'
-import { toSafeExternalHref } from '@/lib/utils'
+import { getVisibilityOption } from '@/lib/constants/product-ui'
+import { toSafeExternalHref, formatDateShort, getImageUrl } from '@/lib/utils'
 import type { ProductData } from '@/types/product'
 
 interface ProductMetadataProps {
@@ -17,7 +17,7 @@ export function ProductMetadata({
   isSource = false,
   compactLayout = false 
 }: ProductMetadataProps) {
-  const imageUrl = product.product_image?.src || product.product_image?.thumb
+  const imageUrl = getImageUrl(product.product_image)
   const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
@@ -72,7 +72,7 @@ export function ProductMetadata({
             <span>{product.variant_count} variant{product.variant_count !== 1 ? 's' : ''}</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-muted-foreground">
-              {new Date(product.ls_created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              {formatDateShort(product.ls_created_at)}
             </span>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function ProductMetadata({
         <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
           <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Created</span>
           <div className="font-medium">
-            {new Date(product.ls_created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            {formatDateShort(product.ls_created_at)}
           </div>
         </div>
       </div>

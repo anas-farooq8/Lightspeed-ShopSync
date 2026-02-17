@@ -3,13 +3,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Package, ExternalLink, RotateCcw, Loader2 } from 'lucide-react'
-import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/visibility'
+import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, cn } from '@/lib/utils'
-import type { Language, ImageInfo, EditableTargetData, ProductContent } from '@/types/product'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl } from '@/lib/utils'
+import type { Language, EditableTargetData, ProductContent } from '@/types/product'
 
 interface TargetPanelProps {
   shopTld: string
@@ -46,12 +46,6 @@ interface TargetPanelProps {
   onUpdateVisibility: (visibility: string) => void
   onResetVisibility: () => void
   onResetProductImage: () => void
-}
-
-function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
-  if (a === b) return true
-  if (!a || !b) return !a && !b
-  return (a.src || '') === (b.src || '')
 }
 
 export function TargetPanel({
@@ -143,7 +137,7 @@ export function TargetPanel({
 
   const shopUrl = toSafeExternalHref(baseUrl)
   const visibilityChanged = data.visibility !== data.originalVisibility
-  const targetProductImageUrl = data.productImage?.src || data.productImage?.thumb
+  const targetProductImageUrl = getImageUrl(data.productImage)
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
 
   return (

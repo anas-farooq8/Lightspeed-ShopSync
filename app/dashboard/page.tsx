@@ -1,6 +1,9 @@
+import Link from 'next/link'
 import { StatsCards } from '@/components/dashboard/StatsCards'
 import { LastSync } from '@/components/dashboard/LastSync'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, ChevronRight } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 export default function DashboardPage() {
   return (
@@ -27,14 +30,21 @@ export default function DashboardPage() {
                 Product Sync Operations
               </h2>
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                Quick overview of sync operations
+                Create, edit, and manage products across shops
               </p>
             </div>
-            <div className="border border-border rounded-lg p-4 sm:p-5 md:p-6 bg-muted/20">
-              <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                Coming soon - Product sync operations will be displayed here
-              </p>
-            </div>
+            <Link href="/dashboard/sync-operations" className="block">
+              <Card className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md cursor-pointer h-full">
+                <CardContent className="flex items-center justify-between p-4 sm:p-5 md:p-6">
+                  <p className="text-sm sm:text-base text-muted-foreground flex-1">
+                    Create products missing in target shops, edit existing products, or fix items with no SKU.
+                  </p>
+                  <Button variant="ghost" size="icon" className="shrink-0 ml-2">
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           {/* Right Column - Last Sync Status */}

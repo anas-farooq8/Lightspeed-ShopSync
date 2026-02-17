@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
 import { createProduct } from '@/lib/services/create-product'
 import { syncCreatedProductToDb } from '@/lib/services/sync-created-product-to-db'
-import { HTTP_STATUS } from '@/lib/api/constants'
-import { handleRouteError } from '@/lib/api/errors'
-import { isRequireUserFailure, requireUser } from '@/lib/api/auth'
+import { HTTP_STATUS, handleRouteError, isRequireUserFailure, requireUser } from '@/lib/api'
 import type { Language } from '@/types/product'
 
 /**

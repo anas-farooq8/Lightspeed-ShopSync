@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -6,8 +6,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { RotateCcw, RefreshCw, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { getOriginLabel, getLanguageOrigin } from '@/lib/utils/translation'
+import {
+  cn,
+  getOriginLabel,
+  getOriginShortLabel,
+  getLanguageOrigin,
+  sortLanguages,
+  getDefaultLanguageCode,
+} from '@/lib/utils'
+import { QL_TOOLBAR_TITLES } from '@/lib/constants/product-ui'
 import type { TranslationMetaByLang, TranslationOrigin } from '@/types/product'
 import dynamic from 'next/dynamic'
 import type { default as ReactQuillType } from 'react-quill-new'
@@ -28,22 +35,6 @@ interface ProductContent {
   fulltitle?: string
   description?: string
   content?: string
-}
-
-const QL_TOOLBAR_TITLES: Record<string, string> = {
-  'ql-bold': 'Bold',
-  'ql-italic': 'Italic',
-  'ql-underline': 'Underline',
-  'ql-strike': 'Strikethrough',
-  'ql-list': 'List',
-  'ql-ordered': 'Ordered list',
-  'ql-bullet': 'Bullet list',
-  'ql-color': 'Text color',
-  'ql-background': 'Highlight',
-  'ql-link': 'Insert link',
-  'ql-image': 'Insert image',
-  'ql-clean': 'Clear formatting',
-  'ql-header': 'Heading',
 }
 
 interface EditableLanguageContentTabsProps {
@@ -77,15 +68,8 @@ export function EditableLanguageContentTabs({
   onRetranslateField,
   onRetranslateLanguage
 }: EditableLanguageContentTabsProps) {
-  const sortedLanguages = useMemo(
-    () => [...languages].sort((a, b) => {
-      if (a.is_default && !b.is_default) return -1
-      if (!a.is_default && b.is_default) return 1
-      return a.code.localeCompare(b.code)
-    }),
-    [languages]
-  )
-  const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
+  const sortedLanguages = sortLanguages(languages)
+  const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const contentWrapperRef = useRef<HTMLDivElement>(null)
 
@@ -118,25 +102,72 @@ export function EditableLanguageContentTabs({
   const isRetranslatingLanguage = retranslatingField === `${shopTld}:${activeLanguage}:all`
   const canRetranslate = activeLanguage !== sourceDefaultLang && onRetranslateField
   
+  const originBadgeColors: Record<TranslationOrigin, string> = {
+    copied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+    translated: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+    manual: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
+  }
+
   const getOriginBadge = (origin: TranslationOrigin | undefined) => {
     if (!origin) return null
-    
-    const labels: Record<TranslationOrigin, string> = {
-      copied: 'Copied',
-      translated: 'Translated',
-      manual: 'Edited'
-    }
-    
-    const colors: Record<TranslationOrigin, string> = {
-      copied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-      translated: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-      manual: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
-    }
-    
+    const label = getOriginShortLabel(origin)
+    if (!label) return null
     return (
-      <Badge variant="secondary" className={cn('ml-1 text-[10px] px-1.5 py-0', colors[origin])}>
-        {labels[origin]}
+      <Badge variant="secondary" className={cn('ml-1 text-[10px] px-1.5 py-0', originBadgeColors[origin])}>
+        {label}
       </Badge>
+    )
+  }
+
+  function FieldHeader({
+    label,
+    lang,
+    field,
+    meta,
+    isResetting,
+    isRetranslating,
+    canRetranslate,
+    onReset,
+    onRetranslate,
+  }: {
+    label: string
+    lang: string
+    field: keyof ProductContent
+    meta?: TranslationOrigin
+    isResetting: boolean
+    isRetranslating: boolean
+    canRetranslate: boolean
+    onReset: () => void
+    onRetranslate: () => void
+  }) {
+    return (
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-bold uppercase">{label}</Label>
+          {meta && (
+            <span className="text-xs text-muted-foreground">{getOriginLabel(meta)}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {dirtyFields.has(`${lang}.${field}`) && (
+            <Button variant="ghost" size="sm" onClick={onReset} disabled={isResetting || isRetranslating} className="h-6 text-xs px-2 cursor-pointer" title="Reset to original value">
+              {isResetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+            </Button>
+          )}
+          {canRetranslate && onRetranslateField && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isResetting && !isRetranslating) onRetranslate() }}
+              disabled={isResetting || isRetranslating}
+              className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+              title="Re-translate this field from source"
+            >
+              {isRetranslating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          )}
+        </div>
+      </div>
     )
   }
 
@@ -225,56 +256,17 @@ export function EditableLanguageContentTabs({
         return (
           <TabsContent key={lang.code} value={lang.code} className="space-y-3">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-bold uppercase">Title</Label>
-                  {langMeta?.title && (
-                    <span className="text-xs text-muted-foreground">
-                      {getOriginLabel(langMeta.title)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {dirtyFields.has(`${lang.code}.title`) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onResetField(lang.code, 'title')}
-                      disabled={isResettingTitle || isRetranslatingTitle}
-                      className="h-6 text-xs px-2 cursor-pointer"
-                      title="Reset to original value"
-                    >
-                      {isResettingTitle ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                  {canRetranslate && onRetranslateField && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!isResettingTitle && !isRetranslatingTitle) {
-                          onRetranslateField(lang.code, 'title')
-                        }
-                      }}
-                      disabled={isResettingTitle || isRetranslatingTitle}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-                      title="Re-translate this field from source"
-                    >
-                      {isRetranslatingTitle ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <FieldHeader
+                label="Title"
+                lang={lang.code}
+                field="title"
+                meta={langMeta?.title}
+                isResetting={isResettingTitle}
+                isRetranslating={isRetranslatingTitle}
+                canRetranslate={!!canRetranslate}
+                onReset={() => onResetField(lang.code, 'title')}
+                onRetranslate={() => onRetranslateField!(lang.code, 'title')}
+              />
               <Input
                 value={langContent.title || ''}
                 onChange={(e) => onUpdateField(lang.code, 'title', e.target.value)}
@@ -287,56 +279,17 @@ export function EditableLanguageContentTabs({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-bold uppercase">Full Title</Label>
-                  {langMeta?.fulltitle && (
-                    <span className="text-xs text-muted-foreground">
-                      {getOriginLabel(langMeta.fulltitle)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {dirtyFields.has(`${lang.code}.fulltitle`) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onResetField(lang.code, 'fulltitle')}
-                      disabled={isResettingFulltitle || isRetranslatingFulltitle}
-                      className="h-6 text-xs px-2 cursor-pointer"
-                      title="Reset to original value"
-                    >
-                      {isResettingFulltitle ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                  {canRetranslate && onRetranslateField && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!isResettingFulltitle && !isRetranslatingFulltitle) {
-                          onRetranslateField(lang.code, 'fulltitle')
-                        }
-                      }}
-                      disabled={isResettingFulltitle || isRetranslatingFulltitle}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-                      title="Re-translate this field from source"
-                    >
-                      {isRetranslatingFulltitle ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <FieldHeader
+                label="Full Title"
+                lang={lang.code}
+                field="fulltitle"
+                meta={langMeta?.fulltitle}
+                isResetting={isResettingFulltitle}
+                isRetranslating={isRetranslatingFulltitle}
+                canRetranslate={!!canRetranslate}
+                onReset={() => onResetField(lang.code, 'fulltitle')}
+                onRetranslate={() => onRetranslateField!(lang.code, 'fulltitle')}
+              />
               <Input
                 value={langContent.fulltitle || ''}
                 onChange={(e) => onUpdateField(lang.code, 'fulltitle', e.target.value)}
@@ -349,56 +302,17 @@ export function EditableLanguageContentTabs({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-bold uppercase">Description</Label>
-                  {langMeta?.description && (
-                    <span className="text-xs text-muted-foreground">
-                      {getOriginLabel(langMeta.description)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {dirtyFields.has(`${lang.code}.description`) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onResetField(lang.code, 'description')}
-                      disabled={isResettingDescription || isRetranslatingDescription}
-                      className="h-6 text-xs px-2 cursor-pointer"
-                      title="Reset to original value"
-                    >
-                      {isResettingDescription ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                  {canRetranslate && onRetranslateField && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!isResettingDescription && !isRetranslatingDescription) {
-                          onRetranslateField(lang.code, 'description')
-                        }
-                      }}
-                      disabled={isResettingDescription || isRetranslatingDescription}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-                      title="Re-translate this field from source"
-                    >
-                      {isRetranslatingDescription ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <FieldHeader
+                label="Description"
+                lang={lang.code}
+                field="description"
+                meta={langMeta?.description}
+                isResetting={isResettingDescription}
+                isRetranslating={isRetranslatingDescription}
+                canRetranslate={!!canRetranslate}
+                onReset={() => onResetField(lang.code, 'description')}
+                onRetranslate={() => onRetranslateField!(lang.code, 'description')}
+              />
               <Textarea
                 value={langContent.description || ''}
                 onChange={(e) => onUpdateField(lang.code, 'description', e.target.value)}
@@ -411,56 +325,17 @@ export function EditableLanguageContentTabs({
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm font-bold uppercase">Content</Label>
-                  {langMeta?.content && (
-                    <span className="text-xs text-muted-foreground">
-                      {getOriginLabel(langMeta.content)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {dirtyFields.has(`${lang.code}.content`) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onResetField(lang.code, 'content')}
-                      disabled={isResettingContent || isRetranslatingContent}
-                      className="h-6 text-xs px-2 cursor-pointer"
-                      title="Reset to original value"
-                    >
-                      {isResettingContent ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                  {canRetranslate && onRetranslateField && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!isResettingContent && !isRetranslatingContent) {
-                          onRetranslateField(lang.code, 'content')
-                        }
-                      }}
-                      disabled={isResettingContent || isRetranslatingContent}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-                      title="Re-translate this field from source"
-                    >
-                      {isRetranslatingContent ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <FieldHeader
+                label="Content"
+                lang={lang.code}
+                field="content"
+                meta={langMeta?.content}
+                isResetting={isResettingContent}
+                isRetranslating={isRetranslatingContent}
+                canRetranslate={!!canRetranslate}
+                onReset={() => onResetField(lang.code, 'content')}
+                onRetranslate={() => onRetranslateField!(lang.code, 'content')}
+              />
               <div
                 className={cn(
                   "rounded-md overflow-hidden border transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300",

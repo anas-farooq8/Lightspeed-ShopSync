@@ -13,13 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { sortShopsSourceFirstThenByTld, getShopRoleLabel } from '@/lib/utils'
+import { sortShopsSourceFirstThenByTld, getShopRoleLabel, formatDateShort } from '@/lib/utils'
 
 const ITEMS_PER_DATE = 20
-const DATE_OPTIONS: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
-
-const formatDate = (dateString: string) =>
-  new Date(dateString).toLocaleDateString('en-US', DATE_OPTIONS)
 
 interface DateGroup {
   date: string
@@ -96,7 +92,7 @@ export default function SyncLogsPage() {
       
       // Expand the most recent date by default
       if (data.syncLogs.length > 0) {
-        const mostRecentDate = formatDate(data.syncLogs[0].started_at)
+        const mostRecentDate = formatDateShort(data.syncLogs[0].started_at)
         setExpandedDates(new Set([mostRecentDate]))
       } else {
         setExpandedDates(new Set())
@@ -131,7 +127,7 @@ export default function SyncLogsPage() {
   const groupedByDate = useMemo<DateGroup[]>(() => {
     const dateMap = new Map<string, SyncLog[]>()
     for (const log of syncLogs) {
-      const date = formatDate(log.started_at)
+      const date = formatDateShort(log.started_at)
       const arr = dateMap.get(date) ?? []
       arr.push(log)
       dateMap.set(date, arr)

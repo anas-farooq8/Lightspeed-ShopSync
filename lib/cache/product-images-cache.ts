@@ -2,8 +2,12 @@
  * Product Images Cache
  *
  * Caches fetched product images (imagesLink + shopTld) to avoid re-fetching
- * when switching between tabs (e.g. .be / .de on SKU page). Cache is cleared
- * when the user navigates away from a product detail view (Back to List).
+ * when switching between tabs (e.g. .be / .de on SKU comparison page).
+ * 
+ * Cache is automatically cleared on:
+ * - Page refresh (in-memory Map clears naturally)
+ * - Navigation away from product detail pages (useEffect cleanup)
+ * - Component unmount (useEffect cleanup)
  */
 
 export interface ProductImage {
@@ -37,8 +41,13 @@ export function setCachedImages(
 }
 
 /**
- * Clears all cached product images. Call when unmounting a product detail page
- * (e.g. SKU page, product/[productId] page) so we don't retain stale data.
+ * Clears all cached product images. Called automatically via useEffect cleanup
+ * when unmounting product detail pages to prevent stale data retention.
+ * 
+ * Used in:
+ * - products/[sku]/page.tsx
+ * - product/[productId]/page.tsx
+ * - preview-create/[sku]/page.tsx
  */
 export function clearProductImagesCache(): void {
   cache.clear()

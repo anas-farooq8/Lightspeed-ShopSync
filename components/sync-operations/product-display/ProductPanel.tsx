@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ExternalLink, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -7,7 +7,7 @@ import { ProductMetadata } from '@/components/sync-operations/product-display/Pr
 import { LanguageContentTabs } from '@/components/sync-operations/product-display/LanguageContentTabs'
 import { VariantsList } from '@/components/sync-operations/product-display/VariantsList'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
-import { toSafeExternalHref, cn } from '@/lib/utils'
+import { toSafeExternalHref, cn, sortLanguages, getDefaultLanguageCode } from '@/lib/utils'
 import type { ProductData, Language } from '@/types/product'
 
 interface ProductPanelProps {
@@ -31,15 +31,8 @@ export function ProductPanel({
   onProductSelect,
   compactLayout = false
 }: ProductPanelProps) {
-  const sortedLanguages = useMemo(
-    () => [...languages].sort((a, b) => {
-      if (a.is_default && !b.is_default) return -1
-      if (!a.is_default && b.is_default) return 1
-      return a.code.localeCompare(b.code)
-    }),
-    [languages]
-  )
-  const defaultLanguage = sortedLanguages.find(l => l.is_default)?.code || sortedLanguages[0]?.code || 'nl'
+  const sortedLanguages = sortLanguages(languages)
+  const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null

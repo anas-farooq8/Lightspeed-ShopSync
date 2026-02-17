@@ -13,8 +13,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react'
-import type { SyncProduct } from './ProductListTab'
-import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
+import type { SyncProduct } from '@/types/product'
+import { extractTargetShops, formatDateShort, getImageUrl } from '@/lib/utils'
 
 interface ProductListTableProps {
   products: SyncProduct[]
@@ -29,11 +29,6 @@ interface ProductListTableProps {
   showShopBadge?: boolean
   showCreateButton?: boolean
   onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
-}
-
-interface TargetShop {
-  tld: string
-  name: string
 }
 
 interface ProductGroup {
@@ -58,20 +53,7 @@ export function ProductListTable({
 }: ProductListTableProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  const targetShops = useMemo(() => {
-    if (products.length === 0) return []
-    const shopsSet = new Set<string>()
-    const shopsMap = new Map<string, string>()
-    products.forEach(product => {
-      Object.entries(product.targets || {}).forEach(([tld, targetInfo]) => {
-        shopsSet.add(tld)
-        shopsMap.set(tld, targetInfo.shop_name)
-      })
-    })
-    return sortShopsSourceFirstThenByTld(
-      Array.from(shopsSet).map(tld => ({ tld, name: shopsMap.get(tld) || tld }))
-    )
-  }, [products])
+  const targetShops = useMemo(() => extractTargetShops(products), [products])
 
   // Auto-expand duplicate groups on initial load
   useEffect(() => {
@@ -144,7 +126,7 @@ export function ProductListTable({
   }
 
   const ProductRow = ({ product, isGrouped = false, isLast = false }: { product: SyncProduct, isGrouped?: boolean, isLast?: boolean }) => {
-    const imageUrl = product.product_image?.thumb || product.product_image?.src || null
+    const imageUrl = getImageUrl(product.product_image as { src?: string; thumb?: string } | null)
     
     return (
       <TableRow
@@ -223,11 +205,7 @@ export function ProductListTable({
         {/* Created At */}
         <TableCell>
           <span className="text-sm text-muted-foreground">
-            {new Date(product.ls_created_at).toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric'
-            })}
+            {formatDateShort(product.ls_created_at)}
           </span>
         </TableCell>
 

@@ -12,7 +12,7 @@ interface ImageData {
 /**
  * Download image from URL and convert to base64
  */
-export async function downloadAndEncodeImage(imageUrl: string): Promise<ImageData> {
+async function downloadAndEncodeImage(imageUrl: string): Promise<ImageData> {
   try {
     // Fetch image from CDN
     const response = await fetch(imageUrl)
@@ -79,7 +79,7 @@ let globalCache: ImageCache | null = null
 /**
  * Get or create image cache
  */
-export function getImageCache(): ImageCache {
+function getImageCache(): ImageCache {
   if (!globalCache) {
     globalCache = new ImageCache()
   }

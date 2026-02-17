@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Package, GripVertical, Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getVariantKey } from '@/lib/utils'
 import type { EditableVariant } from '@/types/product'
 
 interface EditableVariantsListProps {
@@ -19,10 +20,6 @@ interface EditableVariantsListProps {
   onResetVariant: (idx: number) => void
   onResetAllVariants: () => void
   onSelectVariantImage: (idx: number) => void
-}
-
-function getVariantKey(v: EditableVariant): string | number {
-  return v.temp_id ?? v.variant_id
 }
 
 export function EditableVariantsList({
@@ -158,14 +155,14 @@ export function EditableVariantsList({
                 )}
               </button>
               <div className="flex-1 min-w-0 space-y-2">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     value={variant.sku ?? ''}
                     onChange={(e) => onUpdateVariant(idx, 'sku', e.target.value)}
                     placeholder="SKU"
-                    className="h-8 text-xs flex-1 cursor-text"
+                    className="h-8 sm:h-8 text-xs sm:text-xs flex-1 min-w-0 cursor-text"
                   />
-                  <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
+                  <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] sm:min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
                     <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
                     <input
                       type="number"

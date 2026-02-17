@@ -50,14 +50,14 @@ export default function ProductDetailPage() {
         }
         
         const initialTargets: Record<string, number> = {}
-        Object.entries(data.targets).forEach(([tld, products]) => {
+        Object.entries(data.targets ?? {}).forEach(([tld, products]) => {
           if ((products as any[]).length > 0) {
             initialTargets[tld] = (products as any[])[0].product_id
           }
         })
         setSelectedTargetProductIds(initialTargets)
 
-        const targetTlds = Object.keys(data.targets || {})
+        const targetTlds = Object.keys(data.targets ?? {})
           .filter(tld => (data.targets[tld] as any[]).length > 0)
           .sort((a, b) => a.localeCompare(b))
         if (targetTlds.length > 1) {
