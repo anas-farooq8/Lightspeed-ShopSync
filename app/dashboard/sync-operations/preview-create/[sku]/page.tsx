@@ -57,10 +57,10 @@ export default function PreviewCreatePage() {
   const [error, setError] = useState<string | null>(null)
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop translation errors
   const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
-  
-  // Generate unique session ID for translation cache (cleared on unmount)
-  const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substring(7)}`)
-  
+
+  /** Runtime-only translation memo (like productImages/targetData — gone on refresh/navigate). Used for reset, re-translate reuse. */
+  const translationMemoRef = useRef(new Map<string, string>())
+
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
   const [activeTargetTld, setActiveTargetTld] = useState<string>('')
   const [targetData, setTargetData] = useState<Record<string, EditableTargetData>>({})
@@ -241,7 +241,7 @@ export default function PreviewCreatePage() {
         const { uniqueItems, indexMap } = deduplicateTranslationItems(allTranslationItems)
         console.log(`⏳ Translating ${uniqueItems.length} unique items (${allTranslationItems.length} total)`)
         
-        const uniqueResults = await callTranslationAPI(uniqueItems, sessionId)
+        const uniqueResults = await callTranslationAPI(uniqueItems, translationMemoRef.current)
         translationResults = reconstructResults(uniqueResults, indexMap)
         
         console.log(`✓ Translation complete`)
@@ -435,13 +435,27 @@ export default function PreviewCreatePage() {
       const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
       let newTranslationMeta = updated[tld].translationMeta
       
-      if (translatableFields.includes(translatableField) && isChanged) {
-        // Mark as manually edited
-        newTranslationMeta = {
-          ...newTranslationMeta,
-          [langCode]: {
-            ...newTranslationMeta?.[langCode],
-            [translatableField]: 'manual'
+      if (translatableFields.includes(translatableField)) {
+        if (isChanged) {
+          // Mark as manually edited
+          newTranslationMeta = {
+            ...newTranslationMeta,
+            [langCode]: {
+              ...newTranslationMeta?.[langCode],
+              [translatableField]: 'manual'
+            }
+          }
+        } else {
+          // Restore original translation metadata when field is reverted
+          const originalOrigin = originalTranslationMetaRef.current[tld]?.[langCode]?.[translatableField]
+          if (originalOrigin !== undefined) {
+            newTranslationMeta = {
+              ...newTranslationMeta,
+              [langCode]: {
+                ...newTranslationMeta?.[langCode],
+                [translatableField]: originalOrigin
+              }
+            }
           }
         }
       }
@@ -1217,8 +1231,8 @@ export default function PreviewCreatePage() {
         sourceDefaultLang,
         langCode,
         field as TranslatableField,
-        sessionId,
-        tld // Shop-specific override for re-translation
+        translationMemoRef.current,
+        tld // Shop-specific memo for re-translation
       )
 
       setTargetData(prev => {
@@ -1312,8 +1326,8 @@ export default function PreviewCreatePage() {
         sourceDefaultLang,
         langCode,
         translatableFields,
-        sessionId,
-        tld
+        translationMemoRef.current,
+        tld // Shop-specific memo for re-translation
       )
 
       setTargetData(prev => {
