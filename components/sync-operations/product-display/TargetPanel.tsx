@@ -310,13 +310,15 @@ export function TargetPanel({
             onResetAllVariants={onResetAllVariants}
             onSelectVariantImage={onSelectVariantImage}
           />
-          {(imagesLink || (sourceImages != null && sourceImages.length > 0)) && (
+          {(imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
               <ProductImagesGrid
                 imagesLink={imagesLink}
                 shopTld={sourceShopTld}
-                images={sourceImages ?? undefined}
+                // In preview-create, show the target's current image order (which can change when selecting a new product image).
+                // Keep `sourceImages` only as a defensive fallback.
+                images={data.images}
               />
             </div>
           )}

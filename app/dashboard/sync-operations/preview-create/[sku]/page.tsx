@@ -51,7 +51,7 @@ export default function PreviewCreatePage() {
   const { navigating, navigateBack } = useProductNavigation()
 
   const targetShopsParam = searchParams.get('targetShops') || ''
-  const selectedTargetShops = targetShopsParam.split(',').filter(Boolean)
+  const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
 
   const [details, setDetails] = useState<ProductDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -83,8 +83,8 @@ export default function PreviewCreatePage() {
   const [selectingImageForVariant, setSelectingImageForVariant] = useState<number | null>(null)
   const [selectingProductImage, setSelectingProductImage] = useState(false)
 
-  const sortedTargetShops = useMemo(() => 
-    selectedTargetShops.sort((a, b) => a.localeCompare(b)), 
+  const sortedTargetShops = useMemo(
+    () => [...selectedTargetShops].sort((a, b) => a.localeCompare(b)),
     [selectedTargetShops]
   )
 
@@ -170,11 +170,12 @@ export default function PreviewCreatePage() {
       
       const images = await response.json()
       const productImages: ProductImage[] = (images || []).map((img: any, idx: number) => ({
-        id: img.id || `img-${idx}`,
+        id: String(img.id ?? `img-${idx}`),
         src: img.src,
         thumb: img.thumb,
         title: img.title,
-        sort_order: img.sortOrder || idx
+        // Lightspeed API uses sortOrder; some internal shapes may use sort_order
+        sort_order: Number(img.sortOrder ?? img.sort_order ?? idx)
       }))
       
       setProductImages(prev => ({ ...prev, [shopTld]: productImages }))
@@ -743,12 +744,55 @@ export default function PreviewCreatePage() {
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      const productImage: ImageInfo | null = image
-        ? { src: image.src, thumb: image.thumb, title: image.title }
-        : null
+
+      // Product image rules:
+      // - If there are no images, product image can be null (nothing to select anyway).
+      // - If there is only 1 image, product image cannot be changed or removed.
+      // - If there are 2+ images, selecting a new product image swaps its position (and sort_order)
+      //   with the previous product image so bottom-grid ordering stays consistent.
+      const available = updated[tld].images ?? []
+      if (!image) return prev // Product image cannot be removed via the picker
+      if (available.length <= 1) return prev // Cannot change when only one (or zero) image exists
+
+      const nextProductImage: ImageInfo = { src: image.src, thumb: image.thumb, title: image.title }
+
+      // Robust swap strategy:
+      // - Identify selected image by id.
+      // - Identify current "primary" image by smallest sort_order (typically 0).
+      // - Swap their sort_order values (immutably) so the bottom grid re-sorts accordingly.
+      const nextIdx = available.findIndex(i => i.id === image.id)
+      if (nextIdx < 0) {
+        // If we can't find it in the current list, still update productImage but don't attempt reordering.
+        updated[tld] = { ...updated[tld], productImage: nextProductImage, dirty: true }
+        return updated
+      }
+
+      let primaryIdx = 0
+      let bestOrder = Number.POSITIVE_INFINITY
+      for (let i = 0; i < available.length; i++) {
+        const order = available[i]?.sort_order ?? Number.POSITIVE_INFINITY
+        if (order < bestOrder) {
+          bestOrder = order
+          primaryIdx = i
+        }
+      }
+
+      const doSwap = primaryIdx !== nextIdx
+      const primaryOrder = available[primaryIdx]?.sort_order ?? 0
+      const nextOrder = available[nextIdx]?.sort_order ?? nextIdx
+
+      // Efficient immutable update: create a new array, clone only changed items.
+      const newImages = available.slice()
+      if (doSwap) {
+        newImages[primaryIdx] = { ...available[primaryIdx], sort_order: nextOrder }
+        newImages[nextIdx] = { ...available[nextIdx], sort_order: primaryOrder }
+      }
+
       updated[tld] = {
         ...updated[tld],
-        productImage,
+        images: newImages,
+        imageOrderChanged: doSwap ? true : updated[tld].imageOrderChanged,
+        productImage: nextProductImage,
         dirty: true
       }
       return updated
@@ -757,6 +801,16 @@ export default function PreviewCreatePage() {
     setShowImageDialog(false)
     setSelectingProductImage(false)
   }
+
+  const dialogImages = useMemo(() => {
+    if (!showImageDialog || !sourceProduct) return []
+    const raw =
+      targetData[activeTargetTld]?.images ??
+      productImages[sourceProduct.shop_tld] ??
+      []
+    // Sort once per dialog open/list change (not on every render).
+    return [...raw].sort((a, b) => (a.sort_order ?? 999999) - (b.sort_order ?? 999999))
+  }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages])
 
   const resetProductImage = (tld: string) => {
     setTargetData(prev => {
@@ -1527,6 +1581,8 @@ export default function PreviewCreatePage() {
                       setShowImageDialog(true)
                     }}
                     onSelectProductImage={() => {
+                      const imgs = targetData[tld]?.images ?? []
+                      if (imgs.length <= 1) return
                       setSelectingProductImage(true)
                       setSelectingImageForVariant(null)
                       setShowImageDialog(true)
@@ -1591,6 +1647,8 @@ export default function PreviewCreatePage() {
                 setShowImageDialog(true)
               }}
               onSelectProductImage={() => {
+                const imgs = targetData[sortedTargetShops[0]]?.images ?? []
+                if (imgs.length <= 1) return
                 setSelectingProductImage(true)
                 setSelectingImageForVariant(null)
                 setShowImageDialog(true)
@@ -1616,19 +1674,22 @@ export default function PreviewCreatePage() {
             <DialogTitle>{selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4">
-            <div
-              onClick={() => {
-                if (selectingProductImage) selectProductImage(activeTargetTld, null)
-                else if (selectingImageForVariant !== null) selectVariantImage(activeTargetTld, selectingImageForVariant, null)
-              }}
-              className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary flex items-center justify-center cursor-pointer transition-colors"
-            >
-              <div className="text-center text-muted-foreground text-sm">
-                <Package className="h-8 w-8 mx-auto mb-2" />
-                <p>No Image</p>
+            {/* Variants can remove image; product image can only be replaced (not removed). */}
+            {!selectingProductImage && (
+              <div
+                onClick={() => {
+                  if (selectingImageForVariant !== null) selectVariantImage(activeTargetTld, selectingImageForVariant, null)
+                }}
+                className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <div className="text-center text-muted-foreground text-sm">
+                  <Package className="h-8 w-8 mx-auto mb-2" />
+                  <p>No Image</p>
+                </div>
               </div>
-            </div>
-            {(productImages[sourceProduct.shop_tld] || []).map(img => (
+            )}
+
+            {dialogImages.map(img => (
               <div
                 key={img.id}
                 onClick={() => {

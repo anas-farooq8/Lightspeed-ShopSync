@@ -60,6 +60,8 @@ interface ProductListTabProps {
 export function ProductListTab({ operation = 'create', shops }: ProductListTabProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  // `useSearchParams()` can change identity across renders; depend on the string value instead.
+  const searchParamsString = searchParams.toString()
   const isNullSku = operation === 'null_sku'
   const isEdit = operation === 'edit'
   const isCreate = operation === 'create'
@@ -93,11 +95,19 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
   const lastFetchParamsRef = useRef<string>('')
   const isFetchingRef = useRef(false)
 
+  // Keep the input in sync with the URL only when the URL search changes
+  // (prevents re-sync/re-fetch side-effects while the user is typing).
+  useEffect(() => {
+    const urlSearch = new URLSearchParams(searchParamsString).get('search') || ''
+    setSearchInput(urlSearch)
+  }, [searchParamsString])
+
   // Fetch products when URL params or operation changes
   useEffect(() => {
     const fetchProducts = async () => {
+      const sp = new URLSearchParams(searchParamsString)
       // Get current tab from URL
-      const currentTab = searchParams.get('tab') || 'create'
+      const currentTab = sp.get('tab') || 'create'
       const expectedTab = isNullSku ? 'null_sku' : isEdit ? 'edit' : 'create'
       
       // Only fetch if this component's operation matches the active tab
@@ -110,7 +120,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       const fetchPageSize = isMobile ? 50 : 100
 
       // Build params string for deduplication check
-      const paramsString = `${operation}-${searchParams.toString()}-${fetchPageSize}`
+      const paramsString = `${operation}-${searchParamsString}-${fetchPageSize}`
       
       // Prevent duplicate fetches for the same params
       if (isFetchingRef.current || lastFetchParamsRef.current === paramsString) {
@@ -121,17 +131,14 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       lastFetchParamsRef.current = paramsString
       
       // Get URL parameters
-      const search = searchParams.get('search') || ''
-      const page = parseInt(searchParams.get('page') || '1')
-      const missingIn = searchParams.get('missingIn') || 'all'
-      const existsIn = searchParams.get('existsIn') || 'all'
-      const shopFilter = searchParams.get('shopFilter') || 'all'
-      const onlyDuplicates = searchParams.get('onlyDuplicates') === 'true'
-      const sortBy = searchParams.get('sortBy') || 'created'
-      const sortOrder = searchParams.get('sortOrder') || 'desc'
-      
-      // Update search input to match URL
-      setSearchInput(search)
+      const search = sp.get('search') || ''
+      const page = parseInt(sp.get('page') || '1')
+      const missingIn = sp.get('missingIn') || 'all'
+      const existsIn = sp.get('existsIn') || 'all'
+      const shopFilter = sp.get('shopFilter') || 'all'
+      const onlyDuplicates = sp.get('onlyDuplicates') === 'true'
+      const sortBy = sp.get('sortBy') || 'created'
+      const sortOrder = sp.get('sortOrder') || 'desc'
       
       try {
         setIsRefreshing(true)
@@ -176,7 +183,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     }
 
     fetchProducts()
-  }, [searchParams, operation, isNullSku])
+  }, [searchParamsString, operation, isNullSku])
 
   // Helper to update URL with new params
   const updateURL = (newParams: Record<string, string | number | boolean | undefined>) => {
@@ -266,10 +273,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     updateURL({ search: searchInput, page: 1 })
   }
 
-  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearchSubmit()
-    }
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSearchSubmit()
   }
 
   const handleFilterChange = (value: string) => {
@@ -337,7 +342,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
                   placeholder={isNullSku ? "Search by product title, variant title..." : "Search by SKU, product title, variant title..."}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyPress={handleSearchKeyPress}
+                  onKeyDown={handleSearchKeyDown}
                   className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-0 cursor-text flex-1 min-w-[80px] text-sm"
                   disabled={isRefreshing}
                 />
