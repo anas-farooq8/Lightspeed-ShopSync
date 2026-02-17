@@ -1,5 +1,8 @@
 import { type NextRequest } from 'next/server'
 
+/**
+ * Shared API constants and common request types.
+ */
 export const HTTP_STATUS = {
   BAD_REQUEST: 400,
   UNAUTHORIZED: 401,

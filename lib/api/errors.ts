@@ -1,3 +1,11 @@
+/**
+ * Shared API error helpers.
+ *
+ * Provides a consistent way for route handlers to:
+ * - Log unexpected errors with a per-route prefix.
+ * - Return standardized JSON error responses and HTTP status codes.
+ */
+
 import { NextResponse } from 'next/server'
 import { HTTP_STATUS } from './constants'
 

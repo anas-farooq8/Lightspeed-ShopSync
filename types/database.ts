@@ -14,8 +14,7 @@
  * and its sync status with all target shops (dynamically loaded from database).
  *
  * Matching logic: Products matched by variant SKU
- * - First: match by DEFAULT variant SKU
- * - Fallback: match by NON-DEFAULT variant SKU (if not found in default)
+ * - match by DEFAULT variant SKU and match by NON-DEFAULT variant SKU
  * - Then: not_exists
  *
  * View only includes products with VALID SKUs (excludes NULL/empty)

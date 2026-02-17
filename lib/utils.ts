@@ -1,11 +1,19 @@
+/**
+ * Generic UI / formatting utilities.
+ *
+ * These helpers are intentionally framework-agnostic and are reused across
+ * dashboard pages and components (e.g. className merging, shop sorting).
+ */
+
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
+/** Merge Tailwind class names with conditional logic and conflict resolution. */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Sort shops: source first, then targets alphabetically by TLD */
+/** Sort shops: source first, then targets alphabetically by TLD. */
 export function sortShopsSourceFirstThenByTld<T extends { role?: string; tld: string }>(
   items: T[] | null | undefined
 ): T[] {
@@ -17,7 +25,7 @@ export function sortShopsSourceFirstThenByTld<T extends { role?: string; tld: st
   })
 }
 
-/** Format ISO date string for display (e.g. "Feb 5, 2025, 14:30:00") */
+/** Format ISO date string for display (e.g. "Feb 5, 2025, 14:30:00"). */
 export function formatDateTime(dateString: string): string {
   return new Date(dateString).toLocaleString('en-US', {
     year: 'numeric',
@@ -30,12 +38,12 @@ export function formatDateTime(dateString: string): string {
   })
 }
 
-/** Get display label for shop role */
+/** Get display label for shop role. */
 export function getShopRoleLabel(role?: string): string {
   return role === 'source' ? 'Source' : role === 'target' ? 'Target' : ''
 }
 
-/** Normalize base URL to safe external href (adds https if missing) */
+/** Normalize base URL to safe external href (adds https if missing). */
 export function toSafeExternalHref(baseUrl: string | null | undefined): string | null {
   const raw = (baseUrl ?? '').trim()
   if (!raw) return null

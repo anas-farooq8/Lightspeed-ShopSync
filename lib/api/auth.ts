@@ -1,3 +1,10 @@
+/**
+ * Shared API auth helpers for Supabase-backed routes.
+ *
+ * `requireUser` centralizes the pattern of:
+ * - Reading the current user from Supabase.
+ * - Returning a standardized 401 JSON response when unauthenticated.
+ */
 import { createClient } from '@/lib/supabase/server'
 import { unauthorized } from './errors'
 
