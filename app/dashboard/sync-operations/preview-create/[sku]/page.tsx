@@ -28,7 +28,9 @@ import {
   deduplicateTranslationItems,
   reconstructResults,
   getBaseValueForField,
-  getBaseValuesForLanguage
+  getBaseValuesForLanguage,
+  storeTranslationInMemo,
+  storeTranslationsInMemo
 } from '@/lib/utils/translation'
 import type { ProductDetails, ProductData, ProductImage, ImageInfo, EditableVariant, EditableTargetData, ProductContent, TranslatableField, TranslationOrigin } from '@/types/product'
 
@@ -1226,14 +1228,28 @@ export default function PreviewCreatePage() {
     }
 
     try {
+      // Re-translate: Always call API fresh (bypass memo - pass undefined to force API call)
       const { value, origin } = await getBaseValueForField(
         sourceContent,
         sourceDefaultLang,
         langCode,
         field as TranslatableField,
-        translationMemoRef.current,
-        tld // Shop-specific memo for re-translation
+        undefined, // No memo - force fresh API call for re-translation
+        tld
       )
+      
+      // Store the fresh translation in memo for future use (shop-specific key)
+      if (origin === 'translated') {
+        storeTranslationInMemo(
+          translationMemoRef.current,
+          sourceDefaultLang,
+          langCode,
+          field,
+          sourceContent[field] || '',
+          value,
+          tld
+        )
+      }
 
       setTargetData(prev => {
         const updated = { ...prev }
@@ -1320,14 +1336,25 @@ export default function PreviewCreatePage() {
     const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
 
     try {
+      // Re-translate: Always call API fresh (bypass memo - pass undefined to force API call)
       // Use batch translation - ONE API call instead of 4
       const results = await getBaseValuesForLanguage(
         sourceContent,
         sourceDefaultLang,
         langCode,
         translatableFields,
+        undefined, // No memo - force fresh API call for re-translation
+        tld
+      )
+      
+      // Store the fresh translations in memo for future use (shop-specific keys)
+      storeTranslationsInMemo(
         translationMemoRef.current,
-        tld // Shop-specific memo for re-translation
+        sourceContent,
+        sourceDefaultLang,
+        langCode,
+        results,
+        tld
       )
 
       setTargetData(prev => {

@@ -1,9 +1,8 @@
 /**
- * Translation service using Google Cloud Translation API
- * with in-memory caching for performance optimization
+ * Translation service using Google Cloud Translation API.
+ * No server-side cache: reuse is handled in the page via a runtime-only
+ * translation memo (like product images / targetData — gone on refresh/navigate).
  */
-
-import crypto from 'crypto'
 
 // Translation request/response types
 export interface TranslationItem {
@@ -15,51 +14,6 @@ export interface TranslationItem {
 
 export interface TranslationResult extends TranslationItem {
   translatedText: string
-}
-
-interface CacheEntry {
-  translatedText: string
-  timestamp: number
-  sessionId: string
-}
-
-// In-memory translation cache (per session)
-// Key format: {sessionId}:{sourceLang}:{targetLang}:{field}:{contentHash}
-const translationCache = new Map<string, CacheEntry>()
-
-/**
- * Generate SHA-256 hash of text content
- * Uses the text as-is to ensure exact matching
- */
-function hashText(text: string): string {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex')
-}
-
-/**
- * Generate cache key from translation parameters
- * Option 3 (Hybrid): Supports both shared and shop-specific cache
- * 
- * @param sessionId - Unique session identifier
- * @param sourceLang - Source language code
- * @param targetLang - Target language code
- * @param field - Field name
- * @param contentHash - Hash of content
- * @param shopTld - Optional shop TLD for shop-specific override
- */
-function getCacheKey(
-  sessionId: string,
-  sourceLang: string,
-  targetLang: string,
-  field: string,
-  contentHash: string,
-  shopTld?: string
-): string {
-  // Shop-specific override key (for re-translations)
-  if (shopTld) {
-    return `${sessionId}:${shopTld}:${sourceLang}:${targetLang}:${field}:${contentHash}`
-  }
-  // Shared cache key (for initial translations)
-  return `${sessionId}:${sourceLang}:${targetLang}:${field}:${contentHash}`
 }
 
 /**
@@ -180,157 +134,64 @@ async function translateWithGoogle(
 }
 
 /**
- * Process translation batch with caching (Hybrid Strategy - Option 3)
- * Returns translations for all items (from cache or API)
- * 
- * Cache lookup priority:
- * 1. Check shop-specific override (if shopTld provided)
- * 2. Fall back to shared cache
- * 3. Call API if no cache hit
- * 
- * @param items - Array of items to translate
- * @param sessionId - Unique session identifier (cleared on page refresh/navigation)
- * @param shopTld - Optional shop TLD for shop-specific override
+ * Translate a batch of items via Google. No server cache; page holds
+ * runtime-only memo (cleared on refresh/navigate like targetData / productImages).
  */
-export async function translateBatch(
-  items: TranslationItem[],
-  sessionId: string,
-  shopTld?: string
-): Promise<TranslationResult[]> {
+export async function translateBatch(items: TranslationItem[]): Promise<TranslationResult[]> {
   if (items.length === 0) {
     return []
   }
 
-  // Step 1: Check cache and separate hits from misses
-  const cacheHits: TranslationResult[] = []
-  const cacheMisses: TranslationItem[] = []
-  const missIndexMap = new Map<number, number>() // Original index -> miss index
+  const emptyResults: TranslationResult[] = []
+  const toTranslate: TranslationItem[] = []
+  const missIndexMap = new Map<number, number>()
 
   items.forEach((item, index) => {
-    // Skip empty text
     if (!item.text || item.text.trim() === '') {
-      cacheHits.push({
-        ...item,
-        translatedText: '',
-      })
+      emptyResults.push({ ...item, translatedText: '' })
       return
     }
-
-    const contentHash = hashText(item.text)
-    
-    // Try shop-specific override first (if shopTld provided)
-    let cached: CacheEntry | undefined
-    if (shopTld) {
-      const shopKey = getCacheKey(sessionId, item.sourceLang, item.targetLang, item.field, contentHash, shopTld)
-      cached = translationCache.get(shopKey)
-    }
-    
-    // Fall back to shared cache
-    if (!cached) {
-      const sharedKey = getCacheKey(sessionId, item.sourceLang, item.targetLang, item.field, contentHash)
-      cached = translationCache.get(sharedKey)
-    }
-    
-    if (cached) {
-      // Cache hit
-      cacheHits.push({
-        ...item,
-        translatedText: cached.translatedText,
-      })
-    } else {
-      // Cache miss
-      missIndexMap.set(index, cacheMisses.length)
-      cacheMisses.push(item)
-    }
+    missIndexMap.set(index, toTranslate.length)
+    toTranslate.push(item)
   })
 
-  // Step 2: If all cache hits, return immediately
-  if (cacheMisses.length === 0) {
-    console.log(`✓ Translation cache: ${cacheHits.length} hits, 0 misses`)
-    return cacheHits
+  if (toTranslate.length === 0) {
+    return emptyResults
   }
 
-  // Step 3: Group cache misses by (sourceLang, targetLang) for batch translation
   const batchGroups = new Map<string, TranslationItem[]>()
-  
-  cacheMisses.forEach((item) => {
-    const key = `${item.sourceLang}:${item.targetLang}`
-    const group = batchGroups.get(key) || []
+  const toTranslateOrder: { groupKey: string; indexInGroup: number }[] = []
+  toTranslate.forEach((item) => {
+    const groupKey = `${item.sourceLang}:${item.targetLang}`
+    const group = batchGroups.get(groupKey) || []
+    const indexInGroup = group.length
     group.push(item)
-    batchGroups.set(key, group)
+    batchGroups.set(groupKey, group)
+    toTranslateOrder.push({ groupKey, indexInGroup })
   })
 
-  // Step 4: Translate each batch group
-  const translatedResults: TranslationResult[] = []
-  
+  const groupResults = new Map<string, string[]>()
   for (const [groupKey, groupItems] of batchGroups.entries()) {
     const [sourceLang, targetLang] = groupKey.split(':')
-    
-    try {
-      // Call Google Translation API with full items (need field info for newline handling)
-      console.log(
-        `⏳ Translating ${groupItems.length} texts: ${sourceLang} → ${targetLang}`
-      )
-      const translatedTexts = await translateWithGoogle(
-        groupItems,
-        targetLang,
-        sourceLang
-      )
-
-      // Step 5: Store in cache and build results
-      groupItems.forEach((item, index) => {
-        const translatedText = translatedTexts[index] || ''
-        const contentHash = hashText(item.text)
-        
-        // For re-translations with shopTld: store in shop-specific override
-        // For initial translations: store in shared cache
-        const cacheKey = getCacheKey(
-          sessionId,
-          item.sourceLang,
-          item.targetLang,
-          item.field,
-          contentHash,
-          shopTld // Will be undefined for initial translations, defined for re-translations
-        )
-
-        // Store in cache with session ID
-        translationCache.set(cacheKey, {
-          translatedText,
-          timestamp: Date.now(),
-          sessionId,
-        })
-
-        translatedResults.push({
-          ...item,
-          translatedText,
-        })
-      })
-
-      console.log(`✓ Translated ${translatedTexts.length} texts successfully`)
-    } catch (error) {
-      console.error(`Failed to translate batch ${groupKey}:`, error)
-      
-      // Throw error instead of returning fallback - let caller handle it
-      throw error
-    }
+    console.log(`⏳ Translating ${groupItems.length} texts: ${sourceLang} → ${targetLang}`)
+    const translatedTexts = await translateWithGoogle(groupItems, targetLang, sourceLang)
+    groupResults.set(groupKey, translatedTexts)
   }
 
-  // Step 6: Merge cache hits and newly translated results in original order
-  const allResults: TranslationResult[] = []
-  let cacheHitIndex = 0
-  let missResultIndex = 0
+  const translatedResults: TranslationResult[] = toTranslateOrder.map(({ groupKey, indexInGroup }, i) => ({
+    ...toTranslate[i],
+    translatedText: groupResults.get(groupKey)![indexInGroup] || '',
+  }))
 
+  const allResults: TranslationResult[] = []
+  let emptyIdx = 0
   items.forEach((item, index) => {
-    if (missIndexMap.has(index)) {
-      allResults.push(translatedResults[missResultIndex++])
+    if (!item.text || item.text.trim() === '') {
+      allResults.push(emptyResults[emptyIdx++])
     } else {
-      allResults.push(cacheHits[cacheHitIndex++])
+      allResults.push(translatedResults[missIndexMap.get(index)!])
     }
   })
-
-  console.log(
-    `✓ Translation complete: ${cacheHits.length} from cache, ${cacheMisses.length} items translated via ${batchGroups.size} Google API ${batchGroups.size === 1 ? 'call' : 'calls'}`
-  )
 
   return allResults
 }

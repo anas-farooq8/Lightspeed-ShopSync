@@ -185,9 +185,15 @@ export function EditableLanguageContentTabs({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onRetranslateLanguage(activeLanguage)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (!isResettingLanguage && !isRetranslatingLanguage) {
+                  onRetranslateLanguage(activeLanguage)
+                }
+              }}
               disabled={isResettingLanguage || isRetranslatingLanguage}
-              className="text-xs cursor-pointer text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+              className="text-xs cursor-pointer text-red-600 border-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
               title="Re-translate all fields from source language"
             >
               {isRetranslatingLanguage ? (
@@ -245,13 +251,19 @@ export function EditableLanguageContentTabs({
                       )}
                     </Button>
                   )}
-                  {canRetranslate && (
+                  {canRetranslate && onRetranslateField && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRetranslateField(lang.code, 'title')}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!isResettingTitle && !isRetranslatingTitle) {
+                          onRetranslateField(lang.code, 'title')
+                        }
+                      }}
                       disabled={isResettingTitle || isRetranslatingTitle}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                       title="Re-translate this field from source"
                     >
                       {isRetranslatingTitle ? (
@@ -301,13 +313,19 @@ export function EditableLanguageContentTabs({
                       )}
                     </Button>
                   )}
-                  {canRetranslate && (
+                  {canRetranslate && onRetranslateField && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRetranslateField(lang.code, 'fulltitle')}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!isResettingFulltitle && !isRetranslatingFulltitle) {
+                          onRetranslateField(lang.code, 'fulltitle')
+                        }
+                      }}
                       disabled={isResettingFulltitle || isRetranslatingFulltitle}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                       title="Re-translate this field from source"
                     >
                       {isRetranslatingFulltitle ? (
@@ -357,13 +375,19 @@ export function EditableLanguageContentTabs({
                       )}
                     </Button>
                   )}
-                  {canRetranslate && (
+                  {canRetranslate && onRetranslateField && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRetranslateField(lang.code, 'description')}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!isResettingDescription && !isRetranslatingDescription) {
+                          onRetranslateField(lang.code, 'description')
+                        }
+                      }}
                       disabled={isResettingDescription || isRetranslatingDescription}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                       title="Re-translate this field from source"
                     >
                       {isRetranslatingDescription ? (
@@ -413,13 +437,19 @@ export function EditableLanguageContentTabs({
                       )}
                     </Button>
                   )}
-                  {canRetranslate && (
+                  {canRetranslate && onRetranslateField && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRetranslateField(lang.code, 'content')}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (!isResettingContent && !isRetranslatingContent) {
+                          onRetranslateField(lang.code, 'content')
+                        }
+                      }}
                       disabled={isResettingContent || isRetranslatingContent}
-                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                      className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                       title="Re-translate this field from source"
                     >
                       {isRetranslatingContent ? (

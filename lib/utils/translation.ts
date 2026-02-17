@@ -1,5 +1,7 @@
 /**
- * Frontend translation utilities for Preview-Create page
+ * Frontend translation utilities for Preview-Create page.
+ * Optional translation memo = runtime-only reuse (like product images / targetData;
+ * cleared on refresh or navigate).
  */
 
 import type {
@@ -12,39 +14,86 @@ import type {
 import type { TranslationItem, TranslationResult } from '@/lib/services/translation'
 
 /**
- * Call the translation API with a batch of items
- * @param items - Items to translate
- * @param sessionId - Unique session identifier for cache isolation
- * @param shopTld - Optional shop TLD for shop-specific cache override
+ * Generate memo key for translation (Hybrid Model Option 3).
+ * - Initial translations: shared key (no shopTld) - same translation reused across shops
+ * - Re-translations: shop-specific key (with shopTld) - allows shop-specific override
+ */
+function getTranslationMemoKey(item: TranslationItem, shopTld?: string): string {
+  const base = `${item.sourceLang}:${item.targetLang}:${item.field}:${item.text}`
+  return shopTld ? `${shopTld}:${base}` : base
+}
+
+/**
+ * Call the translation API. If memo is provided, hits are served from memo and
+ * only misses are sent to the API; new results are stored in memo (runtime-only,
+ * gone when the page unmounts).
+ * 
+ * Hybrid Model Option 3:
+ * - shopTld undefined: shared memo (initial translations) - reused across shops
+ * - shopTld provided: shop-specific memo (re-translations) - allows per-shop override
  */
 export async function callTranslationAPI(
   items: TranslationItem[],
-  sessionId: string,
+  memo?: Map<string, string>,
   shopTld?: string
 ): Promise<TranslationResult[]> {
   if (items.length === 0) {
     return []
   }
 
-  try {
+  if (!memo) {
     const response = await fetch('/api/translate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ items, sessionId, shopTld }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
     })
-
     if (!response.ok) {
       const error = await response.json()
       throw new Error(error.error || 'Translation failed')
     }
-
     return await response.json()
-  } catch (error) {
-    console.error('Translation API call failed:', error)
-    throw error
   }
+
+  const resultByIndex = new Map<number, TranslationResult>()
+  const misses: TranslationItem[] = []
+  const missOriginalIndices: number[] = []
+
+  items.forEach((item, index) => {
+    // Try shop-specific first (if shopTld provided), then fall back to shared
+    const cached = shopTld
+      ? memo.get(getTranslationMemoKey(item, shopTld)) ?? memo.get(getTranslationMemoKey(item))
+      : memo.get(getTranslationMemoKey(item))
+    
+    if (cached !== undefined) {
+      resultByIndex.set(index, { ...item, translatedText: cached })
+    } else {
+      missOriginalIndices.push(index)
+      misses.push(item)
+    }
+  })
+
+  if (misses.length > 0) {
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: misses }),
+    })
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Translation failed')
+    }
+    const missResults: TranslationResult[] = await response.json()
+    // Store results in memo (shop-specific if shopTld provided, otherwise shared)
+    missResults.forEach((result) => {
+      memo.set(getTranslationMemoKey(result, shopTld), result.translatedText)
+    })
+    // Map results back to original indices
+    missOriginalIndices.forEach((origIdx, i) => {
+      resultByIndex.set(origIdx, missResults[i])
+    })
+  }
+
+  return items.map((_, i) => resultByIndex.get(i)!)
 }
 
 /**
@@ -155,92 +204,132 @@ export function applyTranslationResults(
 }
 
 /**
- * Get base value for a field (used in reset and re-translate operations)
- * This will either copy from source or translate
- * @param shopTld - Optional shop TLD for shop-specific cache override (re-translations)
+ * Store translation result in memo (generalized helper).
+ * Used after re-translate operations to cache fresh translations.
+ * Only stores if both sourceText and translatedText are non-empty.
+ */
+export function storeTranslationInMemo(
+  memo: Map<string, string>,
+  sourceLang: string,
+  targetLang: string,
+  field: string,
+  sourceText: string,
+  translatedText: string,
+  shopTld?: string
+): void {
+  if (!sourceText?.trim() || !translatedText?.trim()) return
+  
+  const key = getTranslationMemoKey(
+    { sourceLang, targetLang, field, text: sourceText },
+    shopTld
+  )
+  memo.set(key, translatedText)
+}
+
+/**
+ * Get base value for a field (reset / re-translate). Uses optional memo for
+ * runtime-only reuse (cleared on refresh/navigate).
+ * 
+ * @param memo - Optional memo for caching (undefined = always call API)
+ * @param shopTld - Optional shop TLD for shop-specific memo (re-translations)
  */
 export async function getBaseValueForField(
   sourceContent: ProductContent,
   sourceDefaultLang: string,
   targetLangCode: string,
   field: TranslatableField,
-  sessionId: string,
+  memo?: Map<string, string>,
   shopTld?: string
 ): Promise<{ value: string; origin: TranslationOrigin }> {
   const sourceValue = sourceContent?.[field] || ''
 
-  // If target language matches source, copy directly
   if (targetLangCode === sourceDefaultLang) {
-    return {
-      value: sourceValue,
-      origin: 'copied',
-    }
+    return { value: sourceValue, origin: 'copied' }
   }
-
-  // If empty source, return empty
   if (!sourceValue || sourceValue.trim() === '') {
-    return {
-      value: '',
-      origin: 'translated',
-    }
+    return { value: '', origin: 'translated' }
   }
 
-  // Otherwise, translate
   try {
-    const results = await callTranslationAPI([
-      {
-        sourceLang: sourceDefaultLang,
-        targetLang: targetLangCode,
-        field,
-        text: sourceValue,
-      },
-    ], sessionId, shopTld)
-
+    const results = await callTranslationAPI(
+      [
+        {
+          sourceLang: sourceDefaultLang,
+          targetLang: targetLangCode,
+          field,
+          text: sourceValue,
+        },
+      ],
+      memo,
+      shopTld
+    )
     return {
       value: results[0]?.translatedText || sourceValue,
       origin: 'translated',
     }
   } catch (error) {
     console.error('Failed to translate field:', error)
-    // Fallback to source value on error
-    return {
-      value: sourceValue,
-      origin: 'translated',
-    }
+    return { value: sourceValue, origin: 'translated' }
   }
 }
 
 /**
- * Get base values for all fields in a language (batch operation)
- * This will either copy from source or translate all fields in ONE API call
- * @param shopTld - Optional shop TLD for shop-specific cache override (re-translations)
+ * Store multiple translation results in memo (generalized helper for batch operations).
+ * Used after re-translate language operations to cache fresh translations.
+ * Only stores translations with origin 'translated' (skips 'copied' and 'manual').
+ */
+export function storeTranslationsInMemo(
+  memo: Map<string, string>,
+  sourceContent: ProductContent,
+  sourceDefaultLang: string,
+  targetLang: string,
+  results: Record<TranslatableField, { value: string; origin: TranslationOrigin }>,
+  shopTld?: string
+): void {
+  Object.entries(results).forEach(([field, result]) => {
+    if (result.origin === 'translated') {
+      const sourceValue = sourceContent[field as TranslatableField]
+      storeTranslationInMemo(
+        memo,
+        sourceDefaultLang,
+        targetLang,
+        field,
+        sourceValue || '',
+        result.value,
+        shopTld
+      )
+    }
+  })
+}
+
+/**
+ * Get base values for all fields in a language (batch). Uses optional memo for
+ * runtime-only reuse (cleared on refresh/navigate).
+ * 
+ * @param memo - Optional memo for caching (undefined = always call API)
+ * @param shopTld - Optional shop TLD for shop-specific memo (re-translations)
  */
 export async function getBaseValuesForLanguage(
   sourceContent: ProductContent,
   sourceDefaultLang: string,
   targetLangCode: string,
   fields: TranslatableField[],
-  sessionId: string,
+  memo?: Map<string, string>,
   shopTld?: string
 ): Promise<Record<TranslatableField, { value: string; origin: TranslationOrigin }>> {
   const results: Record<string, { value: string; origin: TranslationOrigin }> = {}
 
-  // If target language matches source, copy all directly
   if (targetLangCode === sourceDefaultLang) {
-    fields.forEach(field => {
-      results[field] = {
-        value: sourceContent?.[field] || '',
-        origin: 'copied',
-      }
+    fields.forEach((field) => {
+      results[field] = { value: sourceContent?.[field] || '', origin: 'copied' }
     })
     return results
   }
 
-  // Build translation items for all non-empty fields
   const translationItems: TranslationItem[] = []
   const fieldIndexMap: Record<number, TranslatableField> = {}
-  
-  fields.forEach(field => {
+
+  fields.forEach((field) => {
     const sourceValue = sourceContent?.[field] || ''
     if (sourceValue && sourceValue.trim() !== '') {
       fieldIndexMap[translationItems.length] = field
@@ -251,36 +340,28 @@ export async function getBaseValuesForLanguage(
         text: sourceValue,
       })
     } else {
-      // Empty field, no translation needed
-      results[field] = {
-        value: '',
-        origin: 'translated',
-      }
+      results[field] = { value: '', origin: 'translated' }
     }
   })
 
-  // If no items to translate, return early
   if (translationItems.length === 0) {
     return results
   }
 
-  // Call API once with all items
   try {
-    const translationResults = await callTranslationAPI(translationItems, sessionId, shopTld)
-    
+    const translationResults = await callTranslationAPI(translationItems, memo, shopTld)
     translationResults.forEach((result, index) => {
-      const field = fieldIndexMap[index]
-      if (field) {
-        results[field] = {
-          value: result.translatedText || sourceContent?.[field] || '',
+      const f = fieldIndexMap[index]
+      if (f) {
+        results[f] = {
+          value: result.translatedText || sourceContent?.[f] || '',
           origin: 'translated',
         }
       }
     })
   } catch (error) {
     console.error('Failed to translate fields:', error)
-    // Fallback to source values on error
-    fields.forEach(field => {
+    fields.forEach((field) => {
       if (!results[field]) {
         results[field] = {
           value: sourceContent?.[field] || '',

@@ -1,8 +1,8 @@
 /**
  * POST /api/translate
- * 
- * Batch translation endpoint with in-memory caching
- * Accepts multiple translation items and returns translated texts
+ *
+ * Batch translation endpoint. Caching is runtime-only on the client
+ * (translation memo in page state, like product images — gone on refresh/navigate).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,13 +13,10 @@ export const dynamic = 'force-dynamic'
 
 interface TranslateRequestBody {
   items: TranslationItem[]
-  sessionId: string
-  shopTld?: string // Optional: for shop-specific override (re-translations)
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth check
     const supabase = await createClient()
     const {
       data: { user },
@@ -32,19 +29,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Parse request body
     const body: TranslateRequestBody = await request.json()
-    
+
     if (!body.items || !Array.isArray(body.items)) {
       return NextResponse.json(
         { error: 'Invalid request: items array is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!body.sessionId || typeof body.sessionId !== 'string') {
-      return NextResponse.json(
-        { error: 'Invalid request: sessionId is required' },
         { status: 400 }
       )
     }
@@ -53,7 +42,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json([])
     }
 
-    // Validate items
     for (const item of body.items) {
       if (!item.sourceLang || !item.targetLang || !item.field || item.text === undefined) {
         return NextResponse.json(
@@ -65,10 +53,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Process translations with hybrid caching (Option 3)
-    // Initial translations: shared cache (shopTld = undefined)
-    // Re-translations: shop-specific override (shopTld provided)
-    const results = await translateBatch(body.items, body.sessionId, body.shopTld)
+    const results = await translateBatch(body.items)
 
     return NextResponse.json(results)
   } catch (error) {
