@@ -9,7 +9,7 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Lightspeed Sync Tool',
+  title: 'Lightspeed ShopSync',
   description: 'Monitor product variant synchronization across regions',
   icons: {
     icon: [
