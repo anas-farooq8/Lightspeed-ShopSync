@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Package, Layers, CheckCircle2, XCircle, Plus } from 'lucide-react'
+import { Package, Layers, CheckCircle2, XCircle, Plus, Pencil } from 'lucide-react'
 import type { SyncProduct } from '@/types/product'
 import { getImageUrl, sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
@@ -15,9 +15,11 @@ interface ProductCardProps {
   hideDuplicateBadges?: boolean
   showCreateButton?: boolean
   onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
+  showEditButton?: boolean
+  onEditClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
-export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick }: ProductCardProps) {
+export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick, showEditButton = false, onEditClick }: ProductCardProps) {
   const imageUrl = getImageUrl(product.product_image as { src?: string; thumb?: string } | null)
 
   return (
@@ -137,6 +139,22 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
             >
               <Plus className="h-4 w-4 mr-1.5" />
               Create Product
+            </Button>
+          </div>
+        )}
+
+        {/* Edit Button */}
+        {showEditButton && (
+          <div className="pt-2 border-t border-border/50 mt-2">
+            <Button
+              className="w-full cursor-pointer bg-red-600 hover:bg-red-700 min-h-[40px] touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEditClick?.(product, e)
+              }}
+            >
+              <Pencil className="h-4 w-4 mr-1.5" />
+              Edit Product
             </Button>
           </div>
         )}

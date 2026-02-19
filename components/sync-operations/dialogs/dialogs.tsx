@@ -233,6 +233,7 @@ export function TargetShopSelectionDialog({
   onConfirm,
   productSku,
   isLoading = false,
+  mode = 'create',
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -240,8 +241,14 @@ export function TargetShopSelectionDialog({
   onConfirm: (selectedShops: string[]) => void
   productSku: string
   isLoading?: boolean
+  mode?: 'create' | 'edit'
 }) {
-  const defaultSelection = useMemo(() => targetShops.filter((s) => s.status === 'not_exists').map((s) => s.tld), [targetShops])
+  const defaultSelection = useMemo(() => 
+    mode === 'edit' 
+      ? targetShops.filter((s) => s.status === 'exists').map((s) => s.tld)
+      : targetShops.filter((s) => s.status === 'not_exists').map((s) => s.tld), 
+    [targetShops, mode]
+  )
   const [selectedShops, setSelectedShops] = useState<Set<string>>(() => new Set(defaultSelection))
 
   useEffect(() => {
@@ -259,19 +266,25 @@ export function TargetShopSelectionDialog({
 
   const handleConfirm = useCallback(() => onConfirm(Array.from(selectedShops)), [onConfirm, selectedShops])
 
+  const dialogTitle = mode === 'edit' ? 'Select Shops to Edit' : 'Select Target Shops'
+  const dialogDescription = mode === 'edit' 
+    ? `Choose which shops to edit this product in. Product SKU: ` 
+    : `Choose which shops to create this product in. Product SKU: `
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[calc(100vw-1rem)] sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-base sm:text-lg break-words">Select Target Shops</DialogTitle>
+          <DialogTitle className="text-base sm:text-lg break-words">{dialogTitle}</DialogTitle>
           <DialogDescription className="text-xs sm:text-sm break-words">
-            Choose which shops to create this product in. Product SKU: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs break-all">{productSku}</code>
+            {dialogDescription}
+            <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs break-all">{productSku}</code>
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 sm:space-y-3 py-2 sm:py-4 max-h-[60vh] sm:max-h-none overflow-y-auto">
           {targetShops.map((shop) => {
             const exists = shop.status === 'exists'
-            const canSelect = !exists
+            const canSelect = mode === 'edit' ? exists : !exists
             return (
               <div
                 key={shop.tld}
@@ -279,7 +292,7 @@ export function TargetShopSelectionDialog({
                 tabIndex={canSelect ? 0 : -1}
                 className={cn(
                   'flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border',
-                  exists ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' : 'bg-background border-border hover:bg-muted/50 cursor-pointer transition-colors'
+                  !canSelect ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' : 'bg-background border-border hover:bg-muted/50 cursor-pointer transition-colors'
                 )}
                 onClick={() => handleToggle(shop.tld, canSelect)}
                 onKeyDown={(e) => canSelect && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleToggle(shop.tld, true))}

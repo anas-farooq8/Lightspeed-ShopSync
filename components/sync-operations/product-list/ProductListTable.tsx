@@ -12,7 +12,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react'
+import { Package, CheckCircle2, XCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Loader2, Plus, Pencil } from 'lucide-react'
 import type { SyncProduct } from '@/types/product'
 import { extractTargetShops, formatDateShort, getImageUrl } from '@/lib/utils'
 
@@ -29,6 +29,8 @@ interface ProductListTableProps {
   showShopBadge?: boolean
   showCreateButton?: boolean
   onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
+  showEditButton?: boolean
+  onEditClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
 interface ProductGroup {
@@ -47,6 +49,8 @@ export function ProductListTable({
   hideSkuColumn = false,
   showCreateButton = false,
   onCreateClick,
+  showEditButton = false,
+  onEditClick,
   hideDuplicateBadges = false,
   hideShopIndicators = false,
   showShopBadge = false
@@ -251,6 +255,23 @@ export function ProductListTable({
             </Button>
           </TableCell>
         )}
+        
+        {showEditButton && (
+          <TableCell className="text-center">
+            <Button
+              size="sm"
+              variant="default"
+              className="cursor-pointer bg-red-600 hover:bg-red-700 min-h-[36px] touch-manipulation"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEditClick?.(product, e)
+              }}
+            >
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit
+            </Button>
+          </TableCell>
+        )}
       </TableRow>
     )
   }
@@ -285,6 +306,11 @@ export function ProductListTable({
                   </TableHead>
                 ))}
                 {showCreateButton && (
+                  <TableHead className="text-center w-[120px]">
+                    Actions
+                  </TableHead>
+                )}
+                {showEditButton && (
                   <TableHead className="text-center w-[120px]">
                     Actions
                   </TableHead>

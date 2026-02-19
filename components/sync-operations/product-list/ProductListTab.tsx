@@ -224,6 +224,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     setShowSelectionDialog(true)
   }
 
+  const handleEditClick = (product: SyncProduct, event: React.MouseEvent) => {
+    event.stopPropagation()
+    setSelectedProduct(product)
+    setShowSelectionDialog(true)
+  }
+
   const handleTargetShopConfirm = (selectedShopTlds: string[]) => {
     if (!selectedProduct) return
     
@@ -239,8 +245,12 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     // Pass the clicked product ID so the correct source is pre-selected when there are duplicates
     params.set('productId', selectedProduct.source_product_id.toString())
     
-    // Navigate to preview-create page
-    router.push(`/dashboard/sync-operations/preview-create/${encodeURIComponent(selectedProduct.default_sku)}?${params.toString()}`)
+    // Navigate to appropriate page based on operation
+    if (isEdit) {
+      router.push(`/dashboard/sync-operations/preview-edit/${encodeURIComponent(selectedProduct.default_sku)}?${params.toString()}`)
+    } else {
+      router.push(`/dashboard/sync-operations/preview-create/${encodeURIComponent(selectedProduct.default_sku)}?${params.toString()}`)
+    }
   }
 
   const handleSearchSubmit = () => {
@@ -451,6 +461,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           showShopBadge={isNullSku}
           showCreateButton={isCreate}
           onCreateClick={handleCreateClick}
+          showEditButton={isEdit}
+          onEditClick={handleEditClick}
         />
       ) : (
         <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4 min-w-0">
@@ -464,6 +476,8 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               hideDuplicateBadges={isNullSku}
               showCreateButton={isCreate}
               onCreateClick={handleCreateClick}
+              showEditButton={isEdit}
+              onEditClick={handleEditClick}
             />
           ))}
         </div>
@@ -481,6 +495,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
           }))}
           onConfirm={handleTargetShopConfirm}
           productSku={selectedProduct.default_sku}
+          mode={isEdit ? 'edit' : 'create'}
         />
       )}
 

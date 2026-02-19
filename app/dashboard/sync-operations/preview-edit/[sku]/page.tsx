@@ -21,11 +21,6 @@ import { SourcePanel } from '@/components/sync-operations/product-display/Source
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
 import {
-  prepareTranslationBatch,
-  applyTranslationResults,
-  callTranslationAPI,
-  deduplicateTranslationItems,
-  reconstructResults,
   getBaseValueForField,
   getBaseValuesForLanguage,
   storeTranslationInMemo,
@@ -62,49 +57,17 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
       orderChanged: td.orderChanged,
       imageOrderChanged: td.imageOrderChanged,
       translationMeta: td.translationMeta ? JSON.parse(JSON.stringify(td.translationMeta)) : undefined,
+      sourceProduct: td.sourceProduct,
+      targetProductId: td.targetProductId,
+      targetImagesLink: td.targetImagesLink,
     }
   }
   return result
 }
 
-/**
- * Patches freshly-fetched images into each target shop's editable data.
- * Called after initializeTargetData has already run (with an empty images array)
- * so that image-fetch and translation can run in parallel.
- * The React state setter is stable, so passing it here is safe.
- */
-function patchImagesIntoTargetData(
-  setTargetData: (updater: (prev: Record<string, EditableTargetData>) => Record<string, EditableTargetData>) => void,
-  shopTlds: string[],
-  images: ProductImage[],
-  srcProduct: ProductData
-): void {
-  if (!images.length) return
-  setTargetData(prev => {
-    const updated = { ...prev }
-    shopTlds.forEach(tld => {
-      if (!updated[tld]) return
-      const firstImage = images[0]
-      const fallbackProductImage: ImageInfo | null = srcProduct.product_image
-        ? null
-        : firstImage
-          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
-          : null
-      updated[tld] = {
-        ...updated[tld],
-        images: [...images],
-        originalImageOrder: images.map((_, idx) => idx),
-        productImage: updated[tld].productImage ?? fallbackProductImage,
-        originalProductImage: updated[tld].originalProductImage ?? fallbackProductImage,
-      }
-    })
-    return updated
-  })
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function PreviewCreatePage() {
+export default function PreviewEditPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -116,18 +79,17 @@ export default function PreviewCreatePage() {
 
   const [details, setDetails] = useState<ProductDetails | null>(null)
   const [loading, setLoading] = useState(true)
-  const [translating, setTranslating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop translation errors
+  const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop load errors
   /** Keyed by product_id so duplicate sources (same SKU, different products) keep separate image sets. */
   const [productImages, setProductImages] = useState<Record<number, ProductImage[]>>({})
   
-  // Create product states
-  const [creating, setCreating] = useState(false)
-  const [createSuccess, setCreateSuccess] = useState<Record<string, boolean>>({})
-  const [createErrors, setCreateErrors] = useState<Record<string, string>>({})
+  // Edit/Update product states
+  const [updating, setUpdating] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState<Record<string, boolean>>({})
+  const [updateErrors, setUpdateErrors] = useState<Record<string, string>>({})
 
-  /** Runtime-only translation memo (like productImages/targetData — gone on refresh/navigate). Used for reset, re-translate reuse. */
+  /** Runtime-only translation memo for re-translate functionality. */
   const translationMemoRef = useRef(new Map<string, string>())
 
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
@@ -207,7 +169,7 @@ export default function PreviewCreatePage() {
     }
   }, [isDirty, navigateBack])
 
-  const handleCreateClick = useCallback(() => {
+  const handleUpdateClick = useCallback(() => {
     if (!sourceProduct || !details) return
     const data = targetData[activeTargetTld]
     if (!data) {
@@ -217,7 +179,7 @@ export default function PreviewCreatePage() {
     setShowCreateConfirmation(true)
   }, [sourceProduct, details, activeTargetTld, targetData])
 
-  const handleConfirmCreate = useCallback(async () => {
+  const handleConfirmUpdate = useCallback(async () => {
     if (!sourceProduct || !details) return
 
     const tld = activeTargetTld
@@ -229,13 +191,13 @@ export default function PreviewCreatePage() {
     }
 
     setShowCreateConfirmation(false)
-    setCreating(true)
-    setCreateErrors(prev => {
+    setUpdating(true)
+    setUpdateErrors(prev => {
       const updated = { ...prev }
       delete updated[tld]
       return updated
     })
-    setCreateSuccess(prev => {
+    setUpdateSuccess(prev => {
       const updated = { ...prev }
       delete updated[tld]
       return updated
@@ -243,7 +205,7 @@ export default function PreviewCreatePage() {
 
     try {
       // Prepare data for API
-      const sourceProductData = {
+      const updateProductData = {
         visibility: data.visibility,
         content_by_language: data.content_by_language,
         variants: data.variants.map(v => ({
@@ -259,8 +221,8 @@ export default function PreviewCreatePage() {
           .sort((a, b) => a.sort_order - b.sort_order)
       }
 
-      console.log('[UI] Creating product in shop:', tld)
-      console.log('[UI] Product data:', sourceProductData)
+      console.log('[UI] Updating product in shop:', tld)
+      console.log('[UI] Product data:', updateProductData)
 
       const shopId = details.shops?.[tld]?.id
       const targetShopLanguages = details.shops?.[tld]?.languages
@@ -273,16 +235,17 @@ export default function PreviewCreatePage() {
         throw new Error(`Language configuration not found for ${tld}`)
       }
 
-      // Call API
-      const response = await fetch('/api/create-product', {
-        method: 'POST',
+      // Call API (will be created)
+      const response = await fetch('/api/update-product', {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           targetShopTld: tld,
           shopId,
-          sourceProductData,
+          sku,
+          updateProductData,
           targetShopLanguages
         })
       })
@@ -290,36 +253,36 @@ export default function PreviewCreatePage() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to create product')
+        throw new Error(result.error || 'Failed to update product')
       }
 
-      console.log('[UI] ✓ Product created successfully:', result)
+      console.log('[UI] ✓ Product updated successfully:', result)
 
       // Mark as success
-      setCreateSuccess(prev => ({ ...prev, [tld]: true }))
+      setUpdateSuccess(prev => ({ ...prev, [tld]: true }))
 
       // If all shops are done, navigate back after a delay
-      const allShopsCreated = sortedTargetShops.every(
-        shop => createSuccess[shop] || shop === tld
+      const allShopsUpdated = sortedTargetShops.every(
+        shop => updateSuccess[shop] || shop === tld
       )
       
-      if (allShopsCreated) {
+      if (allShopsUpdated) {
         setTimeout(() => {
           navigateBack()
         }, 1500)
       }
 
     } catch (err) {
-      console.error('[UI] Failed to create product:', err)
+      console.error('[UI] Failed to update product:', err)
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
-      setCreateErrors(prev => ({ ...prev, [tld]: errorMessage }))
+      setUpdateErrors(prev => ({ ...prev, [tld]: errorMessage }))
     } finally {
-      setCreating(false)
+      setUpdating(false)
     }
-  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack])
+  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, updateSuccess, navigateBack, sku])
 
-  // Create confirmation dialog content
-  const createConfirmationContent = useMemo(() => {
+  // Update confirmation dialog content
+  const updateConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
     const tld = activeTargetTld
     const data = targetData[tld]
@@ -345,7 +308,8 @@ export default function PreviewCreatePage() {
         setError(null)
         const productId = searchParams.get('productId')
         
-        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}`
+        // For EDIT mode, we need to fetch both source AND existing target products
+        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}&mode=edit&targetShops=${selectedTargetShops.join(',')}`
         
         const response = await fetch(url)
         if (!response.ok) {
@@ -363,20 +327,16 @@ export default function PreviewCreatePage() {
           const initialSourceProduct = data.source.find((p: ProductData) => p.product_id === initialSourceId)
 
           if (initialSourceProduct?.images_link) {
-            // Fire image-fetch and translation in parallel.
-            // initializeTargetData starts translation immediately with [] images;
-            // patchImagesIntoTargetData fills in the image grid once the fetch resolves.
-            const [sourceImages] = await Promise.all([
-              fetchProductImages(
-                initialSourceProduct.product_id,
-                initialSourceProduct.images_link,
-                initialSourceProduct.shop_tld
-              ),
-              initializeTargetData(data, initialSourceId, selectedTargetShops, []),
-            ])
-            patchImagesIntoTargetData(setTargetData, selectedTargetShops, sourceImages, initialSourceProduct)
+            // In EDIT mode, we just fetch source images for display in source panel
+            // Target images are fetched separately per shop in initializeTargetDataForEdit
+            const sourceImages = await fetchProductImages(
+              initialSourceProduct.product_id,
+              initialSourceProduct.images_link,
+              initialSourceProduct.shop_tld
+            )
+            await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
           } else {
-            await initializeTargetData(data, initialSourceId, selectedTargetShops, [])
+            await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
           }
         }
         
@@ -406,17 +366,11 @@ export default function PreviewCreatePage() {
 
 
   /**
-   * Handles source-product dropdown selection in preview-create.
+   * Handles source-product dropdown selection in preview-edit.
    *
    * 1. Saves the current complete editable state to perSourceCacheRef for the OLD source.
-   *    Uses targetDataRef / activeLanguagesRef (always-current refs) instead of the closure
-   *    values so that a product-image change made just before switching is never lost.
    * 2. If the NEW source was previously selected, its snapshot is restored instantly.
-   * 3. Otherwise: shows loading, then fires image-fetch AND translation in parallel so
-   *    neither blocks the other.
-   *
-   * The translation memo (translationMemoRef) is intentionally NOT cleared — it is keyed
-   * by content hash so different source products with identical text share cached translations.
+   * 3. Otherwise: shows loading, then fetches source images and re-initializes target data for the new source.
    */
   const handleSourceProductSelect = useCallback(async (newProductId: number) => {
     if (newProductId === selectedSourceProductId || !details) return
@@ -450,7 +404,7 @@ export default function PreviewCreatePage() {
       return
     }
 
-    // ── 3. Not cached — fetch images AND translate in parallel ────────────────
+    // ── 3. Not cached — fetch source images and re-initialize target data ────────────────
     setSourceSwitching(true)
     setSelectedSourceProductId(newProductId)
     // Clear target panels so they show their loading state while we work.
@@ -470,7 +424,7 @@ export default function PreviewCreatePage() {
         : null
 
       if (cachedPageImages?.length || cachedModuleImages?.length) {
-        // Images already available — start translation immediately with them.
+        // Images already available — just update state
         const imgs = cachedPageImages ?? (cachedModuleImages!.map((img, idx) => ({
           id: String(img.id ?? `img-${idx}`),
           src: img.src ?? '',
@@ -481,19 +435,14 @@ export default function PreviewCreatePage() {
         if (!cachedPageImages?.length) {
           setProductImages(prev => ({ ...prev, [newProductId]: imgs }))
         }
-        await initializeTargetData(details, newProductId, selectedTargetShops, imgs)
+        await initializeTargetDataForEdit(details, newProductId, selectedTargetShops)
       } else if (newSourceProduct.images_link) {
-        // Fire image-fetch AND translation in parallel.
-        // initializeTargetData starts with [] and patchImagesIntoTargetData fills in
-        // the image grid once the fetch resolves.
-        const [imgs] = await Promise.all([
-          fetchProductImages(newProductId, newSourceProduct.images_link, newSourceProduct.shop_tld),
-          initializeTargetData(details, newProductId, selectedTargetShops, []),
-        ])
-        patchImagesIntoTargetData(setTargetData, selectedTargetShops, imgs, newSourceProduct)
+        // Fetch source images for display in source panel
+        const imgs = await fetchProductImages(newProductId, newSourceProduct.images_link, newSourceProduct.shop_tld)
+        await initializeTargetDataForEdit(details, newProductId, selectedTargetShops)
       } else {
-        // No images link — just translate.
-        await initializeTargetData(details, newProductId, selectedTargetShops, [])
+        // No images link — just initialize target data
+        await initializeTargetDataForEdit(details, newProductId, selectedTargetShops)
       }
     } finally {
       setSourceSwitching(false)
@@ -539,19 +488,20 @@ export default function PreviewCreatePage() {
     }
   }
 
-  const initializeTargetData = async (
+
+  /**
+   * Initialize target data for EDIT mode - loads existing target products instead of translating from source
+   */
+  const initializeTargetDataForEdit = async (
     data: ProductDetails,
     sourceProductId: number,
     targetShopTlds: string[],
-    sourceImagesOverride?: ProductImage[],
     options?: { preserveExisting?: boolean }
   ) => {
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
 
     const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
-    const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
-    const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.product_id] ?? []
     
     const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
       ? { ...targetData }
@@ -560,7 +510,6 @@ export default function PreviewCreatePage() {
       ? { ...activeLanguages }
       : {}
 
-    // Start from existing initial content when preserving, otherwise from scratch
     const initialContent: Record<string, Record<string, string>> = options?.preserveExisting
       ? { ...initialContentRef.current }
       : {}
@@ -568,88 +517,44 @@ export default function PreviewCreatePage() {
       contentEditorReadyRef.current = {}
     }
 
-    // Collect all translation items across all shops
-    const allTranslationItems: any[] = []
-    const shopTranslationMaps: Record<string, { langCodes: string[], copyLangCodes: string[] }> = {}
-
-    targetShopTlds.forEach(tld => {
-      const targetLanguages = data.shops[tld]?.languages ?? []
-      const { translationItems, copyLanguages } = prepareTranslationBatch(
-        sourceContent,
-        sourceDefaultLang,
-        targetLanguages
-      )
-
-      shopTranslationMaps[tld] = {
-        langCodes: targetLanguages.map(l => l.code),
-        copyLangCodes: copyLanguages
-      }
-
-      allTranslationItems.push(...translationItems)
-    })
-
-      // Deduplicate and call translation API once
-    let translationResults: any[] = []
-    let translationError: string | null = null
-    if (allTranslationItems.length > 0) {
-      setTranslating(true)
-      try {
-        const { uniqueItems, indexMap } = deduplicateTranslationItems(allTranslationItems)
-        console.log(`⏳ Translating ${uniqueItems.length} unique items (${allTranslationItems.length} total)`)
-        
-        const uniqueResults = await callTranslationAPI(uniqueItems, translationMemoRef.current)
-        translationResults = reconstructResults(uniqueResults, indexMap)
-        
-        console.log(`✓ Translation complete`)
-      } catch (error) {
-        console.error('Translation failed:', error)
-        translationError = error instanceof Error ? error.message : 'Unknown error'
-        // Don't return early - continue to show source panel and target panels with error
-      } finally {
-        setTranslating(false)
-      }
-    }
-
-    // Apply translations to each shop
     const newTargetErrors: Record<string, string> = {}
-    let resultIndex = 0
-    targetShopTlds.forEach(tld => {
+
+    // For EDIT mode, load existing target products
+    for (const tld of targetShopTlds) {
       const targetLanguages = data.shops[tld]?.languages ?? []
       const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
+
+      // Get existing target products for this shop
+      const targetProducts = data.targets?.[tld] || []
       
-      // If translation failed, mark this shop with error and skip initialization
-      if (translationError) {
-        newTargetErrors[tld] = translationError
+      if (targetProducts.length === 0) {
+        newTargetErrors[tld] = 'No existing product found in this shop'
         newActiveLanguages[tld] = defaultLang
-        return
+        continue
       }
-      
-      // Get translation results for this shop
-      const shopItemCount = targetLanguages.reduce((count, lang) => {
-        if (lang.code !== sourceDefaultLang) {
-          const fields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
-          return count + fields.filter(f => sourceContent?.[f] && sourceContent[f]!.trim() !== '').length
+
+      // Use the first target product (user can switch if there are duplicates)
+      const targetProduct = targetProducts[0]
+
+      // Load existing target content for all languages
+      const content_by_language: Record<string, ProductContent> = {}
+      targetLanguages.forEach(lang => {
+        content_by_language[lang.code] = targetProduct.content_by_language?.[lang.code] || {
+          title: '',
+          fulltitle: '',
+          description: '',
+          content: ''
         }
-        return count
-      }, 0)
-      
-      const shopResults = translationResults.slice(resultIndex, resultIndex + shopItemCount)
-      resultIndex += shopItemCount
+      })
 
-      const { content_by_language, translationMeta } = applyTranslationResults(
-        sourceContent,
-        sourceDefaultLang,
-        targetLanguages,
-        shopResults
-      )
-
-      // Store original translated/copied content and metadata for reset functionality
+      // Store original content for comparison and reset
       if (!originalTranslatedContentRef.current[tld]) {
         originalTranslatedContentRef.current[tld] = {}
       }
       if (!originalTranslationMetaRef.current[tld]) {
         originalTranslationMetaRef.current[tld] = {}
       }
+      
       targetLanguages.forEach(lang => {
         originalTranslatedContentRef.current[tld][lang.code] = {
           title: content_by_language[lang.code]?.title || '',
@@ -657,15 +562,17 @@ export default function PreviewCreatePage() {
           description: content_by_language[lang.code]?.description || '',
           content: content_by_language[lang.code]?.content || ''
         }
+        // Mark as existing data (not translated) - this will be used for reset behavior
         originalTranslationMetaRef.current[tld][lang.code] = {
-          title: translationMeta[lang.code]?.title || 'copied',
-          fulltitle: translationMeta[lang.code]?.fulltitle || 'copied',
-          description: translationMeta[lang.code]?.description || 'copied',
-          content: translationMeta[lang.code]?.content || 'copied'
+          title: 'existing',
+          fulltitle: 'existing',
+          description: 'existing',
+          content: 'existing'
         }
       })
 
-      const variants: EditableVariant[] = sourceProduct.variants.map(v => ({
+      // Load existing variants from target
+      const variants: EditableVariant[] = targetProduct.variants.map(v => ({
         ...v,
         sku: v.sku || '',
         originalSku: v.sku || '',
@@ -673,46 +580,51 @@ export default function PreviewCreatePage() {
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            v.content_by_language?.[sourceDefaultLang]?.title || ''
+            v.content_by_language?.[lang.code]?.title || ''
           ])
         ),
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            { title: v.content_by_language?.[sourceDefaultLang]?.title || '' }
+            { title: v.content_by_language?.[lang.code]?.title || '' }
           ])
         )
       }))
 
-      const firstImage = sourceImages[0]
-      const initialProductImage: ImageInfo | null = sourceProduct.product_image
-        ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
-        : firstImage
-          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
-          : null
+      // Load existing images from target product
+      // In EDIT mode, we need to fetch images from the TARGET product's images_link
+      const targetImages: ProductImage[] = []
+      const targetImagesLink = targetProduct.images_link
+      
+      const initialProductImage: ImageInfo | null = targetProduct.product_image
+        ? { src: targetProduct.product_image.src, thumb: targetProduct.product_image.thumb, title: targetProduct.product_image.title }
+        : null
 
       newTargetData[tld] = {
         content_by_language,
         variants,
-        images: [...sourceImages],
-        originalImageOrder: sourceImages.map((_, idx) => idx),
+        images: targetImages, // Will be populated later when target images are fetched
+        originalImageOrder: [],
         removedImageIds: new Set(),
         dirty: false,
         dirtyFields: new Set(),
         dirtyVariants: new Set(),
         originalVariantOrder: variants.map((_, idx) => idx),
-        visibility: sourceProduct.visibility || 'visible',
-        originalVisibility: sourceProduct.visibility || 'visible',
+        visibility: targetProduct.visibility || 'visible',
+        originalVisibility: targetProduct.visibility || 'visible',
         productImage: initialProductImage,
         originalProductImage: initialProductImage,
         orderChanged: false,
         imageOrderChanged: false,
-        translationMeta
+        translationMeta: {}, // No translation metadata in edit mode initially
+        sourceProduct: sourceProduct, // Store source product for comparison
+        targetProductId: targetProduct.product_id, // Store target product ID
+        targetImagesLink: targetImagesLink, // Store target images link for fetching
       }
 
       newActiveLanguages[tld] = defaultLang
 
-      // Reset initial content + editor-ready state for this shop
+      // Set up initial content for editor
       initialContent[tld] = {}
       targetLanguages.forEach(lang => {
         initialContent[tld][lang.code] = content_by_language[lang.code]?.content || ''
@@ -722,13 +634,43 @@ export default function PreviewCreatePage() {
       } else {
         contentEditorReadyRef.current[tld] = {}
       }
-    })
+    }
 
     initialContentRef.current = initialContent
 
     setTargetData(newTargetData)
     setActiveLanguages(newActiveLanguages)
-    setTargetErrors(newTargetErrors) // Set per-shop translation errors
+    setTargetErrors(newTargetErrors)
+
+    // Fetch images for each target shop separately
+    for (const tld of targetShopTlds) {
+      const targetProduct = data.targets?.[tld]?.[0]
+      if (targetProduct?.images_link && newTargetData[tld]) {
+        // Fetch target product images
+        try {
+          const targetImages = await fetchProductImages(
+            targetProduct.product_id,
+            targetProduct.images_link,
+            tld
+          )
+          
+          // Patch images into this specific target shop
+          setTargetData(prev => {
+            const updated = { ...prev }
+            if (updated[tld]) {
+              updated[tld] = {
+                ...updated[tld],
+                images: targetImages,
+                originalImageOrder: targetImages.map((_, idx) => idx),
+              }
+            }
+            return updated
+          })
+        } catch (err) {
+          console.error(`Failed to fetch images for ${tld}:`, err)
+        }
+      }
+    }
 
     if (options?.preserveExisting) {
       const anyDirty = Object.values(newTargetData).some(
@@ -1844,7 +1786,7 @@ export default function PreviewCreatePage() {
         <div className="max-w-7xl mx-auto space-y-4">
           <ProductHeader
             onBack={handleBack}
-            identifier={{ label: 'Preview Create - SKU', value: sku }}
+            identifier={{ label: 'Preview Edit - SKU', value: sku }}
           />
           <div className="border border-destructive/50 rounded-lg p-8 sm:p-12 text-destructive text-sm sm:text-base text-center">
             {error || 'Product not found'}
@@ -1867,8 +1809,8 @@ export default function PreviewCreatePage() {
       <CreateProductConfirmationDialog
         open={showCreateConfirmation}
         onOpenChange={setShowCreateConfirmation}
-        content={createConfirmationContent}
-        onConfirm={handleConfirmCreate}
+        content={updateConfirmationContent}
+        onConfirm={handleConfirmUpdate}
       />
 
       {hasMultipleTargets ? (
@@ -1876,7 +1818,7 @@ export default function PreviewCreatePage() {
           <div className="w-full p-4 sm:p-6">
             <ProductHeader
               onBack={handleBack}
-              identifier={{ label: 'Preview Create - SKU', value: sku }}
+              identifier={{ label: 'Preview Edit - SKU', value: sku }}
               targetTabs={{ tlds: sortedTargetShops, activeTab: activeTargetTld }}
             />
 
@@ -1897,6 +1839,8 @@ export default function PreviewCreatePage() {
               {sortedTargetShops.map(tld => (
                 <TabsContent key={tld} value={tld} className="mt-0">
                   <TargetPanel
+                    mode="edit"
+                    sourceProduct={sourceProduct}
                     shopTld={tld}
                     shopName={details.shops?.[tld]?.name ?? details.targets[tld]?.[0]?.shop_name ?? tld}
                     baseUrl={details.shops?.[tld]?.base_url ?? details.targets[tld]?.[0]?.base_url ?? ''}
@@ -1909,7 +1853,6 @@ export default function PreviewCreatePage() {
                     sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
                     resettingField={resettingField}
                     retranslatingField={retranslatingField}
-                    translating={translating}
                     error={targetErrors[tld]}
                     sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
@@ -1951,7 +1894,7 @@ export default function PreviewCreatePage() {
         <div className="w-full p-4 sm:p-6">
           <ProductHeader
             onBack={handleBack}
-            identifier={{ label: 'Preview Create - SKU', value: sku }}
+            identifier={{ label: 'Preview Edit - SKU', value: sku }}
           />
           <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
             <SourcePanel
@@ -1965,6 +1908,8 @@ export default function PreviewCreatePage() {
               sourceSwitching={sourceSwitching}
             />
             <TargetPanel
+              mode="edit"
+              sourceProduct={sourceProduct}
               shopTld={sortedTargetShops[0]}
               shopName={details.shops?.[sortedTargetShops[0]]?.name ?? details.targets[sortedTargetShops[0]]?.[0]?.shop_name ?? sortedTargetShops[0]}
               baseUrl={details.shops?.[sortedTargetShops[0]]?.base_url ?? details.targets[sortedTargetShops[0]]?.[0]?.base_url ?? ''}
@@ -1977,7 +1922,6 @@ export default function PreviewCreatePage() {
               sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
               resettingField={resettingField}
               retranslatingField={retranslatingField}
-              translating={translating}
               error={targetErrors[sortedTargetShops[0]]}
               sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
@@ -2040,22 +1984,22 @@ export default function PreviewCreatePage() {
         <div className="w-full flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4">
           {/* Status indicators */}
           <div className="flex items-center gap-2 text-sm">
-            {creating && (
+            {updating && (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Creating product...</span>
+                <span>Updating product...</span>
               </div>
             )}
-            {!creating && createSuccess[activeTargetTld] && (
+            {!updating && updateSuccess[activeTargetTld] && (
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Product created successfully</span>
+                <span>Product updated successfully</span>
               </div>
             )}
-            {!creating && createErrors[activeTargetTld] && (
+            {!updating && updateErrors[activeTargetTld] && (
               <div className="flex items-center gap-2 text-destructive">
                 <XCircle className="h-4 w-4" />
-                <span>Creation failed</span>
+                <span>Update failed</span>
               </div>
             )}
           </div>
@@ -2065,18 +2009,18 @@ export default function PreviewCreatePage() {
             <Button
               variant="outline"
               onClick={handleBack}
-              disabled={creating}
+              disabled={updating}
               className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
             >
-              {createSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
+              {updateSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
             </Button>
             <Button
-              onClick={handleCreateClick}
-              disabled={creating || createSuccess[activeTargetTld]}
+              onClick={handleUpdateClick}
+              disabled={updating || updateSuccess[activeTargetTld]}
               className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
             >
-              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {createSuccess[activeTargetTld] ? '✓ Created' : 'Create Product'}
+              {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {updateSuccess[activeTargetTld] ? '✓ Updated' : 'Update Product'}
             </Button>
           </div>
         </div>

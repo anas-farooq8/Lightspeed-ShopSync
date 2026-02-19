@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { RotateCcw, RefreshCw, Loader2 } from 'lucide-react'
+import { RotateCcw, RefreshCw, Loader2, ArrowDownToLine } from 'lucide-react'
 import {
   cn,
   getOriginLabel,
@@ -15,7 +15,7 @@ import {
   getDefaultLanguageCode,
 } from '@/lib/utils'
 import { QL_TOOLBAR_TITLES } from '@/lib/constants/product-ui'
-import type { TranslationMetaByLang, TranslationOrigin } from '@/types/product'
+import type { TranslationMetaByLang, TranslationOrigin, ProductData } from '@/types/product'
 import dynamic from 'next/dynamic'
 import type { default as ReactQuillType } from 'react-quill-new'
 import 'react-quill-new/dist/quill.snow.css'
@@ -38,6 +38,8 @@ interface ProductContent {
 }
 
 interface EditableLanguageContentTabsProps {
+  mode?: 'create' | 'edit'  // Mode for determining diff behavior
+  sourceProduct?: ProductData  // Source product for comparison in edit mode
   shopTld: string
   languages: Language[]
   content: Record<string, ProductContent>
@@ -54,6 +56,8 @@ interface EditableLanguageContentTabsProps {
 }
 
 export function EditableLanguageContentTabs({
+  mode = 'create',  // Default to create mode
+  sourceProduct,
   shopTld,
   languages,
   content,
@@ -105,7 +109,8 @@ export function EditableLanguageContentTabs({
   const originBadgeColors: Record<TranslationOrigin, string> = {
     copied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
     translated: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-    manual: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
+    manual: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+    existing: 'bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300',
   }
 
   const getOriginBadge = (origin: TranslationOrigin | undefined) => {
@@ -129,6 +134,7 @@ export function EditableLanguageContentTabs({
     canRetranslate,
     onReset,
     onRetranslate,
+    currentValue,
   }: {
     label: string
     lang: string
@@ -139,7 +145,36 @@ export function EditableLanguageContentTabs({
     canRetranslate: boolean
     onReset: () => void
     onRetranslate: () => void
+    currentValue: string
   }) {
+    // In EDIT mode, check if current value differs from source
+    const sourceValue = mode === 'edit' && sourceProduct && sourceProduct.content_by_language
+      ? sourceProduct.content_by_language[sourceDefaultLang]?.[field] || ''
+      : ''
+    
+    // For SAME language: Compare values directly - show diff if different
+    // For DIFFERENT language: Don't compare (different languages expected to differ)
+    const isSameLanguage = lang === sourceDefaultLang
+    const shouldCompare = mode === 'edit' && isSameLanguage
+    const isDifferentFromSource = shouldCompare && sourceValue && currentValue !== sourceValue
+    
+    // For different languages in edit mode: show "Pick from Source (Auto-translated)" button
+    const showAutoTranslateButton = mode === 'edit' && !isSameLanguage && sourceValue
+    
+    const handlePickFromSource = () => {
+      if (isSameLanguage && sourceValue) {
+        // Same language: just copy the value
+        onUpdateField(lang, field, sourceValue)
+      }
+    }
+
+    const handlePickFromSourceTranslated = async () => {
+      // Different language: trigger re-translation (same as onRetranslate)
+      if (onRetranslateField && !isResetting && !isRetranslating) {
+        onRetranslateField(lang, field)
+      }
+    }
+
     return (
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -147,14 +182,44 @@ export function EditableLanguageContentTabs({
           {meta && (
             <span className="text-xs text-muted-foreground">{getOriginLabel(meta)}</span>
           )}
+          {isDifferentFromSource && (
+            <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] px-1.5 py-0">
+              Different from source
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1">
+          {isDifferentFromSource && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePickFromSource}
+              className="h-6 text-xs px-2 cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+              title="Copy value from source product"
+            >
+              <ArrowDownToLine className="h-3 w-3 mr-1" />
+              Pick from Source
+            </Button>
+          )}
+          {showAutoTranslateButton && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePickFromSourceTranslated}
+              disabled={isResetting || isRetranslating}
+              className="h-6 text-xs px-2 cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50"
+              title="Auto-translate and copy from source product"
+            >
+              {isRetranslating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ArrowDownToLine className="h-3 w-3 mr-1" />}
+              Pick from Source (Auto-translated)
+            </Button>
+          )}
           {dirtyFields.has(`${lang}.${field}`) && (
             <Button variant="ghost" size="sm" onClick={onReset} disabled={isResetting || isRetranslating} className="h-6 text-xs px-2 cursor-pointer" title="Reset to original value">
               {isResetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
             </Button>
           )}
-          {canRetranslate && onRetranslateField && (
+          {canRetranslate && onRetranslateField && !showAutoTranslateButton && (
             <Button
               variant="ghost"
               size="sm"
@@ -266,6 +331,7 @@ export function EditableLanguageContentTabs({
                 canRetranslate={!!canRetranslate}
                 onReset={() => onResetField(lang.code, 'title')}
                 onRetranslate={() => onRetranslateField!(lang.code, 'title')}
+                currentValue={langContent.title || ''}
               />
               <Input
                 value={langContent.title || ''}
@@ -289,6 +355,7 @@ export function EditableLanguageContentTabs({
                 canRetranslate={!!canRetranslate}
                 onReset={() => onResetField(lang.code, 'fulltitle')}
                 onRetranslate={() => onRetranslateField!(lang.code, 'fulltitle')}
+                currentValue={langContent.fulltitle || ''}
               />
               <Input
                 value={langContent.fulltitle || ''}
@@ -312,6 +379,7 @@ export function EditableLanguageContentTabs({
                 canRetranslate={!!canRetranslate}
                 onReset={() => onResetField(lang.code, 'description')}
                 onRetranslate={() => onRetranslateField!(lang.code, 'description')}
+                currentValue={langContent.description || ''}
               />
               <Textarea
                 value={langContent.description || ''}
@@ -335,6 +403,7 @@ export function EditableLanguageContentTabs({
                 canRetranslate={!!canRetranslate}
                 onReset={() => onResetField(lang.code, 'content')}
                 onRetranslate={() => onRetranslateField!(lang.code, 'content')}
+                currentValue={langContent.content || ''}
               />
               <div
                 className={cn(

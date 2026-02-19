@@ -124,8 +124,12 @@ export interface EditableVariant {
 
 /**
  * How a translated field value was produced.
+ * - copied: Direct copy from source (same language)
+ * - translated: Machine translated from source
+ * - manual: Manually edited by user
+ * - existing: Loaded from existing target product (edit mode)
  */
-export type TranslationOrigin = 'copied' | 'translated' | 'manual'
+export type TranslationOrigin = 'copied' | 'translated' | 'manual' | 'existing'
 
 export type TranslatableField = 'title' | 'fulltitle' | 'description' | 'content'
 
@@ -197,4 +201,7 @@ export interface EditableTargetData {
   orderChanged: boolean
   imageOrderChanged: boolean
   translationMeta?: TranslationMetaByLang
+  sourceProduct?: ProductData // Store source product for comparison in edit mode
+  targetProductId?: number // Store target product ID for edit mode
+  targetImagesLink?: string | null // Store target product images link for fetching
 }

@@ -2,12 +2,14 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Package, GripVertical, Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
+import { Package, GripVertical, Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, ArrowDownToLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getVariantKey } from '@/lib/utils'
-import type { EditableVariant } from '@/types/product'
+import type { EditableVariant, ProductData } from '@/types/product'
 
 interface EditableVariantsListProps {
+  mode?: 'create' | 'edit'  // Mode for determining diff behavior
+  sourceProduct?: ProductData  // Source product for comparison in edit mode
   variants: EditableVariant[]
   activeLanguage: string
   dirtyVariants: Set<string | number>
@@ -23,6 +25,8 @@ interface EditableVariantsListProps {
 }
 
 export function EditableVariantsList({
+  mode = 'create',  // Default to create mode
+  sourceProduct,
   variants,
   activeLanguage,
   dirtyVariants,
@@ -82,6 +86,32 @@ export function EditableVariantsList({
     if (dragPreviewRef.current) dragPreviewRef.current.innerHTML = ''
   }
 
+  // Helper to find matching source variant by SKU
+  const findSourceVariantBySku = (sku: string | null) => {
+    if (!sku || !sourceProduct?.variants) return null
+    return sourceProduct.variants.find(v => v.sku === sku)
+  }
+
+  // Helper to pick value from source variant
+  const pickFromSourceVariant = (idx: number, field: 'sku' | 'price_excl' | 'title') => {
+    const variant = variants[idx]
+    if (!variant || !sourceProduct) return
+    
+    const sourceVariant = findSourceVariantBySku(variant.sku)
+    if (!sourceVariant) return
+    
+    if (field === 'sku') {
+      onUpdateVariant(idx, 'sku', sourceVariant.sku || '')
+    } else if (field === 'price_excl') {
+      onUpdateVariant(idx, 'price_excl', sourceVariant.price_excl)
+    } else if (field === 'title') {
+      // Get source default language title
+      const sourceDefaultLang = 'nl' // Could be passed as prop
+      const sourceTitle = sourceVariant.content_by_language?.[sourceDefaultLang]?.title || ''
+      onUpdateVariantTitle(idx, activeLanguage, sourceTitle)
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div
@@ -117,6 +147,14 @@ export function EditableVariantsList({
         {variants.map((variant, idx) => {
           const isChanged = dirtyVariants.has(getVariantKey(variant))
           const variantImageUrl = variant.image?.src || variant.image?.thumb
+          
+          // In EDIT mode, find matching source variant for comparison
+          const sourceVariant = mode === 'edit' ? findSourceVariantBySku(variant.sku) : null
+          const skuDifferent = mode === 'edit' && sourceVariant && sourceVariant.sku !== variant.sku
+          const priceDifferent = mode === 'edit' && sourceVariant && sourceVariant.price_excl !== variant.price_excl
+          const titleDifferent = mode === 'edit' && sourceVariant && 
+            sourceVariant.content_by_language?.['nl']?.title !== variant.content_by_language?.[activeLanguage]?.title
+          
           return (
             <div
               key={variant.variant_id || variant.temp_id}
@@ -156,57 +194,115 @@ export function EditableVariantsList({
               </button>
               <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    value={variant.sku ?? ''}
-                    onChange={(e) => onUpdateVariant(idx, 'sku', e.target.value)}
-                    placeholder="SKU"
-                    className="h-8 sm:h-8 text-xs sm:text-xs flex-1 min-w-0 cursor-text"
-                  />
-                  <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] sm:min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
-                    <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
-                    <input
-                      type="number"
-                      value={variant.price_excl}
-                      onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
-                      step="1"
-                      placeholder="0.00"
-                      className="flex-1 h-full px-1 text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <div className="flex flex-col border-l border-input">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentPrice = parseFloat(String(variant.price_excl)) || 0
-                          onUpdateVariant(idx, 'price_excl', (currentPrice + 1).toFixed(2))
-                        }}
-                        className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center"
-                        title="Increase price"
-                      >
-                        <ChevronUp className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const currentPrice = parseFloat(String(variant.price_excl)) || 0
-                          onUpdateVariant(idx, 'price_excl', Math.max(0, currentPrice - 1).toFixed(2))
-                        }}
-                        className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center border-t border-input"
-                        title="Decrease price"
-                      >
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={variant.sku ?? ''}
+                        onChange={(e) => onUpdateVariant(idx, 'sku', e.target.value)}
+                        placeholder="SKU"
+                        className="h-8 sm:h-8 text-xs sm:text-xs flex-1 min-w-0 cursor-text"
+                      />
+                      {skuDifferent && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => pickFromSourceVariant(idx, 'sku')}
+                          className="h-8 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 shrink-0"
+                          title="Copy SKU from source"
+                        >
+                          <ArrowDownToLine className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
+                    {skuDifferent && (
+                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] px-1.5 py-0">
+                        SKU differs from source
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] sm:min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
+                      <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
+                      <input
+                        type="number"
+                        value={variant.price_excl}
+                        onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
+                        step="1"
+                        placeholder="0.00"
+                        className="flex-1 h-full px-1 text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <div className="flex flex-col border-l border-input">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                            onUpdateVariant(idx, 'price_excl', (currentPrice + 1).toFixed(2))
+                          }}
+                          className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center"
+                          title="Increase price"
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                            onUpdateVariant(idx, 'price_excl', Math.max(0, currentPrice - 1).toFixed(2))
+                          }}
+                          className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center border-t border-input"
+                          title="Decrease price"
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                    {priceDifferent && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => pickFromSourceVariant(idx, 'price_excl')}
+                        className="h-8 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 shrink-0"
+                        title="Copy price from source"
+                      >
+                        <ArrowDownToLine className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <Input
-                  value={variant.content_by_language[activeLanguage]?.title || ''}
-                  onChange={(e) => onUpdateVariantTitle(idx, activeLanguage, e.target.value)}
-                  placeholder="Variant title"
-                  className="h-8 text-xs cursor-text"
-                />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={variant.content_by_language[activeLanguage]?.title || ''}
+                      onChange={(e) => onUpdateVariantTitle(idx, activeLanguage, e.target.value)}
+                      placeholder="Variant title"
+                      className="h-8 text-xs cursor-text flex-1"
+                    />
+                    {titleDifferent && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => pickFromSourceVariant(idx, 'title')}
+                        className="h-8 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 shrink-0"
+                        title="Copy title from source"
+                      >
+                        <ArrowDownToLine className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  {titleDifferent && (
+                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] px-1.5 py-0">
+                      Title differs from source
+                    </Badge>
+                  )}
+                </div>
                 {variant.is_default && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500/70 text-blue-700 dark:text-blue-400">
                     Default
+                  </Badge>
+                )}
+                {priceDifferent && (
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] px-1.5 py-0">
+                    Price differs from source
                   </Badge>
                 )}
               </div>

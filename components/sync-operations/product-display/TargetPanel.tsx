@@ -2,16 +2,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw, Loader2 } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, isSameImageInfo, getImageUrl } from '@/lib/utils'
-import type { Language, EditableTargetData, ProductContent } from '@/types/product'
+import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 interface TargetPanelProps {
+  mode?: 'create' | 'edit'  // New prop for edit mode
+  sourceProduct?: ProductData  // Source product for comparison in edit mode
   shopTld: string
   shopName: string
   baseUrl: string
@@ -50,6 +52,8 @@ interface TargetPanelProps {
 }
 
 export function TargetPanel({
+  mode = 'create',  // Default to create mode for backward compatibility
+  sourceProduct,
   shopTld,
   shopName,
   baseUrl,
@@ -139,6 +143,17 @@ export function TargetPanel({
 
   const shopUrl = toSafeExternalHref(baseUrl)
   const visibilityChanged = data.visibility !== data.originalVisibility
+  
+  // In EDIT mode, compare target visibility with source visibility
+  const sourceVisibility = mode === 'edit' && sourceProduct ? sourceProduct.visibility : data.originalVisibility
+  const isDifferentFromSource = mode === 'edit' && sourceVisibility && data.visibility !== sourceVisibility
+  const targetMatchesSource = mode === 'edit' && data.visibility === sourceVisibility
+  
+  // Show "Pick from Source" if current differs from source (even if also differs from original)
+  // Show "Reset" if current differs from original
+  const showPickFromSource = mode === 'edit' && isDifferentFromSource
+  const showReset = visibilityChanged
+  
   const targetProductImageUrl = getImageUrl(data.productImage)
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
 
@@ -205,42 +220,52 @@ export function TargetPanel({
             {/* Row 1: Visibility | Price */}
             <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
               <span className="text-muted-foreground block mb-0.5 text-[11px] sm:text-xs">Visibility</span>
-              <div className="flex items-center gap-1.5 justify-center w-full">
-                <div className="relative">
-                  <Select value={data.visibility} onValueChange={onUpdateVisibility}>
-                    <SelectTrigger className="w-[200px] h-9 cursor-pointer">
-                      <SelectValue>
+              <div className="flex items-center gap-1.5 justify-center w-full flex-wrap">
+                <Select value={data.visibility} onValueChange={onUpdateVisibility}>
+                  <SelectTrigger className="w-[200px] h-9 cursor-pointer">
+                    <SelectValue>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const vis = getVisibilityOption(data.visibility)
+                          return <><vis.Icon className={`h-3.5 w-3.5 ${vis.iconClassName}`} /><span className={vis.labelClassName}>{vis.label}</span></>
+                        })()}
+                      </div>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="cursor-pointer">
                         <div className="flex items-center gap-2">
-                          {(() => {
-                            const vis = getVisibilityOption(data.visibility)
-                            return <><vis.Icon className={`h-3.5 w-3.5 ${vis.iconClassName}`} /><span className={vis.labelClassName}>{vis.label}</span></>
-                          })()}
+                          <option.Icon className={`h-3.5 w-3.5 ${option.iconClassName}`} />
+                          <span className={option.labelClassName}>{option.label}</span>
                         </div>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VISIBILITY_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value} className="cursor-pointer">
-                          <div className="flex items-center gap-2">
-                            <option.Icon className={`h-3.5 w-3.5 ${option.iconClassName}`} />
-                            <span className={option.labelClassName}>{option.label}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {visibilityChanged && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={onResetVisibility}
-                      className="absolute -right-8 top-1/2 -translate-y-1/2 h-7 w-7 cursor-pointer"
-                      title="Reset visibility"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showPickFromSource && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onUpdateVisibility(sourceVisibility)}
+                    className="h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                    title="Set visibility from source product"
+                  >
+                    <ArrowDownToLine className="h-3 w-3 mr-1" />
+                    Pick
+                  </Button>
+                )}
+                {showReset && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onResetVisibility}
+                    className="h-9 px-2 text-xs cursor-pointer"
+                    title="Reset visibility to original"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
             </div>
             <div className="flex flex-col items-start sm:items-center justify-center sm:text-center">
@@ -274,6 +299,8 @@ export function TargetPanel({
         {languages.length > 0 && (
           <div className="border-t border-border/50 pt-3 sm:pt-4">
             <EditableLanguageContentTabs
+              mode={mode}
+              sourceProduct={sourceProduct}
               shopTld={shopTld}
               languages={languages}
               content={data.content_by_language}
@@ -293,6 +320,8 @@ export function TargetPanel({
 
         <div className="border-t border-border/50 pt-3 sm:pt-4">
           <EditableVariantsList
+            mode={mode}
+            sourceProduct={sourceProduct}
             variants={data.variants}
             activeLanguage={activeLanguage}
             dirtyVariants={data.dirtyVariants}
@@ -306,15 +335,13 @@ export function TargetPanel({
             onResetAllVariants={onResetAllVariants}
             onSelectVariantImage={onSelectVariantImage}
           />
-          {(imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
+          {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
               <ProductImagesGrid
-                productId={sourceProductId}
-                imagesLink={imagesLink}
-                shopTld={sourceShopTld}
-                // In preview-create, show the target's current image order (which can change when selecting a new product image).
-                // Keep `sourceImages` only as a defensive fallback.
+                productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
+                imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
+                shopTld={mode === 'edit' ? shopTld : sourceShopTld}
                 images={data.images}
               />
             </div>
