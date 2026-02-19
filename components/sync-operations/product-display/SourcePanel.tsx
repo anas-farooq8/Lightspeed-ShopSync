@@ -19,6 +19,8 @@ interface SourcePanelProps {
   onProductSelect: (id: number) => void
   /** Pre-fetched source images (create-preview: pass from page so grid does not fetch). */
   sourceImages?: ProductImageMeta[] | null
+  /** When true (preview-create source switching), shows loading on the duplicate selector. */
+  sourceSwitching?: boolean
 }
 
 export function SourcePanel({ 
@@ -28,7 +30,8 @@ export function SourcePanel({
   allProducts,
   selectedProductId,
   onProductSelect,
-  sourceImages
+  sourceImages,
+  sourceSwitching = false
 }: SourcePanelProps) {
   const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
@@ -74,6 +77,7 @@ export function SourcePanel({
           onProductSelect={onProductSelect}
           defaultLanguage={defaultLanguage}
           isSource={true}
+          loading={sourceSwitching}
         />
       </CardHeader>
 
@@ -135,6 +139,7 @@ export function SourcePanel({
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
               <ProductImagesGrid
+                productId={product.product_id}
                 imagesLink={product.images_link}
                 shopTld={product.shop_tld}
                 images={sourceImages ?? undefined}

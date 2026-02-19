@@ -236,6 +236,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     // Add selected shops as comma-separated list
     params.set('targetShops', selectedShopTlds.join(','))
     
+    // Pass the clicked product ID so the correct source is pre-selected when there are duplicates
+    params.set('productId', selectedProduct.source_product_id.toString())
+    
     // Navigate to preview-create page
     router.push(`/dashboard/sync-operations/preview-create/${encodeURIComponent(selectedProduct.default_sku)}?${params.toString()}`)
   }

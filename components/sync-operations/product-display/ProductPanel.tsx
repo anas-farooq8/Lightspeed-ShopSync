@@ -48,7 +48,19 @@ export function ProductPanel({
             defaultLanguage={defaultLanguage}
             isSource={isSource}
             compactLayout={true}
+            sourceProductLabelCombined={isSource}
           />
+          {hasDuplicates && (
+            <div className="px-4 sm:px-6 pt-2 sm:pt-3 pb-4 sm:pb-6 border-b border-border/50">
+              <DuplicateProductSelector
+                products={allProducts}
+                selectedProductId={selectedProductId}
+                onProductSelect={onProductSelect}
+                defaultLanguage={defaultLanguage}
+                isSource={isSource}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 min-w-0">
             {sortedLanguages.length > 0 && (
@@ -72,7 +84,12 @@ export function ProductPanel({
               {product.images_link && (
                 <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
                   <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-                  <ProductImagesGrid imagesLink={product.images_link} shopTld={product.shop_tld} />
+                  <ProductImagesGrid 
+                    key={`${product.product_id}-${product.images_link}`}
+                    productId={product.product_id}
+                    imagesLink={product.images_link} 
+                    shopTld={product.shop_tld} 
+                  />
                 </div>
               )}
             </div>
@@ -156,7 +173,12 @@ export function ProductPanel({
           {product.images_link && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <ProductImagesGrid imagesLink={product.images_link} shopTld={product.shop_tld} />
+              <ProductImagesGrid 
+                key={`${product.product_id}-${product.images_link}`}
+                productId={product.product_id}
+                imagesLink={product.images_link} 
+                shopTld={product.shop_tld} 
+              />
             </div>
           )}
         </div>

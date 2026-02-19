@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { clearProductImagesCache } from '@/lib/cache/product-images-cache'
+import {
+  clearProductImagesCache,
+  getCachedImages,
+  setCachedImages,
+  fetchAndCacheImages,
+  type ProductImage as CachedProductImage,
+} from '@/lib/cache/product-images-cache'
 import {
   UnsavedChangesDialog,
   CreateProductConfirmationDialog,
@@ -46,7 +52,8 @@ export default function PreviewCreatePage() {
   const [translating, setTranslating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({}) // Per-shop translation errors
-  const [productImages, setProductImages] = useState<Record<string, ProductImage[]>>({})
+  /** Keyed by product_id so duplicate sources (same SKU, different products) keep separate image sets. */
+  const [productImages, setProductImages] = useState<Record<number, ProductImage[]>>({})
   
   // Create product states
   const [creating, setCreating] = useState(false)
@@ -60,6 +67,19 @@ export default function PreviewCreatePage() {
   const [activeTargetTld, setActiveTargetTld] = useState<string>('')
   const [targetData, setTargetData] = useState<Record<string, EditableTargetData>>({})
   const [activeLanguages, setActiveLanguages] = useState<Record<string, string>>({})
+
+  /**
+   * Always-current refs for mutable state used inside async callbacks.
+   * Prevents stale-closure bugs: e.g. if the user changes a product image
+   * (setTargetData) and then immediately switches source before React has
+   * committed the re-render that would recreate handleSourceProductSelect,
+   * reading targetDataRef.current instead of the closure value guarantees
+   * we save the very latest targetData into perSourceCacheRef.
+   */
+  const targetDataRef = useRef(targetData)
+  useEffect(() => { targetDataRef.current = targetData }, [targetData])
+  const activeLanguagesRef = useRef(activeLanguages)
+  useEffect(() => { activeLanguagesRef.current = activeLanguages }, [activeLanguages])
   const [isDirty, setIsDirty] = useState(false)
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
   const [resettingField, setResettingField] = useState<string | null>(null) // "tld:lang:field"
@@ -71,6 +91,26 @@ export default function PreviewCreatePage() {
   const originalTranslatedContentRef = useRef<Record<string, Record<string, Record<string, string>>>>({})
   /** Stores the original translation metadata for reset */
   const originalTranslationMetaRef = useRef<Record<string, Record<string, Record<string, TranslationOrigin>>>>({})
+
+  /** True while a source-product switch is in progress (fetching images + re-translating). */
+  const [sourceSwitching, setSourceSwitching] = useState(false)
+
+  /**
+   * Per-source snapshot cache.
+   * When the user switches the source-product dropdown we save the complete editable state
+   * (targetData, refs, activeLanguages) for the OLD source so that switching BACK restores
+   * everything — including any edits the user had already made — instantly without an API call.
+   */
+  const perSourceCacheRef = useRef(
+    new Map<number, {
+      targetData: Record<string, EditableTargetData>
+      originalTranslatedContent: Record<string, Record<string, Record<string, string>>>
+      originalTranslationMeta: Record<string, Record<string, Record<string, TranslationOrigin>>>
+      initialContent: Record<string, Record<string, string>>
+      contentEditorReady: Record<string, Record<string, boolean>>
+      activeLanguages: Record<string, string>
+    }>()
+  )
 
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [selectingImageForVariant, setSelectingImageForVariant] = useState<number | null>(null)
@@ -254,13 +294,24 @@ export default function PreviewCreatePage() {
           const initialSourceId = productId ? parseInt(productId) : data.source[0].product_id
           setSelectedSourceProductId(initialSourceId)
           
-          // Fetch images for source product so target can use them
-          const sourceProduct = data.source.find((p: ProductData) => p.product_id === initialSourceId)
-          let sourceImages: ProductImage[] = []
-          if (sourceProduct?.images_link) {
-            sourceImages = await fetchProductImages(sourceProduct.images_link, sourceProduct.shop_tld)
+          const initialSourceProduct = data.source.find((p: ProductData) => p.product_id === initialSourceId)
+
+          if (initialSourceProduct?.images_link) {
+            // Fire image-fetch and translation in parallel.
+            // initializeTargetData starts translation immediately with [] images;
+            // patchImagesIntoTargetData fills in the image grid once the fetch resolves.
+            const [sourceImages] = await Promise.all([
+              fetchProductImages(
+                initialSourceProduct.product_id,
+                initialSourceProduct.images_link,
+                initialSourceProduct.shop_tld
+              ),
+              initializeTargetData(data, initialSourceId, selectedTargetShops, []),
+            ])
+            patchImagesIntoTargetData(selectedTargetShops, sourceImages, initialSourceProduct)
+          } else {
+            await initializeTargetData(data, initialSourceId, selectedTargetShops, [])
           }
-          initializeTargetData(data, initialSourceId, selectedTargetShops, sourceImages)
         }
         
         const sortedTargets = selectedTargetShops.sort((a, b) => a.localeCompare(b))
@@ -287,23 +338,209 @@ export default function PreviewCreatePage() {
     return () => clearProductImagesCache()
   }, [])
 
-  const fetchProductImages = async (imagesLink: string, shopTld: string): Promise<ProductImage[]> => {
+  /**
+   * Deep-clone an EditableTargetData map.
+   * Sets (dirtyFields, dirtyVariants, removedImageIds) cannot survive JSON round-trips,
+   * so we clone them explicitly.
+   */
+  const cloneTargetData = useCallback(
+    (data: Record<string, EditableTargetData>): Record<string, EditableTargetData> => {
+      const result: Record<string, EditableTargetData> = {}
+      for (const [tld, td] of Object.entries(data)) {
+        result[tld] = {
+          content_by_language: JSON.parse(JSON.stringify(td.content_by_language)),
+          variants: td.variants.map(v => ({
+            ...v,
+            content_by_language: { ...v.content_by_language }
+          })),
+          images: td.images.map(img => ({ ...img })),
+          originalImageOrder: [...td.originalImageOrder],
+          removedImageIds: new Set(td.removedImageIds),
+          dirty: td.dirty,
+          dirtyFields: new Set(td.dirtyFields),
+          dirtyVariants: new Set(td.dirtyVariants),
+          originalVariantOrder: [...td.originalVariantOrder],
+          visibility: td.visibility,
+          originalVisibility: td.originalVisibility,
+          productImage: td.productImage ? { ...td.productImage } : null,
+          originalProductImage: td.originalProductImage ? { ...td.originalProductImage } : null,
+          orderChanged: td.orderChanged,
+          imageOrderChanged: td.imageOrderChanged,
+          translationMeta: td.translationMeta
+            ? JSON.parse(JSON.stringify(td.translationMeta))
+            : undefined,
+        }
+      }
+      return result
+    },
+    []
+  )
+
+  /**
+   * Patches freshly-fetched images into each target shop's editable data.
+   * Called after `initializeTargetData` has already run (with an empty images array)
+   * so that image-fetch and translation can run in parallel without a dependency.
+   */
+  const patchImagesIntoTargetData = useCallback((
+    shopTlds: string[],
+    images: ProductImage[],
+    srcProduct: ProductData
+  ) => {
+    if (!images.length) return
+    setTargetData(prev => {
+      const updated = { ...prev }
+      shopTlds.forEach(tld => {
+        if (!updated[tld]) return
+        const firstImage = images[0]
+        // productImage is already set from srcProduct.product_image (DB value) during
+        // initializeTargetData; only fill in from images if it was null there.
+        const fallbackProductImage: ImageInfo | null = srcProduct.product_image
+          ? null
+          : firstImage
+            ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
+            : null
+        updated[tld] = {
+          ...updated[tld],
+          images: [...images],
+          originalImageOrder: images.map((_, idx) => idx),
+          productImage: updated[tld].productImage ?? fallbackProductImage,
+          originalProductImage: updated[tld].originalProductImage ?? fallbackProductImage,
+        }
+      })
+      return updated
+    })
+  }, [])
+
+  /**
+   * Handles source-product dropdown selection in preview-create.
+   *
+   * 1. Saves the current complete editable state to perSourceCacheRef for the OLD source.
+   *    Uses targetDataRef / activeLanguagesRef (always-current refs) instead of the closure
+   *    values so that a product-image change made just before switching is never lost.
+   * 2. If the NEW source was previously selected, its snapshot is restored instantly.
+   * 3. Otherwise: shows loading, then fires image-fetch AND translation in parallel so
+   *    neither blocks the other.
+   *
+   * The translation memo (translationMemoRef) is intentionally NOT cleared — it is keyed
+   * by content hash so different source products with identical text share cached translations.
+   */
+  const handleSourceProductSelect = useCallback(async (newProductId: number) => {
+    if (newProductId === selectedSourceProductId || !details) return
+
+    // ── 1. Save current state — read from refs, not closure, to capture latest edits ──
+    if (selectedSourceProductId !== null) {
+      perSourceCacheRef.current.set(selectedSourceProductId, {
+        targetData: cloneTargetData(targetDataRef.current),
+        originalTranslatedContent: JSON.parse(JSON.stringify(originalTranslatedContentRef.current)),
+        originalTranslationMeta: JSON.parse(JSON.stringify(originalTranslationMetaRef.current)),
+        initialContent: JSON.parse(JSON.stringify(initialContentRef.current)),
+        contentEditorReady: JSON.parse(JSON.stringify(contentEditorReadyRef.current)),
+        activeLanguages: { ...activeLanguagesRef.current },
+      })
+    }
+
+    // ── 2. Restore from per-source cache if available (instant, no API call) ──
+    const snapshot = perSourceCacheRef.current.get(newProductId)
+    if (snapshot) {
+      setSelectedSourceProductId(newProductId)
+      setTargetData(snapshot.targetData)
+      setActiveLanguages(snapshot.activeLanguages)
+      originalTranslatedContentRef.current = snapshot.originalTranslatedContent
+      originalTranslationMetaRef.current = snapshot.originalTranslationMeta
+      initialContentRef.current = snapshot.initialContent
+      contentEditorReadyRef.current = snapshot.contentEditorReady
+      const anyDirty = Object.values(snapshot.targetData).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+      return
+    }
+
+    // ── 3. Not cached — fetch images AND translate in parallel ────────────────
+    setSourceSwitching(true)
+    setSelectedSourceProductId(newProductId)
+    // Clear target panels so they show their loading state while we work.
+    setTargetData({})
+
+    const newSourceProduct = details.source.find(p => p.product_id === newProductId)
+    if (!newSourceProduct) {
+      setSourceSwitching(false)
+      return
+    }
+
     try {
-      const response = await fetch(`/api/product-images?link=${encodeURIComponent(imagesLink)}&shopTld=${shopTld}`)
-      if (!response.ok) return []
-      
-      const images = await response.json()
-      const productImages: ProductImage[] = (images || []).map((img: any, idx: number) => ({
+      // Check page-state and module-level cache first (no network needed).
+      const cachedPageImages = productImages[newProductId]
+      const cachedModuleImages = newSourceProduct.images_link
+        ? getCachedImages(newProductId, newSourceProduct.shop_tld)
+        : null
+
+      if (cachedPageImages?.length || cachedModuleImages?.length) {
+        // Images already available — start translation immediately with them.
+        const imgs = cachedPageImages ?? (cachedModuleImages!.map((img, idx) => ({
+          id: String(img.id ?? `img-${idx}`),
+          src: img.src ?? '',
+          thumb: img.thumb,
+          title: img.title,
+          sort_order: Number(img.sortOrder ?? idx)
+        })) as ProductImage[])
+        if (!cachedPageImages?.length) {
+          setProductImages(prev => ({ ...prev, [newProductId]: imgs }))
+        }
+        await initializeTargetData(details, newProductId, selectedTargetShops, imgs)
+      } else if (newSourceProduct.images_link) {
+        // Fire image-fetch AND translation in parallel.
+        // initializeTargetData starts with [] and patchImagesIntoTargetData fills in
+        // the image grid once the fetch resolves.
+        const [imgs] = await Promise.all([
+          fetchProductImages(newProductId, newSourceProduct.images_link, newSourceProduct.shop_tld),
+          initializeTargetData(details, newProductId, selectedTargetShops, []),
+        ])
+        patchImagesIntoTargetData(selectedTargetShops, imgs, newSourceProduct)
+      } else {
+        // No images link — just translate.
+        await initializeTargetData(details, newProductId, selectedTargetShops, [])
+      }
+    } finally {
+      setSourceSwitching(false)
+    }
+  // selectedSourceProductId intentionally omitted — we read it only for the guard check
+  // at the top; the ref handles the rest. deps that change the behaviour are listed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSourceProductId, details, productImages, selectedTargetShops, cloneTargetData, patchImagesIntoTargetData])
+
+  /**
+   * Fetches a product's image list, sharing the module-level cache so that
+   * ProductImagesGrid (view-only pages) and preview-create never duplicate a request.
+   * Cache key: productId|shopTld  — unique per product per shop.
+   */
+  const fetchProductImages = async (productId: number, imagesLink: string, shopTld: string): Promise<ProductImage[]> => {
+    // Reuse module-level cache (same store as ProductImagesGrid).
+    const moduleCached = getCachedImages(productId, shopTld)
+    if (moduleCached) {
+      const imgs: ProductImage[] = moduleCached.map((img, idx) => ({
         id: String(img.id ?? `img-${idx}`),
-        src: img.src,
+        src: img.src ?? '',
         thumb: img.thumb,
         title: img.title,
-        // Lightspeed API uses sortOrder; some internal shapes may use sort_order
-        sort_order: Number(img.sortOrder ?? img.sort_order ?? idx)
+        sort_order: Number(img.sortOrder ?? idx)
       }))
-      
-      setProductImages(prev => ({ ...prev, [shopTld]: productImages }))
-      return productImages
+      setProductImages(prev => ({ ...prev, [productId]: imgs }))
+      return imgs
+    }
+
+    try {
+      // fetchAndCacheImages writes to the module-level cache and returns sorted images.
+      const raw = await fetchAndCacheImages(productId, imagesLink, shopTld)
+      const imgs: ProductImage[] = raw.map((img, idx) => ({
+        id: String(img.id ?? `img-${idx}`),
+        src: img.src ?? '',
+        thumb: img.thumb,
+        title: img.title,
+        sort_order: Number(img.sortOrder ?? idx)
+      }))
+      setProductImages(prev => ({ ...prev, [productId]: imgs }))
+      return imgs
     } catch (err) {
       console.error('Failed to fetch images:', err)
       return []
@@ -322,7 +559,7 @@ export default function PreviewCreatePage() {
 
     const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
-    const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.shop_tld] ?? []
+    const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.product_id] ?? []
     
     const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
       ? { ...targetData }
@@ -930,7 +1167,7 @@ export default function PreviewCreatePage() {
     if (!showImageDialog || !sourceProduct) return []
     const raw =
       targetData[activeTargetTld]?.images ??
-      productImages[sourceProduct.shop_tld] ??
+      productImages[sourceProduct?.product_id ?? 0] ??
       []
     // Sort once per dialog open/list change (not on every render).
     return [...raw].sort((a, b) => (a.sort_order ?? 999999) - (b.sort_order ?? 999999))
@@ -1659,8 +1896,9 @@ export default function PreviewCreatePage() {
                   hasDuplicates={hasSourceDuplicates}
                   allProducts={details.source}
                   selectedProductId={selectedSourceProductId}
-                  onProductSelect={setSelectedSourceProductId}
-                  sourceImages={productImages[sourceProduct.shop_tld] ?? []}
+                  onProductSelect={handleSourceProductSelect}
+                  sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+                  sourceSwitching={sourceSwitching}
                 />
               </div>
 
@@ -1674,13 +1912,14 @@ export default function PreviewCreatePage() {
                     data={targetData[tld]}
                     activeLanguage={activeLanguages[tld] || ''}
                     imagesLink={sourceProduct.images_link}
+                    sourceProductId={sourceProduct.product_id}
                     sourceShopTld={sourceProduct.shop_tld}
                     sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
                     resettingField={resettingField}
                     retranslatingField={retranslatingField}
                     translating={translating}
                     error={targetErrors[tld]}
-                    sourceImages={productImages[sourceProduct.shop_tld] ?? []}
+                    sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
                     onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
                     onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
                     onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -1729,8 +1968,9 @@ export default function PreviewCreatePage() {
               hasDuplicates={hasSourceDuplicates}
               allProducts={details.source}
               selectedProductId={selectedSourceProductId}
-              onProductSelect={setSelectedSourceProductId}
-              sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
+              onProductSelect={handleSourceProductSelect}
+              sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+              sourceSwitching={sourceSwitching}
             />
             <TargetPanel
               shopTld={sortedTargetShops[0]}
@@ -1740,13 +1980,14 @@ export default function PreviewCreatePage() {
               data={targetData[sortedTargetShops[0]]}
               activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
               imagesLink={sourceProduct?.images_link}
+              sourceProductId={sourceProduct?.product_id ?? 0}
               sourceShopTld={sourceProduct?.shop_tld}
               sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
               resettingField={resettingField}
               retranslatingField={retranslatingField}
               translating={translating}
               error={targetErrors[sortedTargetShops[0]]}
-              sourceImages={productImages[sourceProduct?.shop_tld] ?? []}
+              sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
               onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
               onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
               onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}

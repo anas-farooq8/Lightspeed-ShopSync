@@ -19,6 +19,7 @@ interface TargetPanelProps {
   data: EditableTargetData | undefined
   activeLanguage: string
   imagesLink: string | null | undefined
+  sourceProductId: number
   sourceShopTld: string
   sourceDefaultLang?: string
   resettingField?: string | null
@@ -56,6 +57,7 @@ export function TargetPanel({
   data,
   activeLanguage,
   imagesLink,
+  sourceProductId,
   sourceShopTld,
   sourceDefaultLang,
   resettingField,
@@ -308,6 +310,7 @@ export function TargetPanel({
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
               <ProductImagesGrid
+                productId={sourceProductId}
                 imagesLink={imagesLink}
                 shopTld={sourceShopTld}
                 // In preview-create, show the target's current image order (which can change when selecting a new product image).

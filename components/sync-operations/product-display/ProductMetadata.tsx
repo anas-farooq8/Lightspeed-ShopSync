@@ -9,13 +9,16 @@ interface ProductMetadataProps {
   defaultLanguage: string
   isSource?: boolean
   compactLayout?: boolean
+  /** When true (compact + source), show "Source Product #id" on one line instead of Source badge + separate Product link */
+  sourceProductLabelCombined?: boolean
 }
 
 export function ProductMetadata({ 
   product, 
   defaultLanguage, 
   isSource = false,
-  compactLayout = false 
+  compactLayout = false,
+  sourceProductLabelCombined = false
 }: ProductMetadataProps) {
   const imageUrl = getImageUrl(product.product_image)
   const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
@@ -51,16 +54,24 @@ export function ProductMetadata({
               <span className="text-base sm:text-lg font-semibold truncate">{product.shop_name}</span>
             )}
             <Badge variant="outline" className="text-xs sm:text-sm shrink-0">.{product.shop_tld}</Badge>
-            {isSource && (
+            {isSource && !sourceProductLabelCombined && (
               <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 shrink-0 text-xs sm:text-sm">Source</Badge>
             )}
           </div>
-          {productAdminUrl && (
+          {productAdminUrl && sourceProductLabelCombined && isSource ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 shrink-0 text-xs sm:text-sm">Source</Badge>
+              <a href={productAdminUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 font-medium w-fit cursor-pointer">
+                <ExternalLink className="h-3 w-3" />
+                Product #{product.product_id}
+              </a>
+            </div>
+          ) : productAdminUrl ? (
             <a href={productAdminUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 font-medium w-fit cursor-pointer">
               <ExternalLink className="h-3 w-3" />
               Product #{product.product_id}
             </a>
-          )}
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1 text-xs sm:text-sm">
             <span className={`inline-flex items-center gap-1 sm:gap-1.5 ${visibilityInfo.labelClassName || visibilityInfo.iconClassName}`}>
               <visibilityInfo.Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${visibilityInfo.iconClassName}`} />

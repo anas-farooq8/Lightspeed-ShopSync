@@ -32,6 +32,8 @@ export type ProductImageMeta = {
 }
 
 interface ProductImagesGridProps {
+  /** Product ID for cache key (productId + imagesLink + tld). Required when fetching. */
+  productId: number
   imagesLink: string | null | undefined
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
@@ -52,7 +54,7 @@ function normalizeImages(raw: ProductImageMeta[]): ProductImage[] {
     }))
 }
 
-function ProductImagesGridInner({ imagesLink, shopTld, images: imagesProp, className }: ProductImagesGridProps) {
+function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, className }: ProductImagesGridProps) {
   const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +70,7 @@ function ProductImagesGridInner({ imagesLink, shopTld, images: imagesProp, class
       setFetchedImages([])
       return
     }
-    const cached = getCachedImages(imagesLink, shopTld)
+    const cached = getCachedImages(productId, shopTld)
     if (cached) {
       setFetchedImages(cached)
       setLoading(false)
@@ -88,7 +90,7 @@ function ProductImagesGridInner({ imagesLink, shopTld, images: imagesProp, class
           const sorted = [...(Array.isArray(data) ? data : [])].sort(
             (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
           )
-          setCachedImages(imagesLink, shopTld, sorted as CachedProductImage[])
+          setCachedImages(productId, shopTld, sorted as CachedProductImage[])
           setFetchedImages(sorted)
         }
       })
@@ -99,7 +101,7 @@ function ProductImagesGridInner({ imagesLink, shopTld, images: imagesProp, class
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [imagesLink, shopTld, usePreFetched])
+  }, [productId, imagesLink, shopTld, usePreFetched])
 
   if (usePreFetched) {
     if (!images.length) return null
