@@ -30,9 +30,9 @@
 -- PARAMETERS:
 --   p_operation      'create' | 'edit'
 --   p_missing_in     'all' | shop TLD (e.g. 'be') | NULL (default: 'all')
---   p_search         Search in SKU, product title, variant title
+--   p_search         Search in product ID, SKU, product title, variant title
 --   p_only_duplicates  Filter to products with duplicate SKUs only
---   p_sort_by        'title' | 'sku' | 'variants' | 'price' | 'created'
+--   p_sort_by        'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
 --   p_sort_order     'asc' | 'desc'
 --   p_page           Page number (1-based)
 --   p_page_size      Rows per page (1-1000)
@@ -94,8 +94,8 @@ BEGIN
   IF p_operation IS NULL OR p_operation NOT IN ('create', 'edit') THEN
     RAISE EXCEPTION 'Invalid operation. Must be ''create'' or ''edit'', got: %', COALESCE(p_operation, 'NULL');
   END IF;
-  IF p_sort_by IS NULL OR p_sort_by NOT IN ('title', 'sku', 'variants', 'price', 'created') THEN
-    RAISE EXCEPTION 'Invalid sort_by. Must be one of: title, sku, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
+  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'sku', 'variants', 'price', 'created') THEN
+    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, sku, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
   END IF;
   IF p_sort_order IS NULL OR p_sort_order NOT IN ('asc', 'desc') THEN
     RAISE EXCEPTION 'Invalid sort_order. Must be ''asc'' or ''desc'', got: %', COALESCE(p_sort_order, 'NULL');
@@ -134,6 +134,7 @@ BEGIN
     FROM product_sync_status pss
     WHERE
       (p_search IS NULL OR p_search = ''
+        OR pss.source_product_id::TEXT ILIKE '%' || p_search || '%'
         OR pss.product_title ILIKE '%' || p_search || '%'
         OR pss.variant_title ILIKE '%' || p_search || '%'
         OR pss.default_sku ILIKE '%' || p_search || '%')
@@ -170,6 +171,7 @@ BEGIN
       fp.*,
       FIRST_VALUE(
         CASE
+          WHEN p_sort_by = 'product_id' THEN fp.source_product_id::TEXT
           WHEN p_sort_by = 'title' THEN fp.product_title
           WHEN p_sort_by = 'sku' THEN fp.default_sku
           WHEN p_sort_by = 'variants' THEN fp.source_variant_count::TEXT
@@ -195,8 +197,8 @@ BEGIN
         ORDER BY
           CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' THEN sg.group_sort_value END ASC NULLS LAST,
           CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' THEN sg.group_sort_value END DESC NULLS LAST,
-          CASE WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'asc' THEN sg.group_sort_value::NUMERIC END ASC NULLS LAST,
-          CASE WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'desc' THEN sg.group_sort_value::NUMERIC END DESC NULLS LAST,
+          CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'asc' THEN sg.group_sort_value::NUMERIC END ASC NULLS LAST,
+          CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'desc' THEN sg.group_sort_value::NUMERIC END DESC NULLS LAST,
           CASE WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
           CASE WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
           sg.group_secondary_sort DESC,
@@ -246,8 +248,8 @@ BEGIN
   ORDER BY
     CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'asc' THEN pp.group_sort_value END ASC NULLS LAST,
     CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' THEN pp.group_sort_value END DESC NULLS LAST,
-    CASE WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'asc' THEN pp.group_sort_value::NUMERIC END ASC NULLS LAST,
-    CASE WHEN p_sort_by IN ('variants', 'price') AND p_sort_order = 'desc' THEN pp.group_sort_value::NUMERIC END DESC NULLS LAST,
+    CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'asc' THEN pp.group_sort_value::NUMERIC END ASC NULLS LAST,
+    CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'desc' THEN pp.group_sort_value::NUMERIC END DESC NULLS LAST,
     CASE WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
     CASE WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
     pp.group_secondary_sort DESC,
@@ -272,8 +274,8 @@ GRANT EXECUTE ON FUNCTION get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, T
 --
 -- PARAMETERS:
 --   p_shop_tld   Filter by shop TLD (e.g. 'nl', 'be') or NULL for all shops
---   p_search     Search in product title, variant title
---   p_sort_by    'title' | 'variants' | 'price' | 'created' (no 'sku' - products have no SKU)
+--   p_search     Search in product ID, product title, variant title
+--   p_sort_by    'product_id' | 'title' | 'variants' | 'price' | 'created' (no 'sku' - products have no SKU)
 --   p_sort_order 'asc' | 'desc'
 --   p_page       Page number (1-based)
 --   p_page_size  Rows per page (1-1000)
@@ -319,8 +321,8 @@ SET search_path = public, pg_temp
 AS $$
 BEGIN
   -- Input validation
-  IF p_sort_by IS NULL OR p_sort_by NOT IN ('title', 'variants', 'price', 'created') THEN
-    RAISE EXCEPTION 'Invalid sort_by. Must be one of: title, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
+  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'variants', 'price', 'created') THEN
+    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
   END IF;
   IF p_sort_order IS NULL OR p_sort_order NOT IN ('asc', 'desc') THEN
     RAISE EXCEPTION 'Invalid sort_order. Must be ''asc'' or ''desc'', got: %', COALESCE(p_sort_order, 'NULL');
@@ -365,6 +367,7 @@ BEGIN
       (p_shop_tld IS NULL OR s.tld = p_shop_tld)
       AND (
         p_search IS NULL OR p_search = ''
+        OR v.lightspeed_product_id::TEXT ILIKE '%' || p_search || '%'
         OR pc.title ILIKE '%' || p_search || '%'
         OR vc.title ILIKE '%' || p_search || '%'
       )
@@ -392,6 +395,8 @@ BEGIN
       CEIL(cp.total_count::NUMERIC / p_page_size)::INTEGER AS total_pages,
       ROW_NUMBER() OVER (
         ORDER BY
+          CASE WHEN p_sort_by = 'product_id' AND p_sort_order = 'asc' THEN cp.product_id END ASC NULLS LAST,
+          CASE WHEN p_sort_by = 'product_id' AND p_sort_order = 'desc' THEN cp.product_id END DESC NULLS LAST,
           CASE WHEN p_sort_by = 'title' AND p_sort_order = 'asc' THEN cp.product_title END ASC NULLS LAST,
           CASE WHEN p_sort_by = 'title' AND p_sort_order = 'desc' THEN cp.product_title END DESC NULLS LAST,
           CASE WHEN p_sort_by = 'variants' AND p_sort_order = 'asc' THEN cp.variant_count END ASC NULLS LAST,

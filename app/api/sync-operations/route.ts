@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic'
  * - shopTld: Shop TLD filter for null_sku operation.
  * - search: Free-text search across products.
  * - onlyDuplicates: "true" to restrict to duplicated SKUs.
- * - sortBy: "title" | "sku" | "variants" | "price" | "created".
+ * - sortBy: "product_id" | "title" | "sku" | "variants" | "price" | "created".
  * - sortOrder: "asc" | "desc".
  *
  * Responses:

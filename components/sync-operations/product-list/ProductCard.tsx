@@ -51,6 +51,9 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
           {showShopBadge ? (
             <>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                {product.source_product_id}
+              </code>
               <Badge variant="outline" className="text-xs">
                 {product.source_shop_name} (.{product.source_shop_tld})
               </Badge>

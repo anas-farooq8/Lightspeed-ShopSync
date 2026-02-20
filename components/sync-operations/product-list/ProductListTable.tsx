@@ -18,12 +18,13 @@ import { extractTargetShops, formatDateShort, getImageUrl } from '@/lib/utils'
 
 interface ProductListTableProps {
   products: SyncProduct[]
-  sortBy?: 'title' | 'sku' | 'variants' | 'price' | 'created'
+  sortBy?: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
   sortOrder?: 'asc' | 'desc'
   loading?: boolean
-  onSort?: (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => void
+  onSort?: (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created') => void
   onProductClick: (product: SyncProduct) => void
   hideSkuColumn?: boolean
+  showProductIdColumn?: boolean
   hideDuplicateBadges?: boolean
   hideShopIndicators?: boolean
   showShopBadge?: boolean
@@ -47,6 +48,7 @@ export function ProductListTable({
   onSort,
   onProductClick,
   hideSkuColumn = false,
+  showProductIdColumn,
   showCreateButton = false,
   onCreateClick,
   showEditButton = false,
@@ -55,6 +57,7 @@ export function ProductListTable({
   hideShopIndicators = false,
   showShopBadge = false
 }: ProductListTableProps) {
+  const showProductId = showProductIdColumn ?? !hideSkuColumn
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const targetShops = useMemo(() => extractTargetShops(products), [products])
@@ -100,7 +103,7 @@ export function ProductListTable({
     children, 
     className = '' 
   }: { 
-    column: 'title' | 'sku' | 'variants' | 'price' | 'created'
+    column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
     children: React.ReactNode
     className?: string
   }) => {
@@ -137,7 +140,7 @@ export function ProductListTable({
         className={`cursor-pointer hover:bg-muted/50 ${isGrouped ? 'bg-muted/20' : ''} ${isLast ? '' : 'border-b-0'}`}
         onClick={() => onProductClick(product)}
       >
-        {/* SKU - Hidden for NULL SKU mode */}
+        {/* SKU - Hidden for NULL SKU mode. Shown once in group header; empty for expanded rows */}
         {!hideSkuColumn && (
           <TableCell className={isGrouped ? 'pl-12' : ''}>
             {!isGrouped && (
@@ -152,6 +155,15 @@ export function ProductListTable({
                 )}
               </div>
             )}
+          </TableCell>
+        )}
+
+        {/* Product ID - Shown when showProductIdColumn or in create/edit (with SKU). Always show per row */}
+        {showProductId && (
+          <TableCell className={isGrouped ? 'pl-12' : ''}>
+            <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+              {product.source_product_id}
+            </code>
           </TableCell>
         )}
 
@@ -288,6 +300,11 @@ export function ProductListTable({
                     SKU
                   </SortableHeader>
                 )}
+                {showProductId && (
+                  <SortableHeader column="product_id" className="w-[120px]">
+                    Product ID
+                  </SortableHeader>
+                )}
                 <SortableHeader column="title" className="w-[300px]">
                   Product
                 </SortableHeader>
@@ -355,23 +372,28 @@ export function ProductListTable({
                       className="bg-amber-50/50 dark:bg-amber-950/20 border-l-4 border-l-amber-500 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30"
                       onClick={() => toggleGroup(group.sku)}
                     >
-                      <TableCell className="font-semibold" colSpan={hideSkuColumn ? 1 : 1}>
-                        <div className="flex items-center gap-2">
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-amber-700" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-amber-700" />
-                          )}
-                          {!hideSkuColumn && (
+                      {/* SKU - shown once for the group */}
+                      {!hideSkuColumn && (
+                        <TableCell className="font-semibold">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-amber-700" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-amber-700" />
+                            )}
                             <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
                               {group.sku}
                             </code>
-                          )}
-                          <Badge variant="outline" className="text-xs border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                            x{group.products.length}
-                          </Badge>
-                        </div>
-                      </TableCell>
+                            <Badge variant="outline" className="text-xs border-amber-400 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                              x{group.products.length}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                      )}
+                      {/* Product ID - empty in header (group has multiple IDs) */}
+                      {showProductId && (
+                        <TableCell className="text-muted-foreground text-sm">—</TableCell>
+                      )}
                       <TableCell colSpan={(hideSkuColumn ? 4 : 4) + (hideShopIndicators ? 0 : targetShops.length)} className="text-sm text-muted-foreground">
                         {isExpanded 
                           ? `Click to collapse (showing ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'})`

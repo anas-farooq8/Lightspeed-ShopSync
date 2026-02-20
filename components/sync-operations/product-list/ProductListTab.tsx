@@ -189,7 +189,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     router.push(`/dashboard/sync-operations?${params.toString()}`, { scroll: false })
   }
 
-  const handleSort = (column: 'title' | 'sku' | 'variants' | 'price' | 'created') => {
+  const handleSort = (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created') => {
     const currentSortBy = searchParams.get('sortBy') || 'created'
     const currentSortOrder = searchParams.get('sortOrder') || 'desc'
     
@@ -325,7 +325,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
             <div className="flex items-center gap-2 min-w-0">
               <div className="flex-1 min-w-0 flex items-center border border-input rounded-md overflow-hidden transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
                 <Input
-                  placeholder={isNullSku ? "Search by product title, variant title..." : "Search by SKU, product title, variant title..."}
+                  placeholder={isNullSku ? "Search by product ID, product title, variant title..." : "Search by product ID, SKU, product title, variant title..."}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
@@ -450,12 +450,13 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       ) : viewMode === 'table' ? (
         <ProductListTable 
           products={products}
-          sortBy={currentSortBy as 'title' | 'sku' | 'variants' | 'price' | 'created'}
+          sortBy={currentSortBy as 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'}
           sortOrder={currentSortOrder as 'asc' | 'desc'}
           loading={isRefreshing}
           onSort={handleSort}
           onProductClick={handleProductClick}
           hideSkuColumn={isNullSku}
+          showProductIdColumn={isNullSku}
           hideDuplicateBadges={isNullSku}
           hideShopIndicators={isNullSku}
           showShopBadge={isNullSku}
