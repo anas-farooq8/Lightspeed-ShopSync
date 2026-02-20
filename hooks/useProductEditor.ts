@@ -9,7 +9,6 @@
  */
 
 import { useState, useRef, useMemo, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
 import {
   clearProductImagesCache,
   getCachedImages,
@@ -108,8 +107,6 @@ interface UseProductEditorOptions {
 }
 
 export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductEditorOptions) {
-  const searchParams = useSearchParams()
-
   // ─── Core State ───────────────────────────────────────────────────────────
   const [details, setDetails] = useState<ProductDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -242,15 +239,18 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
 
-    const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceShopLanguages = data.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
+    if (!sourceDefaultLang) return
+    
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     const sourceImages = sourceImagesOverride ?? productImages[sourceProduct.product_id] ?? []
     
     const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
-      ? { ...targetData }
+      ? { ...targetDataRef.current }
       : {}
     const newActiveLanguages: Record<string, string> = options?.preserveExisting
-      ? { ...activeLanguages }
+      ? { ...activeLanguagesRef.current }
       : {}
 
     const initialContent: Record<string, Record<string, string>> = options?.preserveExisting
@@ -261,20 +261,14 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     }
 
     const allTranslationItems: any[] = []
-    const shopTranslationMaps: Record<string, { langCodes: string[], copyLangCodes: string[] }> = {}
 
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
-      const { translationItems, copyLanguages } = prepareTranslationBatch(
+      const { translationItems } = prepareTranslationBatch(
         sourceContent,
         sourceDefaultLang,
         targetLanguages
       )
-
-      shopTranslationMaps[tld] = {
-        langCodes: targetLanguages.map(l => l.code),
-        copyLangCodes: copyLanguages
-      }
 
       allTranslationItems.push(...translationItems)
     })
@@ -303,7 +297,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     let resultIndex = 0
     targetShopTlds.forEach(tld => {
       const targetLanguages = data.shops[tld]?.languages ?? []
-      const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
+      const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code
       
       if (translationError) {
         newTargetErrors[tld] = translationError
@@ -312,7 +306,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
       
       const shopItemCount = targetLanguages.reduce((count, lang) => {
-        if (lang.code !== sourceDefaultLang) {
+        if (sourceDefaultLang && lang.code !== sourceDefaultLang) {
           const fields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
           return count + fields.filter(f => sourceContent?.[f] && sourceContent[f]!.trim() !== '').length
         }
@@ -358,13 +352,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            v.content_by_language?.[sourceDefaultLang]?.title || ''
+            sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
           ])
         ),
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            { title: v.content_by_language?.[sourceDefaultLang]?.title || '' }
+            { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
           ])
         )
       }))
@@ -401,11 +395,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       targetLanguages.forEach(lang => {
         initialContent[tld][lang.code] = content_by_language[lang.code]?.content || ''
       })
-      if (!contentEditorReadyRef.current[tld]) {
-        contentEditorReadyRef.current[tld] = {}
-      } else {
-        contentEditorReadyRef.current[tld] = {}
-      }
+      contentEditorReadyRef.current[tld] = {}
     })
 
     initialContentRef.current = initialContent
@@ -422,7 +412,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     } else {
       setIsDirty(false)
     }
-  }, [mode, productImages, targetData, activeLanguages])
+  }, [mode, productImages])
 
   // ─── Target Data Initialization (EDIT mode) ───────────────────────────────
   const initializeTargetDataForEdit = useCallback(async (
@@ -434,13 +424,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
 
-    const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceDefaultLang = data.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code
     
     const newTargetData: Record<string, EditableTargetData> = options?.preserveExisting
-      ? { ...targetData }
+      ? { ...targetDataRef.current }
       : {}
     const newActiveLanguages: Record<string, string> = options?.preserveExisting
-      ? { ...activeLanguages }
+      ? { ...activeLanguagesRef.current }
       : {}
 
     const initialContent: Record<string, Record<string, string>> = options?.preserveExisting
@@ -454,7 +444,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     for (const tld of targetShopTlds) {
       const targetLanguages = data.shops[tld]?.languages ?? []
-      const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code || 'nl'
+      const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code
 
       const targetProducts = data.targets?.[tld] || []
       
@@ -552,11 +542,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       targetLanguages.forEach(lang => {
         initialContent[tld][lang.code] = content_by_language[lang.code]?.content || ''
       })
-      if (!contentEditorReadyRef.current[tld]) {
-        contentEditorReadyRef.current[tld] = {}
-      } else {
-        contentEditorReadyRef.current[tld] = {}
-      }
+      contentEditorReadyRef.current[tld] = {}
     }
 
     initialContentRef.current = initialContent
@@ -573,7 +559,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     } else {
       setIsDirty(false)
     }
-  }, [targetData, activeLanguages])
+  }, [])
 
   // ─── Source Product Switch Handler ────────────────────────────────────────
   const handleSourceProductSelect = useCallback(async (newProductId: number) => {
@@ -781,8 +767,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (isChanged) {
         newDirtyVariants.add(key)
       } else {
-        const variantTitle = updatedVariant.content_by_language[activeLanguages[tld] || 'nl']?.title || ''
-        const originalTitle = updatedVariant.originalTitle?.[activeLanguages[tld] || 'nl'] || ''
+        const variantTitle = updatedVariant.content_by_language[activeLanguages[tld]]?.title || ''
+        const originalTitle = updatedVariant.originalTitle?.[activeLanguages[tld]] || ''
         const skuMatch = mode === 'create' || updatedVariant.sku === updatedVariant.originalSku
         if (variantTitle === originalTitle && skuMatch && updatedVariant.price_excl === updatedVariant.originalPrice) {
           newDirtyVariants.delete(key)
@@ -796,10 +782,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
-  }, [mode, activeLanguages])
+  }, [mode])
 
   const updateVariantTitle = useCallback((tld: string, variantIndex: number, langCode: string, title: string) => {
     setTargetData(prev => {
@@ -839,9 +828,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
   }, [mode])
 
   // ─── Variant Management ───────────────────────────────────────────────────
@@ -883,9 +875,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
   }, [details, selectedSourceProductId])
 
   const removeVariant = useCallback((tld: string, variantIndex: number) => {
@@ -910,9 +905,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
   }, [details, selectedSourceProductId])
 
   const moveVariant = useCallback((tld: string, fromIndex: number, toIndex: number) => {
@@ -944,9 +942,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || orderChanged || visibilityChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
   }, [details, selectedSourceProductId])
 
   // ─── Visibility ───────────────────────────────────────────────────────────
@@ -967,9 +968,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || isChanged || orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
   }, [details, selectedSourceProductId])
 
   const resetVisibility = useCallback((tld: string) => {
@@ -1006,9 +1010,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
     setShowImageDialog(false)
     setSelectingImageForVariant(null)
   }, [])
@@ -1057,9 +1064,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         productImage: nextProductImage,
         dirty: true
       }
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
       return updated
     })
-    setIsDirty(true)
     setShowImageDialog(false)
     setSelectingProductImage(false)
   }, [])
@@ -1261,7 +1271,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const sourceVariant = sourceProduct.variants.find(v => v.variant_id === variant.variant_id)
       if (!sourceVariant) return prev
       
-      const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+      const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+      const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
       const targetLanguages = details.shops[tld]?.languages ?? []
       
       const newVariants = [...updated[tld].variants]
@@ -1273,13 +1284,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            sourceVariant.content_by_language?.[sourceDefaultLang]?.title || ''
+            sourceDefaultLang ? (sourceVariant.content_by_language?.[sourceDefaultLang]?.title || '') : ''
           ])
         ),
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            { title: sourceVariant.content_by_language?.[sourceDefaultLang]?.title || '' }
+            { title: sourceDefaultLang ? (sourceVariant.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
           ])
         )
       }
@@ -1304,7 +1315,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
     
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
     const targetLanguages = details.shops[tld]?.languages ?? []
     
     setTargetData(prev => {
@@ -1319,13 +1331,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            v.content_by_language?.[sourceDefaultLang]?.title || ''
+            sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
           ])
         ),
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            { title: v.content_by_language?.[sourceDefaultLang]?.title || '' }
+            { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
           ])
         )
       }))
@@ -1349,7 +1361,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (!sourceProduct) return
     
     const targetLanguages = details.shops[tld]?.languages ?? []
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
     
     setTargetData(prev => {
       const updated = { ...prev }
@@ -1386,13 +1399,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            v.content_by_language?.[sourceDefaultLang]?.title || ''
+            sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
           ])
         ),
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
-            { title: v.content_by_language?.[sourceDefaultLang]?.title || '' }
+            { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
           ])
         )
       }))
@@ -1423,12 +1436,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       return updated
     })
     
-    const anyDirty = Object.entries(targetData).some(([shopTld, td]) => {
+    const anyDirty = Object.entries(targetDataRef.current).some(([shopTld, td]) => {
       if (shopTld === tld) return false
       return td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
     })
     setIsDirty(anyDirty)
-  }, [details, selectedSourceProductId, targetData])
+  }, [details, selectedSourceProductId])
 
   // ─── Re-translate Operations ──────────────────────────────────────────────
   const retranslateField = useCallback(async (tld: string, langCode: string, field: keyof ProductContent) => {
@@ -1437,7 +1450,10 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
 
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
+    if (!sourceDefaultLang) return
+    
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     
     if (langCode === sourceDefaultLang) {
@@ -1540,7 +1556,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
 
-    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code || 'nl'
+    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
+    if (!sourceDefaultLang) return
     
     if (langCode === sourceDefaultLang) {
       alert('Cannot re-translate content in the same language as source.')
@@ -1637,6 +1655,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     }
   }, [details, selectedSourceProductId])
 
+  // ─── Cleanup ──────────────────────────────────────────────────────────────
+  const cleanup = useCallback(() => {
+    clearProductImagesCache()
+  }, [])
+
   // ─── Return API ───────────────────────────────────────────────────────────
   return {
     // State
@@ -1720,6 +1743,6 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     retranslateLanguage,
     
     // Cleanup
-    cleanup: () => clearProductImagesCache(),
+    cleanup,
   }
 }

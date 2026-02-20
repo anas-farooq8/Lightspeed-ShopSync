@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useCallback } from 'react'
+import { useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -54,7 +54,12 @@ export default function PreviewCreatePage() {
   const { navigating, navigateBack } = useProductNavigation()
 
   const targetShopsParam = searchParams.get('targetShops') || ''
+  const productIdParam = searchParams.get('productId')
   const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
+  
+  // Track initialization to prevent infinite loops
+  const initializedRef = useRef(false)
+  const initializationKeyRef = useRef<string>('')
 
   // Use the shared product editor hook
   const editor = useProductEditor({
@@ -136,7 +141,7 @@ export default function PreviewCreatePage() {
     } else {
       navigateBack()
     }
-  }, [isDirty, navigateBack])
+  }, [isDirty, navigateBack, setShowCloseConfirmation])
 
   const handleCreateClick = useCallback(() => {
     if (!sourceProduct || !details) return
@@ -146,7 +151,7 @@ export default function PreviewCreatePage() {
       return
     }
     setShowCreateConfirmation(true)
-  }, [sourceProduct, details, activeTargetTld, targetData, setShowCreateConfirmation])
+  }, [sourceProduct, details, activeTargetTld, targetData])
 
   const handleConfirmCreate = useCallback(async () => {
     if (!sourceProduct || !details) return
@@ -243,7 +248,7 @@ export default function PreviewCreatePage() {
     } finally {
       setCreating(false)
     }
-  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack, setShowCreateConfirmation, setCreating, setCreateErrors, setCreateSuccess])
+  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
 
   // Create confirmation dialog content
   const createConfirmationContent = useMemo(() => {
@@ -267,13 +272,26 @@ export default function PreviewCreatePage() {
 
   // Initial data fetch
   useEffect(() => {
+    // Create a unique key for this initialization
+    const initKey = `${sku}-${productIdParam || 'none'}-${selectedTargetShops.join(',')}`
+    
+    // Reset initialization if key changed
+    if (initializationKeyRef.current !== initKey) {
+      initializedRef.current = false
+      initializationKeyRef.current = initKey
+    }
+    
+    // Skip if already initialized for this key
+    if (initializedRef.current) {
+      return
+    }
+
     async function fetchProductDetails() {
       try {
         setLoading(true)
         setError(null)
-        const productId = searchParams.get('productId')
         
-        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}`
+        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productIdParam ? `&productId=${productIdParam}` : ''}`
         
         const response = await fetch(url)
         if (!response.ok) {
@@ -285,7 +303,7 @@ export default function PreviewCreatePage() {
         setDetails(data)
         
         if (data.source.length > 0) {
-          const initialSourceId = productId ? parseInt(productId) : data.source[0].product_id
+          const initialSourceId = productIdParam ? parseInt(productIdParam) : data.source[0].product_id
           setSelectedSourceProductId(initialSourceId)
           
           const initialSourceProduct = data.source.find((p: any) => p.product_id === initialSourceId)
@@ -305,10 +323,13 @@ export default function PreviewCreatePage() {
           }
         }
         
-        const sortedTargets = selectedTargetShops.sort((a, b) => a.localeCompare(b))
+        const sortedTargets = [...selectedTargetShops].sort((a, b) => a.localeCompare(b))
         if (sortedTargets.length > 0) {
           setActiveTargetTld(sortedTargets[0])
         }
+        
+        // Mark as initialized
+        initializedRef.current = true
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
       } finally {
@@ -323,13 +344,32 @@ export default function PreviewCreatePage() {
     }
 
     fetchProductDetails()
-  }, [sku, searchParams, selectedTargetShops, fetchProductImages, initializeTargetData, setDetails, setLoading, setError, setSelectedSourceProductId, setActiveTargetTld, setTargetData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sku, productIdParam, targetShopsParam])
 
   useEffect(() => {
-    return () => cleanup()
-  }, [cleanup])
+    return cleanup
+  }, [])
 
-  // Render methods
+  // Render methods - memoize callbacks for better performance
+  const handleLanguageChange = useCallback((tld: string) => (lang: string) => {
+    setActiveLanguages(prev => ({ ...prev, [tld]: lang }))
+  }, [])
+
+  const handleSelectVariantImage = useCallback((tld: string) => (idx: number) => {
+    setSelectingImageForVariant(idx)
+    setSelectingProductImage(false)
+    setShowImageDialog(true)
+  }, [])
+
+  const handleSelectProductImage = useCallback((tld: string) => () => {
+    const imgs = targetData[tld]?.images ?? []
+    if (imgs.length <= 1) return
+    setSelectingProductImage(true)
+    setSelectingImageForVariant(null)
+    setShowImageDialog(true)
+  }, [targetData])
+
   const renderTargetPanel = useCallback((tld: string) => (
     <TargetPanel
       mode="create"
@@ -342,13 +382,13 @@ export default function PreviewCreatePage() {
       imagesLink={sourceProduct?.images_link}
       sourceProductId={sourceProduct?.product_id ?? 0}
       sourceShopTld={sourceProduct?.shop_tld ?? ''}
-      sourceDefaultLang={details?.shops[sourceProduct?.shop_tld ?? 'nl']?.languages?.find(l => l.is_default)?.code}
+      sourceDefaultLang={details?.shops[sourceProduct?.shop_tld ?? '']?.languages?.find((l: { is_default?: boolean }) => l.is_default)?.code ?? details?.shops[sourceProduct?.shop_tld ?? '']?.languages?.[0]?.code}
       resettingField={resettingField}
       retranslatingField={retranslatingField}
       translating={translating}
       error={targetErrors[tld]}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-      onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
+      onLanguageChange={handleLanguageChange(tld)}
       onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
       onResetField={(lang, field) => resetField(tld, lang, field)}
       onResetLanguage={(lang) => resetLanguage(tld, lang)}
@@ -362,23 +402,13 @@ export default function PreviewCreatePage() {
       onMoveVariant={() => {}}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
-      onSelectVariantImage={(idx) => {
-        setSelectingImageForVariant(idx)
-        setSelectingProductImage(false)
-        setShowImageDialog(true)
-      }}
-      onSelectProductImage={() => {
-        const imgs = targetData[tld]?.images ?? []
-        if (imgs.length <= 1) return
-        setSelectingProductImage(true)
-        setSelectingImageForVariant(null)
-        setShowImageDialog(true)
-      }}
+      onSelectVariantImage={handleSelectVariantImage(tld)}
+      onSelectProductImage={handleSelectProductImage(tld)}
       onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
       onResetVisibility={() => resetVisibility(tld)}
       onResetProductImage={() => resetProductImage(tld)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, setActiveLanguages, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, addVariant, removeVariant, resetVariant, resetAllVariants, setSelectingImageForVariant, setSelectingProductImage, setShowImageDialog, updateVisibility, resetVisibility, resetProductImage])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, addVariant, removeVariant, resetVariant, resetAllVariants, updateVisibility, resetVisibility, resetProductImage])
 
   if (loading) {
     return (

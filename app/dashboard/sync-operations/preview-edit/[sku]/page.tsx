@@ -26,6 +26,7 @@ export default function PreviewEditPage() {
   const { navigating, navigateBack } = useProductNavigation()
 
   const targetShopsParam = searchParams.get('targetShops') || ''
+  const productIdParam = searchParams.get('productId')
   const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
 
   // Use the shared product editor hook
@@ -244,9 +245,8 @@ export default function PreviewEditPage() {
       try {
         setLoading(true)
         setError(null)
-        const productId = searchParams.get('productId')
         
-        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productId ? `&productId=${productId}` : ''}&mode=edit&targetShops=${selectedTargetShops.join(',')}`
+        const url = `/api/product-details?sku=${encodeURIComponent(sku)}${productIdParam ? `&productId=${productIdParam}` : ''}&mode=edit&targetShops=${selectedTargetShops.join(',')}`
         
         const response = await fetch(url)
         if (!response.ok) {
@@ -258,14 +258,14 @@ export default function PreviewEditPage() {
         setDetails(data)
         
         if (data.source.length > 0) {
-          const initialSourceId = productId ? parseInt(productId) : data.source[0].product_id
+          const initialSourceId = productIdParam ? parseInt(productIdParam) : data.source[0].product_id
           setSelectedSourceProductId(initialSourceId)
           
           const initialSourceProduct = data.source.find((p: any) => p.product_id === initialSourceId)
           
           await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
           
-          const sortedTargets = selectedTargetShops.sort((a, b) => a.localeCompare(b))
+          const sortedTargets = [...selectedTargetShops].sort((a, b) => a.localeCompare(b))
           const firstTarget = sortedTargets.length > 0 ? sortedTargets[0] : null
           if (firstTarget) {
             setActiveTargetTld(firstTarget)
@@ -324,11 +324,10 @@ export default function PreviewEditPage() {
     }
 
     fetchProductDetails()
-  }, [sku, searchParams, selectedTargetShops, fetchProductImages, initializeTargetDataForEdit, setDetails, setLoading, setError, setSelectedSourceProductId, setActiveTargetTld, setTargetData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sku, productIdParam, targetShopsParam])
 
-  useEffect(() => {
-    return () => cleanup()
-  }, [cleanup])
+  useEffect(() => cleanup, [cleanup])
 
   // Fetch target images when switching tabs (on-demand)
   useEffect(() => {
@@ -384,6 +383,93 @@ export default function PreviewEditPage() {
       })
     }).catch(err => console.error(`Failed to fetch ${activeTargetTld} images:`, err))
   }, [activeTargetTld, details, targetData, fetchProductImages, setTargetData])
+
+  // Render methods - memoize callbacks for better performance
+  const handleLanguageChange = useCallback((tld: string) => (lang: string) => {
+    setActiveLanguages(prev => ({ ...prev, [tld]: lang }))
+  }, [])
+
+  const handleSelectVariantImage = useCallback((tld: string) => (idx: number) => {
+    setSelectingImageForVariant(idx)
+    setSelectingProductImage(false)
+    setShowImageDialog(true)
+  }, [])
+
+  const handleSelectProductImage = useCallback((tld: string) => () => {
+    const imgs = targetData[tld]?.images ?? []
+    if (imgs.length <= 1) return
+    setSelectingProductImage(true)
+    setSelectingImageForVariant(null)
+    setShowImageDialog(true)
+  }, [targetData])
+
+  const renderTargetPanel = useCallback((tld: string) => (
+    <TargetPanel
+      mode="edit"
+      sourceProduct={sourceProduct}
+      shopTld={tld}
+      shopName={details?.shops?.[tld]?.name ?? details?.targets?.[tld]?.[0]?.shop_name ?? tld}
+      baseUrl={details?.shops?.[tld]?.base_url ?? details?.targets?.[tld]?.[0]?.base_url ?? ''}
+      languages={details?.shops?.[tld]?.languages ?? []}
+      data={targetData[tld]}
+      activeLanguage={activeLanguages[tld] || ''}
+      imagesLink={sourceProduct?.images_link}
+      sourceProductId={sourceProduct?.product_id ?? 0}
+      sourceShopTld={sourceProduct?.shop_tld ?? ''}
+      sourceDefaultLang={details?.shops[sourceProduct?.shop_tld ?? '']?.languages?.find((l: { is_default?: boolean }) => l.is_default)?.code ?? details?.shops[sourceProduct?.shop_tld ?? '']?.languages?.[0]?.code}
+      resettingField={resettingField}
+      retranslatingField={retranslatingField}
+      error={targetErrors[tld]}
+      sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+      onLanguageChange={handleLanguageChange(tld)}
+      onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
+      onResetField={(lang, field) => resetField(tld, lang, field)}
+      onResetLanguage={(lang) => resetLanguage(tld, lang)}
+      onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
+      onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
+      onResetShop={() => resetShop(tld)}
+      onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
+      onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
+      onAddVariant={() => addVariant(tld)}
+      onRemoveVariant={(idx) => removeVariant(tld, idx)}
+      onMoveVariant={(from, to) => moveVariant(tld, from, to)}
+      onResetVariant={(idx) => resetVariant(tld, idx)}
+      onResetAllVariants={() => resetAllVariants(tld)}
+      onSelectVariantImage={handleSelectVariantImage(tld)}
+      onSelectProductImage={handleSelectProductImage(tld)}
+      onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
+      onResetVisibility={() => resetVisibility(tld)}
+      onResetProductImage={() => resetProductImage(tld)}
+    />
+  ), [
+    details,
+    targetData,
+    activeLanguages,
+    sourceProduct,
+    targetErrors,
+    productImages,
+    resettingField,
+    retranslatingField,
+    handleLanguageChange,
+    handleSelectVariantImage,
+    handleSelectProductImage,
+    updateField,
+    resetField,
+    resetLanguage,
+    retranslateField,
+    retranslateLanguage,
+    resetShop,
+    updateVariant,
+    updateVariantTitle,
+    addVariant,
+    removeVariant,
+    moveVariant,
+    resetVariant,
+    resetAllVariants,
+    updateVisibility,
+    resetVisibility,
+    resetProductImage,
+  ])
 
   if (loading) {
     return (
@@ -452,53 +538,7 @@ export default function PreviewEditPage() {
 
               {sortedTargetShops.map(tld => (
                 <TabsContent key={tld} value={tld} className="mt-0">
-                  <TargetPanel
-                    mode="edit"
-                    sourceProduct={sourceProduct}
-                    shopTld={tld}
-                    shopName={details.shops?.[tld]?.name ?? details.targets[tld]?.[0]?.shop_name ?? tld}
-                    baseUrl={details.shops?.[tld]?.base_url ?? details.targets[tld]?.[0]?.base_url ?? ''}
-                    languages={details.shops[tld]?.languages ?? []}
-                    data={targetData[tld]}
-                    activeLanguage={activeLanguages[tld] || ''}
-                    imagesLink={sourceProduct.images_link}
-                    sourceProductId={sourceProduct.product_id}
-                    sourceShopTld={sourceProduct.shop_tld}
-                    sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
-                    resettingField={resettingField}
-                    retranslatingField={retranslatingField}
-                    error={targetErrors[tld]}
-                    sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-                    onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
-                    onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
-                    onResetField={(lang, field) => resetField(tld, lang, field)}
-                    onResetLanguage={(lang) => resetLanguage(tld, lang)}
-                    onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
-                    onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
-                    onResetShop={() => resetShop(tld)}
-                    onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
-                    onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
-                    onAddVariant={() => addVariant(tld)}
-                    onRemoveVariant={(idx) => removeVariant(tld, idx)}
-                    onMoveVariant={(from, to) => moveVariant(tld, from, to)}
-                    onResetVariant={(idx) => resetVariant(tld, idx)}
-                    onResetAllVariants={() => resetAllVariants(tld)}
-                    onSelectVariantImage={(idx) => {
-                      setSelectingImageForVariant(idx)
-                      setSelectingProductImage(false)
-                      setShowImageDialog(true)
-                    }}
-                    onSelectProductImage={() => {
-                      const imgs = targetData[tld]?.images ?? []
-                      if (imgs.length <= 1) return
-                      setSelectingProductImage(true)
-                      setSelectingImageForVariant(null)
-                      setShowImageDialog(true)
-                    }}
-                    onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
-                    onResetVisibility={() => resetVisibility(tld)}
-                    onResetProductImage={() => resetProductImage(tld)}
-                  />
+                  {renderTargetPanel(tld)}
                 </TabsContent>
               ))}
             </div>
@@ -521,53 +561,7 @@ export default function PreviewEditPage() {
               sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
               sourceSwitching={sourceSwitching}
             />
-            <TargetPanel
-              mode="edit"
-              sourceProduct={sourceProduct}
-              shopTld={sortedTargetShops[0]}
-              shopName={details.shops?.[sortedTargetShops[0]]?.name ?? details.targets[sortedTargetShops[0]]?.[0]?.shop_name ?? sortedTargetShops[0]}
-              baseUrl={details.shops?.[sortedTargetShops[0]]?.base_url ?? details.targets[sortedTargetShops[0]]?.[0]?.base_url ?? ''}
-              languages={details.shops[sortedTargetShops[0]]?.languages ?? []}
-              data={targetData[sortedTargetShops[0]]}
-              activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
-              imagesLink={sourceProduct?.images_link}
-              sourceProductId={sourceProduct?.product_id ?? 0}
-              sourceShopTld={sourceProduct?.shop_tld}
-              sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
-              resettingField={resettingField}
-              retranslatingField={retranslatingField}
-              error={targetErrors[sortedTargetShops[0]]}
-              sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-              onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
-              onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
-              onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}
-              onResetLanguage={(lang) => resetLanguage(sortedTargetShops[0], lang)}
-              onRetranslateField={(lang, field) => retranslateField(sortedTargetShops[0], lang, field)}
-              onRetranslateLanguage={(lang) => retranslateLanguage(sortedTargetShops[0], lang)}
-              onResetShop={() => resetShop(sortedTargetShops[0])}
-              onUpdateVariant={(idx, field, val) => updateVariant(sortedTargetShops[0], idx, field, val)}
-              onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(sortedTargetShops[0], idx, lang, title)}
-              onAddVariant={() => addVariant(sortedTargetShops[0])}
-              onRemoveVariant={(idx) => removeVariant(sortedTargetShops[0], idx)}
-              onMoveVariant={(from, to) => moveVariant(sortedTargetShops[0], from, to)}
-              onResetVariant={(idx) => resetVariant(sortedTargetShops[0], idx)}
-              onResetAllVariants={() => resetAllVariants(sortedTargetShops[0])}
-              onSelectVariantImage={(idx) => {
-                setSelectingImageForVariant(idx)
-                setSelectingProductImage(false)
-                setShowImageDialog(true)
-              }}
-              onSelectProductImage={() => {
-                const imgs = targetData[sortedTargetShops[0]]?.images ?? []
-                if (imgs.length <= 1) return
-                setSelectingProductImage(true)
-                setSelectingImageForVariant(null)
-                setShowImageDialog(true)
-              }}
-              onUpdateVisibility={(visibility) => updateVisibility(sortedTargetShops[0], visibility)}
-              onResetVisibility={() => resetVisibility(sortedTargetShops[0])}
-              onResetProductImage={() => resetProductImage(sortedTargetShops[0])}
-            />
+            {renderTargetPanel(sortedTargetShops[0])}
           </div>
         </div>
       )}
