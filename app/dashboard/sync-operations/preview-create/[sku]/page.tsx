@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
@@ -107,7 +107,6 @@ function patchImagesIntoTargetData(
 export default function PreviewCreatePage() {
   const params = useParams()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const sku = decodeURIComponent((params.sku as string) || '')
   const { navigating, navigateBack } = useProductNavigation()
 
@@ -854,9 +853,10 @@ export default function PreviewCreatePage() {
       newVariants[variantIndex] = { ...variant, [field]: newValue }
       const updatedVariant = newVariants[variantIndex]
       
-      const isChanged = field === 'sku' 
-        ? newValue !== variant.originalSku
-        : newValue !== variant.originalPrice
+      // Only track price changes as dirty (not SKU in create mode)
+      const isChanged = field === 'price_excl' 
+        ? newValue !== variant.originalPrice
+        : false // SKU changes are not tracked in create mode
       
       const key = getVariantKey(variant)
       const newDirtyVariants = new Set(updated[tld].dirtyVariants)
@@ -865,7 +865,7 @@ export default function PreviewCreatePage() {
       } else {
         const variantTitle = updatedVariant.content_by_language[activeLanguages[tld] || 'nl']?.title || ''
         const originalTitle = updatedVariant.originalTitle?.[activeLanguages[tld] || 'nl'] || ''
-        if (variantTitle === originalTitle && updatedVariant.sku === updatedVariant.originalSku && updatedVariant.price_excl === updatedVariant.originalPrice) {
+        if (variantTitle === originalTitle && updatedVariant.price_excl === updatedVariant.originalPrice) {
           newDirtyVariants.delete(key)
         }
       }
@@ -907,7 +907,8 @@ export default function PreviewCreatePage() {
       if (isChanged) {
         newDirtyVariants.add(key)
       } else {
-        if (updatedVariant.sku === updatedVariant.originalSku && updatedVariant.price_excl === updatedVariant.originalPrice && title === originalTitle) {
+        // Only check price and title (not SKU) in create mode
+        if (updatedVariant.price_excl === updatedVariant.originalPrice && title === originalTitle) {
           newDirtyVariants.delete(key)
         }
       }
@@ -987,41 +988,6 @@ export default function PreviewCreatePage() {
         orderChanged,
         dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
         dirtyVariants: newDirtyVariants
-      }
-      
-      return updated
-    })
-    setIsDirty(true)
-  }
-
-  const moveVariant = (tld: string, fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return
-    setTargetData(prev => {
-      const updated = { ...prev }
-      if (!updated[tld]) return prev
-      const variants = updated[tld].variants
-      if (fromIndex < 0 || fromIndex >= variants.length || toIndex < 0 || toIndex >= variants.length) return prev
-      const newVariants = [...variants]
-      const [movedVariant] = newVariants.splice(fromIndex, 1)
-      newVariants.splice(toIndex, 0, movedVariant)
-      
-      newVariants.forEach((v, idx) => {
-        v.sort_order = idx
-      })
-      
-      // Check if order has changed from original by comparing variant IDs in order
-      const currentOrder = newVariants.map(v => v.variant_id)
-      const originalVariants = details?.source.find(p => p.product_id === selectedSourceProductId)?.variants || []
-      const originalOrder = originalVariants.map(v => v.variant_id)
-      const orderChanged = currentOrder.length !== originalOrder.length || !currentOrder.every((id, idx) => id === originalOrder[idx])
-      
-      const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
-      
-      updated[tld] = {
-        ...updated[tld],
-        variants: newVariants,
-        orderChanged,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || orderChanged || visibilityChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
       return updated
@@ -1166,105 +1132,29 @@ export default function PreviewCreatePage() {
   }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages])
 
   const resetProductImage = (tld: string) => {
-    setTargetData(prev => {
-      const updated = { ...prev }
-      if (!updated[tld]) return prev
-      updated[tld] = {
-        ...updated[tld],
-        productImage: updated[tld].originalProductImage,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
-      }
-      return updated
-    })
-  }
-
-  const removeImage = (tld: string, imageId: string) => {
-    setTargetData(prev => {
-      const updated = { ...prev }
-      if (!updated[tld]) return prev
-      
-      const newRemovedIds = new Set(updated[tld].removedImageIds)
-      newRemovedIds.add(imageId)
-      
-      updated[tld] = {
-        ...updated[tld],
-        removedImageIds: newRemovedIds,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || newRemovedIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
-      }
-      
-      return updated
-    })
-    setIsDirty(true)
-  }
-
-  const restoreImage = (tld: string, imageId: string) => {
-    setTargetData(prev => {
-      const updated = { ...prev }
-      if (!updated[tld]) return prev
-      
-      const newRemovedIds = new Set(updated[tld].removedImageIds)
-      newRemovedIds.delete(imageId)
-      
-      updated[tld] = {
-        ...updated[tld],
-        removedImageIds: newRemovedIds,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || newRemovedIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
-      }
-      
-      return updated
-    })
-  }
-
-  const moveImage = (tld: string, fromIdx: number, toIdx: number) => {
-    setTargetData(prev => {
-      const updated = { ...prev }
-      if (!updated[tld]) return prev
-      
-      const newImages = [...updated[tld].images]
-      const [movedImage] = newImages.splice(fromIdx, 1)
-      newImages.splice(toIdx, 0, movedImage)
-      
-      // Update sort_order for all images
-      newImages.forEach((img, idx) => {
-        img.sort_order = idx
-      })
-      
-      const imageOrderChanged = newImages.some((img, idx) => updated[tld].originalImageOrder[idx] !== idx)
-      
-      updated[tld] = {
-        ...updated[tld],
-        images: newImages,
-        imageOrderChanged,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || imageOrderChanged || updated[tld].orderChanged
-      }
-      
-      return updated
-    })
-    setIsDirty(true)
-  }
-
-  const resetImageOrder = (tld: string) => {
     if (!details || !selectedSourceProductId) return
     
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
-    if (!sourceProduct || !sourceProduct.images) return
-    
-    const sourceImages: ProductImage[] = sourceProduct.images.map((img: any) => ({
-      ...img,
-      id: String(img.id)
-    }))
+    if (!sourceProduct) return
     
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
       
+      // Reset to original images with original sort_order
+      const sourceImages = productImages[sourceProduct.product_id] ?? []
+      const resetImages = sourceImages.map((img, idx) => ({
+        ...img,
+        sort_order: idx // Restore original sort order
+      }))
+      
       updated[tld] = {
         ...updated[tld],
-        images: [...sourceImages],
+        images: resetImages,
+        productImage: updated[tld].originalProductImage,
         imageOrderChanged: false,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged
+        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
       }
-      
       return updated
     })
   }
@@ -1829,6 +1719,57 @@ export default function PreviewCreatePage() {
     }
   }
 
+  // Helper to render TargetPanel with consistent props
+  const renderTargetPanel = (tld: string) => (
+    <TargetPanel
+      mode="create"
+      shopTld={tld}
+      shopName={details?.shops?.[tld]?.name ?? details?.targets[tld]?.[0]?.shop_name ?? tld}
+      baseUrl={details?.shops?.[tld]?.base_url ?? details?.targets[tld]?.[0]?.base_url ?? ''}
+      languages={details?.shops[tld]?.languages ?? []}
+      data={targetData[tld]}
+      activeLanguage={activeLanguages[tld] || ''}
+      imagesLink={sourceProduct?.images_link}
+      sourceProductId={sourceProduct?.product_id ?? 0}
+      sourceShopTld={sourceProduct?.shop_tld ?? ''}
+      sourceDefaultLang={details?.shops[sourceProduct?.shop_tld ?? 'nl']?.languages?.find(l => l.is_default)?.code}
+      resettingField={resettingField}
+      retranslatingField={retranslatingField}
+      translating={translating}
+      error={targetErrors[tld]}
+      sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+      onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
+      onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
+      onResetField={(lang, field) => resetField(tld, lang, field)}
+      onResetLanguage={(lang) => resetLanguage(tld, lang)}
+      onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
+      onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
+      onResetShop={() => resetShop(tld)}
+      onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
+      onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
+      onAddVariant={() => addVariant(tld)}
+      onRemoveVariant={(idx) => removeVariant(tld, idx)}
+      onMoveVariant={() => {}} // No-op in create mode
+      onResetVariant={(idx) => resetVariant(tld, idx)}
+      onResetAllVariants={() => resetAllVariants(tld)}
+      onSelectVariantImage={(idx) => {
+        setSelectingImageForVariant(idx)
+        setSelectingProductImage(false)
+        setShowImageDialog(true)
+      }}
+      onSelectProductImage={() => {
+        const imgs = targetData[tld]?.images ?? []
+        if (imgs.length <= 1) return
+        setSelectingProductImage(true)
+        setSelectingImageForVariant(null)
+        setShowImageDialog(true)
+      }}
+      onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
+      onResetVisibility={() => resetVisibility(tld)}
+      onResetProductImage={() => resetProductImage(tld)}
+    />
+  )
+
   if (loading) {
     return (
       <div className="w-full min-h-screen flex items-center justify-center">
@@ -1896,52 +1837,7 @@ export default function PreviewCreatePage() {
 
               {sortedTargetShops.map(tld => (
                 <TabsContent key={tld} value={tld} className="mt-0">
-                  <TargetPanel
-                    shopTld={tld}
-                    shopName={details.shops?.[tld]?.name ?? details.targets[tld]?.[0]?.shop_name ?? tld}
-                    baseUrl={details.shops?.[tld]?.base_url ?? details.targets[tld]?.[0]?.base_url ?? ''}
-                    languages={details.shops[tld]?.languages ?? []}
-                    data={targetData[tld]}
-                    activeLanguage={activeLanguages[tld] || ''}
-                    imagesLink={sourceProduct.images_link}
-                    sourceProductId={sourceProduct.product_id}
-                    sourceShopTld={sourceProduct.shop_tld}
-                    sourceDefaultLang={details.shops[sourceProduct.shop_tld]?.languages?.find(l => l.is_default)?.code}
-                    resettingField={resettingField}
-                    retranslatingField={retranslatingField}
-                    translating={translating}
-                    error={targetErrors[tld]}
-                    sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-                    onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [tld]: lang }))}
-                    onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
-                    onResetField={(lang, field) => resetField(tld, lang, field)}
-                    onResetLanguage={(lang) => resetLanguage(tld, lang)}
-                    onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
-                    onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
-                    onResetShop={() => resetShop(tld)}
-                    onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
-                    onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
-                    onAddVariant={() => addVariant(tld)}
-                    onRemoveVariant={(idx) => removeVariant(tld, idx)}
-                    onMoveVariant={(from, to) => moveVariant(tld, from, to)}
-                    onResetVariant={(idx) => resetVariant(tld, idx)}
-                    onResetAllVariants={() => resetAllVariants(tld)}
-                    onSelectVariantImage={(idx) => {
-                      setSelectingImageForVariant(idx)
-                      setSelectingProductImage(false)
-                      setShowImageDialog(true)
-                    }}
-                    onSelectProductImage={() => {
-                      const imgs = targetData[tld]?.images ?? []
-                      if (imgs.length <= 1) return
-                      setSelectingProductImage(true)
-                      setSelectingImageForVariant(null)
-                      setShowImageDialog(true)
-                    }}
-                    onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
-                    onResetVisibility={() => resetVisibility(tld)}
-                    onResetProductImage={() => resetProductImage(tld)}
-                  />
+                  {renderTargetPanel(tld)}
                 </TabsContent>
               ))}
             </div>
@@ -1964,52 +1860,7 @@ export default function PreviewCreatePage() {
               sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
               sourceSwitching={sourceSwitching}
             />
-            <TargetPanel
-              shopTld={sortedTargetShops[0]}
-              shopName={details.shops?.[sortedTargetShops[0]]?.name ?? details.targets[sortedTargetShops[0]]?.[0]?.shop_name ?? sortedTargetShops[0]}
-              baseUrl={details.shops?.[sortedTargetShops[0]]?.base_url ?? details.targets[sortedTargetShops[0]]?.[0]?.base_url ?? ''}
-              languages={details.shops[sortedTargetShops[0]]?.languages ?? []}
-              data={targetData[sortedTargetShops[0]]}
-              activeLanguage={activeLanguages[sortedTargetShops[0]] || ''}
-              imagesLink={sourceProduct?.images_link}
-              sourceProductId={sourceProduct?.product_id ?? 0}
-              sourceShopTld={sourceProduct?.shop_tld}
-              sourceDefaultLang={details.shops[sourceProduct?.shop_tld || 'nl']?.languages?.find(l => l.is_default)?.code}
-              resettingField={resettingField}
-              retranslatingField={retranslatingField}
-              translating={translating}
-              error={targetErrors[sortedTargetShops[0]]}
-              sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-              onLanguageChange={(lang) => setActiveLanguages(prev => ({ ...prev, [sortedTargetShops[0]]: lang }))}
-              onUpdateField={(lang, field, value) => updateField(sortedTargetShops[0], lang, field, value)}
-              onResetField={(lang, field) => resetField(sortedTargetShops[0], lang, field)}
-              onResetLanguage={(lang) => resetLanguage(sortedTargetShops[0], lang)}
-              onRetranslateField={(lang, field) => retranslateField(sortedTargetShops[0], lang, field)}
-              onRetranslateLanguage={(lang) => retranslateLanguage(sortedTargetShops[0], lang)}
-              onResetShop={() => resetShop(sortedTargetShops[0])}
-              onUpdateVariant={(idx, field, val) => updateVariant(sortedTargetShops[0], idx, field, val)}
-              onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(sortedTargetShops[0], idx, lang, title)}
-              onAddVariant={() => addVariant(sortedTargetShops[0])}
-              onRemoveVariant={(idx) => removeVariant(sortedTargetShops[0], idx)}
-              onMoveVariant={(from, to) => moveVariant(sortedTargetShops[0], from, to)}
-              onResetVariant={(idx) => resetVariant(sortedTargetShops[0], idx)}
-              onResetAllVariants={() => resetAllVariants(sortedTargetShops[0])}
-              onSelectVariantImage={(idx) => {
-                setSelectingImageForVariant(idx)
-                setSelectingProductImage(false)
-                setShowImageDialog(true)
-              }}
-              onSelectProductImage={() => {
-                const imgs = targetData[sortedTargetShops[0]]?.images ?? []
-                if (imgs.length <= 1) return
-                setSelectingProductImage(true)
-                setSelectingImageForVariant(null)
-                setShowImageDialog(true)
-              }}
-              onUpdateVisibility={(visibility) => updateVisibility(sortedTargetShops[0], visibility)}
-              onResetVisibility={() => resetVisibility(sortedTargetShops[0])}
-              onResetProductImage={() => resetProductImage(sortedTargetShops[0])}
-            />
+            {renderTargetPanel(sortedTargetShops[0])}
           </div>
         </div>
       )}

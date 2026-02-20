@@ -105,6 +105,10 @@ export function EditableLanguageContentTabs({
   const isResettingLanguage = resettingField === `${shopTld}:${activeLanguage}:all`
   const isRetranslatingLanguage = retranslatingField === `${shopTld}:${activeLanguage}:all`
   const canRetranslate = activeLanguage !== sourceDefaultLang && onRetranslateField
+  const isSameLanguage = activeLanguage === sourceDefaultLang
+  const resetLanguageTooltip = isSameLanguage 
+    ? "Reset all fields to original values"
+    : "Reset all fields to original translated values"
   
   const originBadgeColors: Record<TranslationOrigin, string> = {
     copied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
@@ -267,7 +271,7 @@ export function EditableLanguageContentTabs({
               onClick={() => onResetLanguage(activeLanguage)}
               disabled={isResettingLanguage || isRetranslatingLanguage}
               className="text-xs cursor-pointer"
-              title="Reset all fields to original translated values"
+              title={resetLanguageTooltip}
             >
               {isResettingLanguage ? (
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />

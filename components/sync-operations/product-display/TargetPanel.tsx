@@ -209,7 +209,7 @@ export function TargetPanel({
                   size="icon"
                   onClick={(e) => { e.stopPropagation(); onResetProductImage() }}
                   className="absolute top-1 right-1 h-7 w-7 rounded-full bg-background/90 hover:bg-background shadow-md cursor-pointer"
-                  title="Reset product image"
+                  title="Reset product image and restore original image order"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
@@ -261,7 +261,7 @@ export function TargetPanel({
                     size="sm"
                     onClick={onResetVisibility}
                     className="h-9 px-2 text-xs cursor-pointer"
-                    title="Reset visibility to original"
+                    title="Reset visibility to original value"
                   >
                     <RotateCcw className="h-3 w-3" />
                   </Button>
@@ -288,6 +288,7 @@ export function TargetPanel({
                 size="sm"
                 onClick={onResetShop}
                 className="h-9 px-3 text-xs cursor-pointer shrink-0"
+                title="Reset all fields, variants, and settings to original values"
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
                 Reset Shop
