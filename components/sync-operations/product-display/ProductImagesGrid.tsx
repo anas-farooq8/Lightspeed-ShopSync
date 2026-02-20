@@ -3,7 +3,7 @@
 import { useEffect, useState, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { Star, Package, X } from 'lucide-react'
-import { getCachedImages, setCachedImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
+import { getCachedImages, fetchAndCacheImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
 import {
   Dialog,
   DialogContent,
@@ -80,26 +80,22 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetch(`/api/product-images?link=${encodeURIComponent(imagesLink)}&shopTld=${encodeURIComponent(shopTld)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch images')
-        return res.json()
-      })
-      .then((data: ProductImage[]) => {
+    
+    // Use centralized fetchAndCacheImages to prevent duplicate requests
+    fetchAndCacheImages(productId, imagesLink, shopTld)
+      .then((sorted) => {
         if (!cancelled) {
-          const sorted = [...(Array.isArray(data) ? data : [])].sort(
-            (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
-          )
-          setCachedImages(productId, shopTld, sorted as CachedProductImage[])
           setFetchedImages(sorted)
+          setError(null)
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message)
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch images')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+    
     return () => { cancelled = true }
   }, [productId, imagesLink, shopTld, usePreFetched])
 
