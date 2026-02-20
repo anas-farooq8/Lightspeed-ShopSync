@@ -311,17 +311,19 @@ export function EditableVariantsList({
                   )}
                 </div>
               </div>
-              <div className="flex flex-col gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onRemoveVariant(idx)}
-                  className="h-7 w-7 p-0 cursor-pointer hover:bg-destructive/10"
-                  title="Remove variant"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
-              </div>
+              {!variant.is_default && (
+                <div className="flex flex-col gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveVariant(idx)}
+                    className="h-7 w-7 p-0 cursor-pointer hover:bg-destructive/10"
+                    title="Remove variant"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                </div>
+              )}
             </div>
           )
         })}
