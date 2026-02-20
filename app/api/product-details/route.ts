@@ -103,7 +103,41 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      return NextResponse.json(data[0])
+      const payload = data[0] as { source?: unknown[]; shops?: Record<string, { languages?: { code?: string; is_default?: boolean }[] }> }
+      const mode = searchParams.get('mode')
+
+      // For edit mode: inject 2 dummy variants into source for testing "Add from source"
+      if (mode === 'edit' && payload?.source && Array.isArray(payload.source) && payload.source.length > 0) {
+        const shopTld = (payload.source[0] as { shop_tld?: string })?.shop_tld
+        const shopLangs = (payload.shops?.[shopTld ?? ''] as { languages?: { code?: string; is_default?: boolean }[] })?.languages ?? []
+        const sourceDefaultLang = (typeof shopLangs === 'object' && Array.isArray(shopLangs))
+          ? (shopLangs.find((l) => l.is_default)?.code ?? shopLangs[0]?.code ?? 'nl')
+          : 'nl'
+        const dummy1 = {
+          variant_id: -998,
+          sku: 'TEST-DUMMY-001',
+          is_default: false,
+          sort_order: 99998,
+          price_excl: 9.99,
+          image: null,
+          content_by_language: { [sourceDefaultLang]: { title: 'Test Dummy Variant 1' } }
+        }
+        const dummy2 = {
+          variant_id: -999,
+          sku: 'TEST-DUMMY-002',
+          is_default: false,
+          sort_order: 99999,
+          price_excl: 12.5,
+          image: null,
+          content_by_language: { [sourceDefaultLang]: { title: 'Test Dummy Variant 2' } }
+        }
+        payload.source = (payload.source as { variants?: unknown[] }[]).map((p) => ({
+          ...p,
+          variants: [...(p.variants ?? []), dummy1, dummy2]
+        }))
+      }
+
+      return NextResponse.json(payload)
     }
   } catch (error) {
     return handleRouteError(error, {

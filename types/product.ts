@@ -120,6 +120,8 @@ export interface EditableVariant {
   originalTitle?: Record<string, string>
   originalIsDefault?: boolean
   originalImage?: ImageInfo | null
+  /** True when variant was added from source (edit mode) */
+  addedFromSource?: boolean
   content_by_language: Record<string, VariantContent>
   deleted?: boolean
   deletedAt?: number

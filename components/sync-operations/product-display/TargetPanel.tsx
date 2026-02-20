@@ -186,6 +186,7 @@ interface TargetPanelProps {
   onRestoreDefaultVariant: () => void
   onAddImagesFromSource?: () => void
   onRemoveImageFromSource?: (imageId: string) => void
+  onAddVariantsFromSource?: () => void
 }
 
 export function TargetPanel({
@@ -228,6 +229,7 @@ export function TargetPanel({
   onRestoreDefaultVariant,
   onAddImagesFromSource,
   onRemoveImageFromSource,
+  onAddVariantsFromSource,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -519,6 +521,7 @@ export function TargetPanel({
             onSelectVariantImage={onSelectVariantImage}
             onSetDefaultVariant={onSetDefaultVariant}
             onRestoreDefaultVariant={onRestoreDefaultVariant}
+            onAddVariantsFromSource={onAddVariantsFromSource}
           />
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">

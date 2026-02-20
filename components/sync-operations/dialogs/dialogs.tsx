@@ -370,6 +370,123 @@ export function AddImagesFromSourceDialog({
   )
 }
 
+// ─── AddVariantsFromSourceDialog ─────────────────────────────────────────────
+
+export interface VariantForSelection {
+  variant_id: number
+  sku: string | null
+  price_excl: number
+  sort_order?: number
+  content_by_language?: Record<string, { title?: string }>
+}
+
+export function AddVariantsFromSourceDialog({
+  open,
+  onOpenChange,
+  sourceVariants,
+  targetVariantSkus = new Set<string>(),
+  sourceDefaultLang = '',
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  sourceVariants: VariantForSelection[]
+  targetVariantSkus?: Set<string>
+  sourceDefaultLang?: string
+  onConfirm: (variants: VariantForSelection[]) => void
+}) {
+  const [selected, setSelected] = useState<VariantForSelection[]>([])
+
+  const allVariantsSorted = useMemo(() => {
+    return [...sourceVariants].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+  }, [sourceVariants])
+
+  const handleToggle = useCallback((v: VariantForSelection) => {
+    if (targetVariantSkus.has((v.sku || '').toLowerCase().trim())) return
+    setSelected(prev => {
+      const idx = prev.findIndex(p => p.variant_id === v.variant_id && p.sku === v.sku)
+      if (idx >= 0) return prev.filter((_, i) => i !== idx)
+      return [...prev, v]
+    })
+  }, [targetVariantSkus])
+
+  const handleConfirm = useCallback(() => {
+    const ordered = [...selected].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+    onConfirm(ordered)
+    setSelected([])
+    onOpenChange(false)
+  }, [onConfirm, selected, onOpenChange])
+
+  const handleClose = useCallback(() => {
+    setSelected([])
+    onOpenChange(false)
+  }, [onOpenChange])
+
+  useEffect(() => {
+    if (!open) setSelected([])
+  }, [open])
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); onOpenChange(o) }}>
+      <DialogContent className="max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base sm:text-lg">Add variants from source</DialogTitle>
+          <DialogDescription>
+            Select variants to add to the target. Only title, price, and SKU are copied (no image). Order follows source. Variants already in target cannot be selected.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 p-2 sm:p-4">
+          {allVariantsSorted.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No variants available from source</p>
+          ) : (
+            allVariantsSorted.map((v) => {
+              const title = v.content_by_language?.[sourceDefaultLang]?.title ?? ''
+              const isSelected = selected.some(p => p.variant_id === v.variant_id && p.sku === v.sku)
+              const alreadyInTarget = targetVariantSkus.has((v.sku || '').toLowerCase().trim())
+              const order = selected.findIndex(p => p.variant_id === v.variant_id && p.sku === v.sku) + 1
+              return (
+                <button
+                  key={`${v.variant_id}-${v.sku}`}
+                  type="button"
+                  onClick={() => handleToggle(v)}
+                  disabled={alreadyInTarget}
+                  className={cn(
+                    "w-full flex items-center justify-between p-3 rounded-lg border-2 text-left transition-colors relative",
+                    alreadyInTarget && "cursor-not-allowed opacity-60",
+                    !alreadyInTarget && "cursor-pointer",
+                    isSelected ? "border-primary ring-2 ring-primary/30 bg-primary/5" : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <span className="font-medium truncate">{title || v.sku || 'Untitled'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      SKU: {v.sku || '-'} · €{v.price_excl.toFixed(2)}
+                    </span>
+                  </div>
+                  {isSelected && (
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                      {order}
+                    </span>
+                  )}
+                  {alreadyInTarget && !isSelected && (
+                    <span className="shrink-0 text-xs font-medium px-2 py-0.5 bg-muted rounded">In target</span>
+                  )}
+                </button>
+              )
+            })
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} className="cursor-pointer w-full sm:w-auto">Cancel</Button>
+          <Button onClick={handleConfirm} disabled={selected.length === 0} className="cursor-pointer w-full sm:w-auto">
+            Add {selected.length > 0 ? `(${selected.length})` : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── TargetShopSelectionDialog ──────────────────────────────────────────────
 
 interface TargetShop {

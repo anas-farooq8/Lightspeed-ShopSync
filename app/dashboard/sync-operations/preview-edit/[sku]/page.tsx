@@ -12,6 +12,7 @@ import {
   CreateProductConfirmationDialog,
   ImageSelectionDialog,
   AddImagesFromSourceDialog,
+  AddVariantsFromSourceDialog,
 } from '@/components/sync-operations/dialogs'
 import { ProductHeader } from '@/components/sync-operations/product-display/ProductHeader'
 import { SourcePanel } from '@/components/sync-operations/product-display/SourcePanel'
@@ -30,6 +31,7 @@ export default function PreviewEditPage() {
   const productIdParam = searchParams.get('productId')
   const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
   const [showAddImagesFromSource, setShowAddImagesFromSource] = useState(false)
+  const [showAddVariantsFromSource, setShowAddVariantsFromSource] = useState(false)
 
   // Use the shared product editor hook
   const editor = useProductEditor({
@@ -89,6 +91,7 @@ export default function PreviewEditPage() {
     updateVariantTitle,
     removeVariant,
     restoreVariant,
+    addVariantsFromSource,
     setDefaultVariant,
     restoreDefaultVariant,
     updateVisibility,
@@ -453,6 +456,7 @@ export default function PreviewEditPage() {
       onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
       onAddImagesFromSource={() => setShowAddImagesFromSource(true)}
       onRemoveImageFromSource={(imageId) => removeImageFromTarget(tld, imageId)}
+      onAddVariantsFromSource={() => setShowAddVariantsFromSource(true)}
     />
   ), [
     details,
@@ -485,6 +489,7 @@ export default function PreviewEditPage() {
     addImagesToTarget,
     removeImageFromTarget,
     resetProductImage,
+    addVariantsFromSource,
   ])
 
   if (loading) {
@@ -627,6 +632,22 @@ export default function PreviewEditPage() {
           }))
           addImagesToTarget(activeTargetTld, toAdd)
           setShowAddImagesFromSource(false)
+        }}
+      />
+
+      <AddVariantsFromSourceDialog
+        open={showAddVariantsFromSource}
+        onOpenChange={setShowAddVariantsFromSource}
+        sourceVariants={sourceProduct?.variants ?? []}
+        targetVariantSkus={new Set(
+          (targetData[activeTargetTld]?.variants ?? [])
+            .map(v => (v.sku || '').toLowerCase().trim())
+            .filter(Boolean)
+        )}
+        sourceDefaultLang={details?.shops?.[sourceProduct?.shop_tld ?? '']?.languages?.find((l: { is_default?: boolean }) => l.is_default)?.code ?? details?.shops?.[sourceProduct?.shop_tld ?? '']?.languages?.[0]?.code ?? ''}
+        onConfirm={(variants) => {
+          addVariantsFromSource(activeTargetTld, variants)
+          setShowAddVariantsFromSource(false)
         }}
       />
 

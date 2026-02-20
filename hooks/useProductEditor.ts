@@ -926,6 +926,74 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     })
   }, [details, selectedSourceProductId])
 
+  /** Add variants from source (edit mode only). Picks sku, price, title; no image. Appends below last target variant with sort_order = last + 1. */
+  const addVariantsFromSource = useCallback((tld: string, sourceVariants: Array<{ sku: string | null; price_excl: number; sort_order?: number; content_by_language?: Record<string, { title?: string }> }>) => {
+    if (!details || !selectedSourceProductId || mode !== 'edit') return
+
+    const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
+    if (!sourceProduct) return
+
+    const sourceDefaultLang = details.shops[sourceProduct.shop_tld]?.languages?.find((l: { is_default?: boolean }) => l.is_default)?.code
+      ?? details.shops[sourceProduct.shop_tld]?.languages?.[0]?.code ?? ''
+    const targetLanguages = details.shops[tld]?.languages ?? []
+
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+
+      const existing = updated[tld].variants
+      const existingSkus = new Set(existing.map(v => (v.sku || '').toLowerCase().trim()).filter(Boolean))
+      const maxSortOrder = existing.reduce((max, v) => Math.max(max, v.sort_order ?? 0), 0)
+
+      const toAdd = sourceVariants
+        .filter(sv => !existingSkus.has((sv.sku || '').toLowerCase().trim()))
+        .map((sv, i): EditableVariant => {
+          const titleByLang: Record<string, string> = {}
+          const sourceTitle = sv.content_by_language?.[sourceDefaultLang]?.title ?? ''
+          targetLanguages.forEach(lang => {
+            titleByLang[lang.code] = sourceTitle
+          })
+          return {
+            variant_id: -Date.now() - i - Math.random() * 1e3,
+            temp_id: `from-source-${sv.sku || Date.now()}-${Date.now()}`,
+            sku: sv.sku || '',
+            is_default: false,
+            sort_order: maxSortOrder + 1 + i,
+            price_excl: sv.price_excl,
+            image: null,
+            originalSku: sv.sku || '',
+            originalPrice: sv.price_excl,
+            originalTitle: titleByLang,
+            addedFromSource: true,
+            content_by_language: Object.fromEntries(
+              targetLanguages.map(lang => [lang.code, { title: titleByLang[lang.code] || '' }])
+            )
+          }
+        })
+
+      if (toAdd.length === 0) return prev
+
+      const merged = [...existing, ...toAdd]
+
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      // Do not add newly picked variants to dirtyVariants; they match source and need no reset
+
+      updated[tld] = {
+        ...updated[tld],
+        variants: merged,
+        orderChanged: true,
+        dirty: true,
+        dirtyVariants: newDirtyVariants
+      }
+
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [details, selectedSourceProductId, mode])
+
   const removeVariant = useCallback((tld: string, variantIndex: number) => {
     setTargetData(prev => {
       const updated = { ...prev }
@@ -1573,8 +1641,34 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!variant) return prev
       
       const key = getVariantKey(variant)
-      
-      // Handle newly added variants (temp_id) - remove them
+      let targetLanguages = details.shops[tld]?.languages ?? []
+
+      // Added-from-source: restore to original (source) values
+      if (variant.addedFromSource) {
+        const newVariants = [...updated[tld].variants]
+        newVariants[variantIndex] = {
+          ...variant,
+          sku: variant.originalSku || '',
+          price_excl: variant.originalPrice ?? 0,
+          content_by_language: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              { title: variant.originalTitle?.[lang.code] || '' }
+            ])
+          )
+        }
+        const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+        newDirtyVariants.delete(key)
+        updated[tld] = {
+          ...updated[tld],
+          variants: newVariants,
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirtyVariants: newDirtyVariants
+        }
+        return updated
+      }
+
+      // Other temp_id variants (e.g. manually added empty) - remove them
       if (variant.temp_id) {
         const newVariants = updated[tld].variants.filter((_, idx) => idx !== variantIndex)
         const newDirtyVariants = new Set(updated[tld].dirtyVariants)
@@ -1591,10 +1685,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         }
         return updated
       }
-      
+
       // For edit mode, reset to original target values (not source)
       if (mode === 'edit') {
-        const targetLanguages = details.shops[tld]?.languages ?? []
         
         const newVariants = [...updated[tld].variants]
         newVariants[variantIndex] = {
@@ -1630,7 +1723,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       
       const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
       const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
-      const targetLanguages = details.shops[tld]?.languages ?? []
+      targetLanguages = details.shops[tld]?.languages ?? []
       
       const newVariants = [...updated[tld].variants]
       newVariants[variantIndex] = {
@@ -2167,6 +2260,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     updateVariant,
     updateVariantTitle,
     addVariant,
+    addVariantsFromSource,
     removeVariant,
     restoreVariant,
     setDefaultVariant,

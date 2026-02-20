@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2 } from 'lucide-react'
+import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2, SquarePlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getVariantKey } from '@/lib/utils'
 import type { EditableVariant, ProductData } from '@/types/product'
@@ -23,6 +23,7 @@ interface EditableVariantsListProps {
   onSelectVariantImage: (idx: number) => void
   onSetDefaultVariant: (idx: number) => void
   onRestoreDefaultVariant: () => void
+  onAddVariantsFromSource?: () => void
 }
 
 export function EditableVariantsList({
@@ -40,7 +41,8 @@ export function EditableVariantsList({
   onResetAllVariants,
   onSelectVariantImage,
   onSetDefaultVariant,
-  onRestoreDefaultVariant
+  onRestoreDefaultVariant,
+  onAddVariantsFromSource
 }: EditableVariantsListProps) {
   
   // Split variants into active and deleted
@@ -92,8 +94,8 @@ export function EditableVariantsList({
     // Check if default status has changed
     const defaultChanged = variant.originalIsDefault !== undefined && variant.is_default !== variant.originalIsDefault
     
-    // For new variants (temp_id), don't show "different" badges since they have no original values
-    const isNewVariant = !!variant.temp_id
+    // For new variants (temp_id) without addedFromSource, don't show "different" badges
+    const isNewVariant = !!variant.temp_id && !variant.addedFromSource
     
     return (
       <div
@@ -222,6 +224,11 @@ export function EditableVariantsList({
             </div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
+            {variant.addedFromSource && (
+              <Badge variant="outline" className="text-xs border-blue-500 text-blue-600 dark:text-blue-400">
+                Picked from source
+              </Badge>
+            )}
             {variant.is_default && (
               <Badge variant="outline" className="text-xs px-2 py-0.5 border-blue-500/70 text-blue-700 dark:text-blue-400">
                 Default
@@ -291,7 +298,18 @@ export function EditableVariantsList({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-xs sm:text-sm font-bold uppercase">Variants ({activeVariants.length})</h4>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          {mode === 'edit' && sourceProduct && onAddVariantsFromSource && (
+            <Button
+              size="sm"
+              onClick={onAddVariantsFromSource}
+              className="text-xs cursor-pointer bg-red-600 hover:bg-red-700 text-white"
+              title="Add variants from source (sku, price, title only)"
+            >
+              <SquarePlus className="h-3 w-3 mr-1" />
+              Add from source
+            </Button>
+          )}
           {hasDefaultChanges && originalDefaultIsDeleted && (
             <span className="text-xs text-amber-600 dark:text-amber-500">
               Cannot restore default. The original default variant is deleted. Restore it first.
