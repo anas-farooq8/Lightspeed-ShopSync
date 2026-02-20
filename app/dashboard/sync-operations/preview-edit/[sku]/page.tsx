@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useCallback } from 'react'
+import { useEffect, useMemo, useCallback, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -11,6 +11,7 @@ import {
   UnsavedChangesDialog,
   CreateProductConfirmationDialog,
   ImageSelectionDialog,
+  AddImagesFromSourceDialog,
 } from '@/components/sync-operations/dialogs'
 import { ProductHeader } from '@/components/sync-operations/product-display/ProductHeader'
 import { SourcePanel } from '@/components/sync-operations/product-display/SourcePanel'
@@ -28,6 +29,7 @@ export default function PreviewEditPage() {
   const targetShopsParam = searchParams.get('targetShops') || ''
   const productIdParam = searchParams.get('productId')
   const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
+  const [showAddImagesFromSource, setShowAddImagesFromSource] = useState(false)
 
   // Use the shared product editor hook
   const editor = useProductEditor({
@@ -63,6 +65,7 @@ export default function PreviewEditPage() {
     hasSourceDuplicates,
     hasMultipleTargets,
     dialogImages,
+    dialogSelectedImage,
     setDetails,
     setLoading,
     setError,
@@ -92,6 +95,8 @@ export default function PreviewEditPage() {
     resetVisibility,
     selectVariantImage,
     selectProductImage,
+    addImagesToTarget,
+    removeImageFromTarget,
     resetProductImage,
     resetField,
     resetLanguage,
@@ -147,10 +152,11 @@ export default function PreviewEditPage() {
     })
 
     try {
+      const activeVariants = data.variants.filter(v => !v.deleted)
       const updateProductData = {
         visibility: data.visibility,
         content_by_language: data.content_by_language,
-        variants: data.variants.map(v => ({
+        variants: activeVariants.map(v => ({
           sku: v.sku || '',
           is_default: v.is_default,
           sort_order: v.sort_order || 0,
@@ -220,7 +226,7 @@ export default function PreviewEditPage() {
     }
   }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, updateSuccess, navigateBack, sku, setShowCreateConfirmation, setUpdating, setUpdateErrors, setUpdateSuccess])
 
-  // Update confirmation dialog content
+  // Update confirmation dialog content (counts match what will be updated)
   const updateConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
     const tld = activeTargetTld
@@ -228,15 +234,16 @@ export default function PreviewEditPage() {
     if (!data) return null
 
     const shopName = details.shops?.[tld]?.name ?? tld
+    const activeVariants = data.variants.filter(v => !v.deleted)
+    const variantCount = activeVariants.length
     const imageCount = data.images.filter(img => !data.removedImageIds.has(img.id)).length
-    const variantCount = data.variants.length
 
     return {
       shopName,
       shopTld: tld,
       variantCount,
       imageCount,
-      sku: data.variants[0]?.sku || sourceProduct.sku || sku
+      sku: activeVariants[0]?.sku || sourceProduct.sku || sku
     }
   }, [details, sourceProduct, activeTargetTld, targetData, sku])
 
@@ -444,6 +451,8 @@ export default function PreviewEditPage() {
       onResetProductImage={() => resetProductImage(tld)}
       onSetDefaultVariant={(idx) => setDefaultVariant(tld, idx)}
       onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
+      onAddImagesFromSource={() => setShowAddImagesFromSource(true)}
+      onRemoveImageFromSource={(imageId) => removeImageFromTarget(tld, imageId)}
     />
   ), [
     details,
@@ -473,6 +482,8 @@ export default function PreviewEditPage() {
     resetAllVariants,
     updateVisibility,
     resetVisibility,
+    addImagesToTarget,
+    removeImageFromTarget,
     resetProductImage,
   ])
 
@@ -516,6 +527,7 @@ export default function PreviewEditPage() {
         onOpenChange={setShowCreateConfirmation}
         content={updateConfirmationContent}
         onConfirm={handleConfirmUpdate}
+        mode="edit"
       />
 
       {hasMultipleTargets ? (
@@ -583,6 +595,7 @@ export default function PreviewEditPage() {
         title={selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}
         images={dialogImages}
         showNoImageOption={!selectingProductImage}
+        selectedImage={dialogSelectedImage}
         onSelectImage={(img) => {
           const productImg = img as ProductImage | null
           if (selectingProductImage) {
@@ -590,6 +603,30 @@ export default function PreviewEditPage() {
           } else if (selectingImageForVariant !== null) {
             selectVariantImage(activeTargetTld, selectingImageForVariant, productImg)
           }
+        }}
+      />
+
+      <AddImagesFromSourceDialog
+        open={showAddImagesFromSource}
+        onOpenChange={setShowAddImagesFromSource}
+        sourceImages={(productImages[sourceProduct?.product_id ?? 0] ?? []).map(img => ({
+          id: img.id,
+          src: img.src,
+          thumb: img.thumb,
+          title: img.title,
+          sort_order: img.sort_order
+        }))}
+        targetImageIds={new Set(targetData[activeTargetTld]?.images?.map(img => String(img.id)) ?? [])}
+        onConfirm={(imgs) => {
+          const toAdd: ProductImage[] = imgs.map(img => ({
+            id: String(img.id),
+            src: img.src ?? '',
+            thumb: img.thumb,
+            title: img.title,
+            sort_order: img.sort_order ?? 0
+          }))
+          addImagesToTarget(activeTargetTld, toAdd)
+          setShowAddImagesFromSource(false)
         }}
       />
 

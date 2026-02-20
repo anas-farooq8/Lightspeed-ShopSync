@@ -98,6 +98,8 @@ export interface ProductImage {
   title?: string
   sort_order: number
   id: string
+  /** True when image was added from source (edit mode) */
+  addedFromSource?: boolean
 }
 
 // Editable types for preview-create page
@@ -117,6 +119,7 @@ export interface EditableVariant {
   originalPrice?: number
   originalTitle?: Record<string, string>
   originalIsDefault?: boolean
+  originalImage?: ImageInfo | null
   content_by_language: Record<string, VariantContent>
   deleted?: boolean
   deletedAt?: number

@@ -1,15 +1,150 @@
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
-import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
+import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { toSafeExternalHref, isSameImageInfo, getImageUrl } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
+
+function EditModeImagesSection({
+  images,
+  onAddImagesFromSource,
+  onRemoveImageFromSource,
+}: {
+  images: ProductImageMeta[]
+  onAddImagesFromSource?: () => void
+  onRemoveImageFromSource?: (imageId: string) => void
+}) {
+  const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
+  const [previewImage, setPreviewImage] = useState<{ src?: string; thumb?: string; title?: string } | null>(null)
+
+  useEffect(() => {
+    setTooltip(null)
+  }, [images])
+
+  const originalImages = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
+  const addedImages = images
+    .filter((img: ProductImageMeta & { addedFromSource?: boolean }) => img.addedFromSource)
+    .sort((a, b) => (a.sort_order ?? a.sortOrder ?? 0) - (b.sort_order ?? b.sortOrder ?? 0))
+
+  const gridClass = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3"
+
+  return (
+    <>
+      <ImageTooltipPortal tooltip={tooltip} />
+      <ImagePreviewDialog image={previewImage} onClose={() => setPreviewImage(null)} />
+      <div className="space-y-4">
+        {originalImages.length > 0 && (
+          <div className={gridClass}>
+            {originalImages.map((img, index) => {
+              const src = img.src ?? img.thumb
+              const isPrimary = index === 0
+              const title = img.title
+              return (
+                <div
+                  key={String(img.id)}
+                  className="group relative"
+                  onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
+                  onMouseLeave={title ? () => setTooltip(null) : undefined}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImage({ src, thumb: img.thumb, title })}
+                    className="w-full aspect-square rounded-lg overflow-hidden border border-border/40 bg-muted hover:border-border focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer transition-colors"
+                  >
+                    {src ? (
+                      <img src={src} alt={img.title || 'Product image'} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="h-8 w-8 text-muted-foreground/50" />
+                      </div>
+                    )}
+                    {isPrimary && (
+                      <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
+                        <Star className="h-3 w-3 fill-white text-white shrink-0" />
+                      </div>
+                    )}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {(addedImages.length > 0 || onAddImagesFromSource) && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-dashed border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Images from source</span>
+              </div>
+            </div>
+
+            <div className={gridClass}>
+              {addedImages.map((img, index) => {
+                const src = img.src ?? img.thumb
+                const title = img.title
+                return (
+                  <div
+                    key={String(img.id)}
+                    className="group relative"
+                    onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
+                    onMouseLeave={title ? () => setTooltip(null) : undefined}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ src, thumb: img.thumb, title })}
+                      className="w-full aspect-square rounded-lg overflow-hidden border border-border/40 bg-muted hover:border-border focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer transition-colors"
+                    >
+                      {src ? (
+                        <img src={src} alt={img.title || 'Product image'} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
+                      )}
+                      <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-bold">
+                        {index + 1}
+                      </div>
+                    </button>
+                    {onRemoveImageFromSource && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onRemoveImageFromSource(String(img.id)) }}
+                        className="absolute top-1 right-1 w-7 h-7 rounded-md bg-destructive/90 hover:bg-destructive text-destructive-foreground flex items-center justify-center cursor-pointer transition-colors"
+                        title="Remove image"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            {onAddImagesFromSource && (
+              <button
+                type="button"
+                onClick={onAddImagesFromSource}
+                className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                title="Add images from source"
+              >
+                <SquarePlus className="h-8 w-8 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      </div>
+    </>
+  )
+}
 
 interface TargetPanelProps {
   mode?: 'create' | 'edit'
@@ -49,6 +184,8 @@ interface TargetPanelProps {
   onResetProductImage: () => void
   onSetDefaultVariant: (idx: number) => void
   onRestoreDefaultVariant: () => void
+  onAddImagesFromSource?: () => void
+  onRemoveImageFromSource?: (imageId: string) => void
 }
 
 export function TargetPanel({
@@ -88,7 +225,9 @@ export function TargetPanel({
   onResetVisibility,
   onResetProductImage,
   onSetDefaultVariant,
-  onRestoreDefaultVariant
+  onRestoreDefaultVariant,
+  onAddImagesFromSource,
+  onRemoveImageFromSource,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -384,12 +523,30 @@ export function TargetPanel({
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              <ProductImagesGrid
-                productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
-                imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
-                shopTld={mode === 'edit' ? shopTld : sourceShopTld}
-                images={data.images}
-              />
+              {mode === 'edit' && (onAddImagesFromSource != null || onRemoveImageFromSource != null) ? (
+                <EditModeImagesSection
+                  images={data.images}
+                  onAddImagesFromSource={onAddImagesFromSource}
+                  onRemoveImageFromSource={onRemoveImageFromSource}
+                />
+              ) : (
+                <ProductImagesGrid
+                  productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
+                  imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
+                  shopTld={mode === 'edit' ? shopTld : sourceShopTld}
+                  images={data.images}
+                  trailingElement={mode === 'edit' && onAddImagesFromSource ? (
+                    <button
+                      type="button"
+                      onClick={onAddImagesFromSource}
+                      className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      title="Add images from source"
+                    >
+                      <SquarePlus className="h-8 w-8 text-muted-foreground" />
+                    </button>
+                  ) : undefined}
+                />
+              )}
             </div>
           )}
         </div>

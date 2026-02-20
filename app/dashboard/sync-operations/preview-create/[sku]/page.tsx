@@ -96,6 +96,7 @@ export default function PreviewCreatePage() {
     hasSourceDuplicates,
     hasMultipleTargets,
     dialogImages,
+    dialogSelectedImage,
     setDetails,
     setLoading,
     setError,
@@ -180,10 +181,11 @@ export default function PreviewCreatePage() {
     })
 
     try {
+      const activeVariants = data.variants.filter(v => !v.deleted)
       const sourceProductData = {
         visibility: data.visibility,
         content_by_language: data.content_by_language,
-        variants: data.variants.map(v => ({
+        variants: activeVariants.map(v => ({
           sku: v.sku || '',
           is_default: v.is_default,
           sort_order: v.sort_order || 0,
@@ -252,7 +254,7 @@ export default function PreviewCreatePage() {
     }
   }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
 
-  // Create confirmation dialog content
+  // Create confirmation dialog content (counts match what will be created)
   const createConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
     const tld = activeTargetTld
@@ -260,15 +262,16 @@ export default function PreviewCreatePage() {
     if (!data) return null
 
     const shopName = details.shops?.[tld]?.name ?? tld
+    const activeVariants = data.variants.filter(v => !v.deleted)
+    const variantCount = activeVariants.length
     const imageCount = data.images.filter(img => !data.removedImageIds.has(img.id)).length
-    const variantCount = data.variants.length
 
     return {
       shopName,
       shopTld: tld,
       variantCount,
       imageCount,
-      sku: data.variants[0]?.sku || sourceProduct.sku || sku
+      sku: activeVariants[0]?.sku || sourceProduct.sku || sku
     }
   }, [details, sourceProduct, activeTargetTld, targetData, sku])
 
@@ -520,6 +523,7 @@ export default function PreviewCreatePage() {
         title={selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}
         images={dialogImages}
         showNoImageOption={!selectingProductImage}
+        selectedImage={dialogSelectedImage}
         onSelectImage={(img) => {
           const productImg = img as ProductImage | null
           if (selectingProductImage) {
