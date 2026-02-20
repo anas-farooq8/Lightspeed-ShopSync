@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import { useParams, useSearchParams, useRouter } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
@@ -70,7 +70,6 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
 export default function PreviewEditPage() {
   const params = useParams()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const sku = decodeURIComponent((params.sku as string) || '')
   const { navigating, navigateBack } = useProductNavigation()
 
@@ -325,24 +324,60 @@ export default function PreviewEditPage() {
           setSelectedSourceProductId(initialSourceId)
           
           const initialSourceProduct = data.source.find((p: ProductData) => p.product_id === initialSourceId)
-
+          
+          // Initialize target data first
+          await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
+          
+          // Determine the selected target tab
+          const sortedTargets = selectedTargetShops.sort((a, b) => a.localeCompare(b))
+          const firstTarget = sortedTargets.length > 0 ? sortedTargets[0] : null
+          if (firstTarget) {
+            setActiveTargetTld(firstTarget)
+          }
+          
+          // Fetch images in parallel for source and first target
+          const imageFetchPromises: Promise<void>[] = []
+          
+          // Fetch source images
           if (initialSourceProduct?.images_link) {
-            // In EDIT mode, we just fetch source images for display in source panel
-            // Target images are fetched separately per shop in initializeTargetDataForEdit
-            const sourceImages = await fetchProductImages(
+            const sourceImagePromise = fetchProductImages(
               initialSourceProduct.product_id,
               initialSourceProduct.images_link,
               initialSourceProduct.shop_tld
-            )
-            await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
-          } else {
-            await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
+            ).then(() => {}).catch(err => console.error('Failed to fetch source images:', err))
+            imageFetchPromises.push(sourceImagePromise)
           }
-        }
-        
-        const sortedTargets = selectedTargetShops.sort((a, b) => a.localeCompare(b))
-        if (sortedTargets.length > 0) {
-          setActiveTargetTld(sortedTargets[0])
+          
+          // Fetch first target images
+          if (firstTarget) {
+            const targetProduct = data.targets?.[firstTarget]?.[0]
+            if (targetProduct?.images_link) {
+              const targetImagePromise = fetchProductImages(
+                targetProduct.product_id,
+                targetProduct.images_link,
+                firstTarget
+              ).then((targetImages) => {
+                // Update target data with fetched images
+                setTargetData(prev => {
+                  const updated = { ...prev }
+                  if (updated[firstTarget]) {
+                    updated[firstTarget] = {
+                      ...updated[firstTarget],
+                      images: targetImages,
+                      originalImageOrder: targetImages.map((_, idx) => idx),
+                    }
+                  }
+                  return updated
+                })
+              }).catch(err => console.error(`Failed to fetch ${firstTarget} images:`, err))
+              imageFetchPromises.push(targetImagePromise)
+            }
+          }
+          
+          // Execute both fetches in parallel
+          if (imageFetchPromises.length > 0) {
+            await Promise.all(imageFetchPromises)
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
@@ -363,6 +398,67 @@ export default function PreviewEditPage() {
   useEffect(() => {
     return () => clearProductImagesCache()
   }, [])
+
+  // Fetch target images when switching tabs (on-demand)
+  useEffect(() => {
+    if (!details || !activeTargetTld) return
+    
+    const targetData_current = targetData[activeTargetTld]
+    if (!targetData_current) return
+    
+    // Skip if images already loaded
+    if (targetData_current.images.length > 0) return
+    
+    // Skip if no images link
+    if (!targetData_current.targetImagesLink) return
+    
+    // Check if images are already cached
+    const targetProductId = targetData_current.targetProductId
+    if (!targetProductId) return
+    
+    const cached = getCachedImages(targetProductId, activeTargetTld)
+    if (cached) {
+      // Update state with cached images
+      setTargetData(prev => {
+        const updated = { ...prev }
+        if (updated[activeTargetTld]) {
+          updated[activeTargetTld] = {
+            ...updated[activeTargetTld],
+            images: cached.map((img, idx) => ({
+              id: String(img.id ?? `img-${idx}`),
+              src: img.src ?? '',
+              thumb: img.thumb,
+              title: img.title,
+              sort_order: Number(img.sortOrder ?? idx)
+            })),
+            originalImageOrder: cached.map((_, idx) => idx),
+          }
+        }
+        return updated
+      })
+      return
+    }
+    
+    // Fetch images for this target (cache module prevents duplicates)
+    fetchProductImages(
+      targetProductId,
+      targetData_current.targetImagesLink,
+      activeTargetTld
+    ).then((targetImages) => {
+      // Update target data with fetched images
+      setTargetData(prev => {
+        const updated = { ...prev }
+        if (updated[activeTargetTld]) {
+          updated[activeTargetTld] = {
+            ...updated[activeTargetTld],
+            images: targetImages,
+            originalImageOrder: targetImages.map((_, idx) => idx),
+          }
+        }
+        return updated
+      })
+    }).catch(err => console.error(`Failed to fetch ${activeTargetTld} images:`, err))
+  }, [activeTargetTld, details])
 
 
   /**
@@ -591,8 +687,7 @@ export default function PreviewEditPage() {
         )
       }))
 
-      // Load existing images from target product
-      // In EDIT mode, we need to fetch images from the TARGET product's images_link
+      // Initialize images as empty array - will be fetched on-demand
       const targetImages: ProductImage[] = []
       const targetImagesLink = targetProduct.images_link
       
@@ -603,7 +698,7 @@ export default function PreviewEditPage() {
       newTargetData[tld] = {
         content_by_language,
         variants,
-        images: targetImages, // Will be populated later when target images are fetched
+        images: targetImages, // Will be populated on-demand when tab is selected
         originalImageOrder: [],
         removedImageIds: new Set(),
         dirty: false,
@@ -642,35 +737,7 @@ export default function PreviewEditPage() {
     setActiveLanguages(newActiveLanguages)
     setTargetErrors(newTargetErrors)
 
-    // Fetch images for each target shop separately
-    for (const tld of targetShopTlds) {
-      const targetProduct = data.targets?.[tld]?.[0]
-      if (targetProduct?.images_link && newTargetData[tld]) {
-        // Fetch target product images
-        try {
-          const targetImages = await fetchProductImages(
-            targetProduct.product_id,
-            targetProduct.images_link,
-            tld
-          )
-          
-          // Patch images into this specific target shop
-          setTargetData(prev => {
-            const updated = { ...prev }
-            if (updated[tld]) {
-              updated[tld] = {
-                ...updated[tld],
-                images: targetImages,
-                originalImageOrder: targetImages.map((_, idx) => idx),
-              }
-            }
-            return updated
-          })
-        } catch (err) {
-          console.error(`Failed to fetch images for ${tld}:`, err)
-        }
-      }
-    }
+    // Do NOT fetch images here - they will be fetched on-demand when tabs are selected
 
     if (options?.preserveExisting) {
       const anyDirty = Object.values(newTargetData).some(

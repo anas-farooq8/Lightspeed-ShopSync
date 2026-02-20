@@ -29,6 +29,7 @@ function cacheKey(productId: number, shopTld: string): string {
 }
 
 const cache = new Map<string, ProductImage[]>()
+const ongoingFetches = new Map<string, Promise<ProductImage[]>>()
 
 export function getCachedImages(
   productId: number,
@@ -49,9 +50,14 @@ export function setCachedImages(
 /**
  * Fetch a product's image list from the API (with automatic caching).
  * Returns cached data immediately if available; otherwise calls the API, caches, and returns.
+ * 
+ * Prevents duplicate fetches: if a fetch is already in progress for the same product,
+ * returns the same promise instead of starting a new request.
  *
  * Used by:
- * - preview-create/[sku]/page.tsx  (replaces its own ad-hoc fetch logic)
+ * - preview-create/[sku]/page.tsx
+ * - products/[sku]/page.tsx
+ * - preview-edit/[sku]/page.tsx
  *
  * ProductImagesGrid uses getCachedImages / setCachedImages directly with its own fetch loop.
  */
@@ -60,35 +66,55 @@ export async function fetchAndCacheImages(
   imagesLink: string,
   shopTld: string
 ): Promise<ProductImage[]> {
+  const key = cacheKey(productId, shopTld)
+  
+  // Return cached data if available
   const cached = getCachedImages(productId, shopTld)
   if (cached) return cached
 
-  try {
-    const res = await fetch(
-      `/api/product-images?link=${encodeURIComponent(imagesLink)}&shopTld=${encodeURIComponent(shopTld)}`
-    )
-    if (!res.ok) return []
+  // Return existing promise if fetch is already in progress
+  const existingFetch = ongoingFetches.get(key)
+  if (existingFetch) return existingFetch
 
-    const raw: ProductImage[] = await res.json()
-    const sorted = [...(Array.isArray(raw) ? raw : [])].sort(
-      (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
-    )
-    setCachedImages(productId, shopTld, sorted)
-    return sorted
-  } catch {
-    return []
-  }
+  // Start new fetch
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(
+        `/api/product-images?link=${encodeURIComponent(imagesLink)}&shopTld=${encodeURIComponent(shopTld)}`
+      )
+      if (!res.ok) return []
+
+      const raw: ProductImage[] = await res.json()
+      const sorted = [...(Array.isArray(raw) ? raw : [])].sort(
+        (a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)
+      )
+      setCachedImages(productId, shopTld, sorted)
+      return sorted
+    } catch {
+      return []
+    } finally {
+      // Clean up ongoing fetch tracking
+      ongoingFetches.delete(key)
+    }
+  })()
+
+  // Track this fetch
+  ongoingFetches.set(key, fetchPromise)
+  
+  return fetchPromise
 }
 
 /**
- * Clears all cached product images.
+ * Clears all cached product images and cancels ongoing fetches.
  * Called via useEffect cleanup when unmounting product detail pages.
  *
  * Used in:
  * - products/[sku]/page.tsx
  * - product/[productId]/page.tsx
  * - preview-create/[sku]/page.tsx
+ * - preview-edit/[sku]/page.tsx
  */
 export function clearProductImagesCache(): void {
   cache.clear()
+  ongoingFetches.clear()
 }

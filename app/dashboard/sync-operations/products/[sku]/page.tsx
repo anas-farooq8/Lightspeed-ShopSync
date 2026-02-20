@@ -6,7 +6,7 @@ import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { clearProductImagesCache } from '@/lib/cache/product-images-cache'
+import { clearProductImagesCache, fetchAndCacheImages, getCachedImages } from '@/lib/cache/product-images-cache'
 import { ProductPanel } from '@/components/sync-operations/product-display/ProductPanel'
 import { ProductHeader } from '@/components/sync-operations/product-display/ProductHeader'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
@@ -60,11 +60,45 @@ export default function ProductDetailPage() {
         const targetTlds = Object.keys(data.targets ?? {})
           .filter(tld => (data.targets[tld] as any[]).length > 0)
           .sort((a, b) => a.localeCompare(b))
+        
+        let selectedTab = null
         if (targetTlds.length > 1) {
           const defaultTab = targetTlds.find(tld => (data.targets[tld] as any[]).length === 0) ?? targetTlds[0]
           setSelectedTargetTab(defaultTab)
-        } else {
+          selectedTab = defaultTab
+        } else if (targetTlds.length === 1) {
+          selectedTab = targetTlds[0]
           setSelectedTargetTab(null)
+        }
+
+        // Fetch images in parallel for source and selected target
+        const imageFetchPromises: Promise<any>[] = []
+        
+        // Fetch source images
+        const sourceProduct = data.source[0]
+        if (sourceProduct?.images_link) {
+          const sourceImagePromise = fetchAndCacheImages(
+            sourceProduct.product_id,
+            sourceProduct.images_link,
+            sourceProduct.shop_tld
+          ).catch(err => console.error('Failed to fetch source images:', err))
+          imageFetchPromises.push(sourceImagePromise)
+        }
+        
+        // Fetch selected target images
+        if (selectedTab && data.targets[selectedTab]?.[0]?.images_link) {
+          const targetProduct = data.targets[selectedTab][0]
+          const targetImagePromise = fetchAndCacheImages(
+            targetProduct.product_id,
+            targetProduct.images_link,
+            targetProduct.shop_tld
+          ).catch(err => console.error(`Failed to fetch ${selectedTab} images:`, err))
+          imageFetchPromises.push(targetImagePromise)
+        }
+        
+        // Execute both fetches in parallel
+        if (imageFetchPromises.length > 0) {
+          await Promise.all(imageFetchPromises)
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
@@ -79,6 +113,25 @@ export default function ProductDetailPage() {
   useEffect(() => {
     return () => clearProductImagesCache()
   }, [])
+
+  // Fetch target images when switching tabs
+  useEffect(() => {
+    if (!details || !selectedTargetTab) return
+    
+    const targetProduct = details.targets[selectedTargetTab]?.[0]
+    if (!targetProduct?.images_link) return
+    
+    // Check if images are already cached
+    const cached = getCachedImages(targetProduct.product_id, targetProduct.shop_tld)
+    if (cached) return
+    
+    // Fetch images for this target (cache module prevents duplicates)
+    fetchAndCacheImages(
+      targetProduct.product_id,
+      targetProduct.images_link,
+      targetProduct.shop_tld
+    ).catch(err => console.error(`Failed to fetch ${selectedTargetTab} images:`, err))
+  }, [selectedTargetTab, details])
 
   if (loading) {
     return (
