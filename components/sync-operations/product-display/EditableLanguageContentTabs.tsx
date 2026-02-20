@@ -128,6 +128,41 @@ export function EditableLanguageContentTabs({
     )
   }
 
+  // Get the status text for a field
+  const getFieldStatusText = (
+    lang: string,
+    field: keyof ProductContent,
+    meta: TranslationOrigin | undefined,
+    isDirty: boolean
+  ): string => {
+    const isSameLanguage = lang === sourceDefaultLang
+
+    if (mode === 'create') {
+      if (isDirty) {
+        return 'Manually edited'
+      }
+      if (isSameLanguage) {
+        return 'Copied from source'
+      }
+      return 'Translated from source'
+    } else {
+      // EDIT mode - use meta to determine status
+      if (!meta || meta === 'existing') {
+        return 'Original value from target'
+      }
+      if (meta === 'copied') {
+        return 'Copied from source'
+      }
+      if (meta === 'translated') {
+        return 'Translated from source'
+      }
+      if (meta === 'manual') {
+        return 'Manually edited'
+      }
+      return 'Original value from target'
+    }
+  }
+
   function FieldHeader({
     label,
     lang,
@@ -151,31 +186,63 @@ export function EditableLanguageContentTabs({
     onRetranslate: () => void
     currentValue: string
   }) {
-    // In EDIT mode, check if current value differs from source
-    const sourceValue = mode === 'edit' && sourceProduct && sourceProduct.content_by_language
-      ? sourceProduct.content_by_language[sourceDefaultLang]?.[field] || ''
-      : ''
-    
-    // For SAME language: Compare values directly - show diff if different
-    // For DIFFERENT language: Don't compare (different languages expected to differ)
+    const isDirty = dirtyFields.has(`${lang}.${field}`)
     const isSameLanguage = lang === sourceDefaultLang
-    const shouldCompare = mode === 'edit' && isSameLanguage
-    const isDifferentFromSource = shouldCompare && sourceValue && currentValue !== sourceValue
+    const statusText = getFieldStatusText(lang, field, meta, isDirty)
     
-    // For different languages in edit mode: show "Pick from Source (Auto-translated)" button
-    const showAutoTranslateButton = mode === 'edit' && !isSameLanguage && sourceValue
+    // Button visibility logic
+    let showPickFromSourceButton = false
+    let showResetButton = false
+    let showRetranslateButton = false
     
-    const handlePickFromSource = () => {
-      if (isSameLanguage && sourceValue) {
-        // Same language: just copy the value
-        onUpdateField(lang, field, sourceValue)
+    if (mode === 'create') {
+      if (isSameLanguage) {
+        // CREATE + SAME LANG: Show "Pick from source" ONLY when edited
+        showPickFromSourceButton = isDirty
+        showResetButton = false
+      } else {
+        // CREATE + DIFFERENT LANG: Show "Reset" when edited, always show "Retranslate"
+        showPickFromSourceButton = false
+        showResetButton = isDirty
+        showRetranslateButton = true
       }
+    } else {
+      // EDIT mode - button logic based on meta
+      if (meta === 'existing') {
+        // Original value from target: Show ONLY pick button
+        showPickFromSourceButton = true
+        showResetButton = false
+      } else if (meta === 'copied' || meta === 'translated') {
+        // Copied/Translated from source: Show ONLY reset button
+        showPickFromSourceButton = false
+        showResetButton = true
+      } else if (meta === 'manual') {
+        // Manually edited: Show BOTH buttons
+        showPickFromSourceButton = true
+        showResetButton = true
+      } else {
+        // Fallback: treat as existing
+        showPickFromSourceButton = true
+        showResetButton = false
+      }
+      showRetranslateButton = false
     }
 
-    const handlePickFromSourceTranslated = async () => {
-      // Different language: trigger re-translation (same as onRetranslate)
-      if (onRetranslateField && !isResetting && !isRetranslating) {
-        onRetranslateField(lang, field)
+    const handlePickFromSource = async () => {
+      if (mode === 'create' && isSameLanguage) {
+        // CREATE + SAME LANG: Reset to original (which is source)
+        onReset()
+      } else if (mode === 'edit') {
+        // EDIT mode: Use retranslateField to properly update meta
+        // This will set meta to 'copied' for same language or 'translated' for different language
+        if (onRetranslateField && !isResetting && !isRetranslating) {
+          onRetranslateField(lang, field)
+        }
+      } else if (!isSameLanguage) {
+        // CREATE + DIFFERENT LANG: Trigger retranslation
+        if (onRetranslateField && !isResetting && !isRetranslating) {
+          onRetranslateField(lang, field)
+        }
       }
     }
 
@@ -183,56 +250,43 @@ export function EditableLanguageContentTabs({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Label className="text-sm font-bold uppercase">{label}</Label>
-          {meta && (
-            <span className="text-xs text-muted-foreground">{getOriginLabel(meta)}</span>
-          )}
-          {isDifferentFromSource && (
-            <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] px-1.5 py-0">
-              Different from source
-            </Badge>
-          )}
+          <span className="text-xs text-muted-foreground">{statusText}</span>
         </div>
         <div className="flex items-center gap-1">
-          {isDifferentFromSource && (
+          {showPickFromSourceButton && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={handlePickFromSource}
-              className="h-6 text-xs px-2 cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-              title="Copy value from source product"
-            >
-              <ArrowDownToLine className="h-3 w-3 mr-1" />
-              Pick from Source
-            </Button>
-          )}
-          {showAutoTranslateButton && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePickFromSourceTranslated}
               disabled={isResetting || isRetranslating}
-              className="h-6 text-xs px-2 cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50"
-              title="Auto-translate and copy from source product"
+              className="h-7 w-7 p-0 cursor-pointer text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50"
+              title={!isSameLanguage ? "Pick from source (auto-translated)" : "Pick from source"}
             >
-              {isRetranslating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ArrowDownToLine className="h-3 w-3 mr-1" />}
-              Pick from Source (Auto-translated)
+              {isRetranslating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowDownToLine className="h-3.5 w-3.5" />}
             </Button>
           )}
-          {dirtyFields.has(`${lang}.${field}`) && (
-            <Button variant="ghost" size="sm" onClick={onReset} disabled={isResetting || isRetranslating} className="h-6 text-xs px-2 cursor-pointer" title="Reset to original value">
-              {isResetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+          {showResetButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onReset}
+              disabled={isResetting || isRetranslating}
+              className="h-7 w-7 p-0 cursor-pointer"
+              title={mode === 'create' && !isSameLanguage ? "Reset to last translated value" : "Reset to original value"}
+            >
+              {isResetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
             </Button>
           )}
-          {canRetranslate && onRetranslateField && !showAutoTranslateButton && (
+          {showRetranslateButton && canRetranslate && onRetranslateField && (
             <Button
               variant="ghost"
               size="sm"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isResetting && !isRetranslating) onRetranslate() }}
               disabled={isResetting || isRetranslating}
-              className="h-6 text-xs px-2 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+              className="h-7 w-7 p-0 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
               title="Re-translate this field from source"
             >
-              {isRetranslating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {isRetranslating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             </Button>
           )}
         </div>

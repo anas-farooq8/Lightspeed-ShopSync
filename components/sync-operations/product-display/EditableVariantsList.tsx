@@ -2,30 +2,31 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Package, GripVertical, Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, ArrowDownToLine } from 'lucide-react'
+import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getVariantKey } from '@/lib/utils'
 import type { EditableVariant, ProductData } from '@/types/product'
 
 interface EditableVariantsListProps {
-  mode?: 'create' | 'edit'  // Mode for determining diff behavior
-  sourceProduct?: ProductData  // Source product for comparison in edit mode
+  mode?: 'create' | 'edit'
+  sourceProduct?: ProductData
   variants: EditableVariant[]
   activeLanguage: string
   dirtyVariants: Set<string | number>
   orderChanged: boolean
   onUpdateVariant: (idx: number, field: 'sku' | 'price_excl', value: string | number) => void
   onUpdateVariantTitle: (idx: number, lang: string, title: string) => void
-  onAddVariant: () => void
   onRemoveVariant: (idx: number) => void
-  onMoveVariant: (fromIdx: number, toIdx: number) => void
+  onRestoreVariant: (idx: number) => void
   onResetVariant: (idx: number) => void
   onResetAllVariants: () => void
   onSelectVariantImage: (idx: number) => void
+  onSetDefaultVariant: (idx: number) => void
+  onRestoreDefaultVariant: () => void
 }
 
 export function EditableVariantsList({
-  mode = 'create',  // Default to create mode
+  mode = 'create',
   sourceProduct,
   variants,
   activeLanguage,
@@ -33,68 +34,33 @@ export function EditableVariantsList({
   orderChanged,
   onUpdateVariant,
   onUpdateVariantTitle,
-  onAddVariant,
   onRemoveVariant,
-  onMoveVariant,
+  onRestoreVariant,
   onResetVariant,
   onResetAllVariants,
-  onSelectVariantImage
+  onSelectVariantImage,
+  onSetDefaultVariant,
+  onRestoreDefaultVariant
 }: EditableVariantsListProps) {
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-  const lastDropTargetRef = useRef<number | null>(null)
-  const dragPreviewRef = useRef<HTMLDivElement>(null)
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    if (mode !== 'edit') return // Only allow dragging in edit mode
-    setDraggedIndex(index)
-    lastDropTargetRef.current = null
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(index))
-    e.dataTransfer.dropEffect = 'move'
-    const row = e.currentTarget as HTMLElement
-    const rect = row.getBoundingClientRect()
-    const preview = dragPreviewRef.current
-    if (preview && typeof document !== 'undefined') {
-      const clone = row.cloneNode(true) as HTMLElement
-      clone.style.width = `${rect.width}px`
-      clone.style.opacity = '1'
-      clone.style.pointerEvents = 'none'
-      clone.style.boxShadow = '0 10px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.15)'
-      clone.style.borderRadius = '0.5rem'
-      clone.style.background = 'hsl(var(--background))'
-      clone.style.border = '1px solid hsl(var(--border))'
-      preview.innerHTML = ''
-      preview.appendChild(clone)
-      const offsetX = e.clientX - rect.left
-      const offsetY = e.clientY - rect.top
-      e.dataTransfer.setDragImage(preview.firstChild as HTMLElement, offsetX, offsetY)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    if (mode !== 'edit') return // Only allow dragging in edit mode
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (draggedIndex === null || draggedIndex === index) return
-    if (lastDropTargetRef.current === index) return
-    lastDropTargetRef.current = index
-    onMoveVariant(draggedIndex, index)
-    setDraggedIndex(index)
-  }
-
-  const handleDragEnd = () => {
-    if (mode !== 'edit') return // Only allow dragging in edit mode
-    setDraggedIndex(null)
-    lastDropTargetRef.current = null
-    if (dragPreviewRef.current) dragPreviewRef.current.innerHTML = ''
-  }
-
+  
+  // Split variants into active and deleted
+  const activeVariants = variants.filter(v => !v.deleted)
+  const deletedVariants = variants.filter(v => v.deleted)
+  
+  // Check if any variant's default status changed
+  const hasDefaultChanges = activeVariants.some(v => 
+    v.originalIsDefault !== undefined && v.is_default !== v.originalIsDefault
+  )
+  
+  // Check if the original default variant is deleted (can't restore default in that case)
+  const originalDefaultIsDeleted = variants.some(v => v.originalIsDefault === true && v.deleted === true)
+  
   // Helper to find matching source variant by SKU
   const findSourceVariantBySku = (sku: string | null) => {
     if (!sku || !sourceProduct?.variants) return null
     return sourceProduct.variants.find(v => v.sku === sku)
   }
-
+  
   // Helper to pick value from source variant
   const pickFromSourceVariant = (idx: number, field: 'sku' | 'price_excl' | 'title') => {
     const variant = variants[idx]
@@ -108,26 +74,229 @@ export function EditableVariantsList({
     } else if (field === 'price_excl') {
       onUpdateVariant(idx, 'price_excl', sourceVariant.price_excl)
     } else if (field === 'title') {
-      // Get source default language title
-      const sourceDefaultLang = 'nl' // Could be passed as prop
+      const sourceDefaultLang = 'nl'
       const sourceTitle = sourceVariant.content_by_language?.[sourceDefaultLang]?.title || ''
       onUpdateVariantTitle(idx, activeLanguage, sourceTitle)
     }
   }
+  
+  const renderVariant = (variant: EditableVariant, idx: number, isDeleted: boolean = false) => {
+    const isChanged = dirtyVariants.has(getVariantKey(variant))
+    const variantImageUrl = variant.image?.src || variant.image?.thumb
+    
+    // Compare against original values
+    const priceDifferent = variant.price_excl !== variant.originalPrice
+    const titleDifferent = variant.content_by_language?.[activeLanguage]?.title !== variant.originalTitle?.[activeLanguage]
+    const skuDifferent = variant.sku !== variant.originalSku
+    
+    // Check if default status has changed
+    const defaultChanged = variant.originalIsDefault !== undefined && variant.is_default !== variant.originalIsDefault
+    
+    // For new variants (temp_id), don't show "different" badges since they have no original values
+    const isNewVariant = !!variant.temp_id
+    
+    return (
+      <div
+        key={variant.variant_id || variant.temp_id}
+        className={cn(
+          "flex items-start gap-2 p-2 sm:p-3 rounded-lg border bg-muted/30 transition-all duration-200",
+          isChanged && "border-amber-500",
+          isDeleted && "opacity-60"
+        )}
+      >
+        {isChanged && !isDeleted && !defaultChanged && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onResetVariant(idx)}
+            className="h-7 w-7 p-0 cursor-pointer shrink-0 mt-0.5"
+            title="Reset variant to original values"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        <button
+          type="button"
+          onClick={() => !isDeleted && onSelectVariantImage(idx)}
+          disabled={isDeleted}
+          className={cn(
+            "w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center border-2 border-dashed border-border transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+            !isDeleted && "cursor-pointer hover:border-primary"
+          )}
+        >
+          {variantImageUrl ? (
+            <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
+          )}
+        </button>
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 min-w-0 space-y-1">
+              <Input
+                value={variant.sku ?? ''}
+                readOnly
+                placeholder="SKU"
+                className="h-8 sm:h-8 text-xs sm:text-xs flex-1 min-w-0 cursor-default bg-muted/50"
+              />
+            </div>
+            <div className="flex items-start gap-1">
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] sm:min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
+                  <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
+                  <input
+                    type="number"
+                    value={variant.price_excl}
+                    onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
+                    step="1"
+                    placeholder="0.00"
+                    disabled={isDeleted}
+                    className="flex-1 h-full px-1 text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:cursor-default"
+                  />
+                  <div className="flex flex-col border-l border-input">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                        onUpdateVariant(idx, 'price_excl', (currentPrice + 1).toFixed(2))
+                      }}
+                      disabled={isDeleted}
+                      className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center disabled:cursor-default disabled:opacity-50"
+                      title="Increase price"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentPrice = parseFloat(String(variant.price_excl)) || 0
+                        onUpdateVariant(idx, 'price_excl', Math.max(0, currentPrice - 1).toFixed(2))
+                      }}
+                      disabled={isDeleted}
+                      className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center border-t border-input disabled:cursor-default disabled:opacity-50"
+                      title="Decrease price"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {priceDifferent && !isDeleted && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
+                  title="Reset price to original value"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <div className="flex-1 min-w-0">
+                <Input
+                  value={variant.content_by_language[activeLanguage]?.title || ''}
+                  onChange={(e) => onUpdateVariantTitle(idx, activeLanguage, e.target.value)}
+                  placeholder="Variant title"
+                  readOnly={isDeleted}
+                  className={cn(
+                    "h-8 text-xs flex-1",
+                    isDeleted ? "cursor-default bg-muted/50" : "cursor-text"
+                  )}
+                />
+              </div>
+              {titleDifferent && !isDeleted && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
+                  title="Reset title to original value"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {variant.is_default && (
+              <Badge variant="outline" className="text-xs px-2 py-0.5 border-blue-500/70 text-blue-700 dark:text-blue-400">
+                Default
+              </Badge>
+            )}
+            {defaultChanged && (
+              <Badge variant="outline" className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 text-xs px-2 py-0.5">
+                Default status changed
+              </Badge>
+            )}
+            {!isNewVariant && titleDifferent && (
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
+                Title is different
+              </Badge>
+            )}
+            {!isNewVariant && priceDifferent && (
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
+                Price is different
+              </Badge>
+            )}
+            {isDeleted && (
+              <Badge variant="outline" className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 text-xs px-2 py-0.5">
+                Deleted
+              </Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 shrink-0">
+          {!isDeleted && !variant.is_default && activeVariants.length > 1 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onSetDefaultVariant(idx)}
+              className="h-7 w-7 p-0 cursor-pointer hover:bg-blue-500/10"
+              title="Set as default variant"
+            >
+              <Star className="h-3.5 w-3.5 text-blue-600" />
+            </Button>
+          )}
+          {isDeleted ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRestoreVariant(idx)}
+              className="h-7 w-7 p-0 cursor-pointer bg-blue-600 hover:bg-blue-700 opacity-100"
+              title="Restore variant"
+            >
+              <Undo2 className="h-3.5 w-3.5 text-white" />
+            </Button>
+          ) : !variant.is_default ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onRemoveVariant(idx)}
+              className="h-7 w-7 p-0 cursor-pointer hover:bg-destructive/10"
+              title="Delete variant"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
-      {/* Only show drag preview in edit mode */}
-      {mode === 'edit' && (
-        <div
-          ref={dragPreviewRef}
-          className="fixed left-[-9999px] top-0 z-[9999] pointer-events-none"
-          aria-hidden
-        />
-      )}
       <div className="flex items-center justify-between">
-        <h4 className="text-xs sm:text-sm font-bold uppercase">Variants ({variants.length})</h4>
-        <div className="flex gap-2">
+        <h4 className="text-xs sm:text-sm font-bold uppercase">Variants ({activeVariants.length})</h4>
+        <div className="flex gap-2 items-center">
+          {hasDefaultChanges && originalDefaultIsDeleted && (
+            <span className="text-xs text-amber-600 dark:text-amber-500">
+              Cannot restore default. The original default variant is deleted. Restore it first.
+            </span>
+          )}
           {(dirtyVariants.size > 0 || orderChanged) && (
             <Button
               size="sm"
@@ -140,194 +309,50 @@ export function EditableVariantsList({
               Reset All
             </Button>
           )}
-          {mode === 'edit' && (
+          {hasDefaultChanges && !originalDefaultIsDeleted && (
             <Button
               size="sm"
-              onClick={onAddVariant}
-              className="text-xs bg-red-600 hover:bg-red-700 cursor-pointer"
+              variant="outline"
+              onClick={onRestoreDefaultVariant}
+              className="text-xs cursor-pointer"
+              title="Restore original default variant"
             >
-              <Plus className="h-3 w-3 mr-1" />
-              Add
+              <Undo2 className="h-3 w-3 mr-1" />
+              Restore Default
             </Button>
           )}
         </div>
       </div>
+      
+      {/* Active Variants */}
       <div className="space-y-2">
-        {variants.map((variant, idx) => {
-          const isChanged = dirtyVariants.has(getVariantKey(variant))
-          const variantImageUrl = variant.image?.src || variant.image?.thumb
-          
-          // In EDIT mode, find matching source variant for comparison
-          const sourceVariant = mode === 'edit' ? findSourceVariantBySku(variant.sku) : null
-          // In CREATE mode, compare against originalPrice and originalTitle
-          const priceDifferent = mode === 'edit' 
-            ? (sourceVariant && sourceVariant.price_excl !== variant.price_excl)
-            : (variant.price_excl !== variant.originalPrice)
-          const titleDifferent = mode === 'edit'
-            ? (sourceVariant && sourceVariant.content_by_language?.['nl']?.title !== variant.content_by_language?.[activeLanguage]?.title)
-            : (variant.content_by_language?.[activeLanguage]?.title !== variant.originalTitle?.[activeLanguage])
-          
-          return (
-            <div
-              key={variant.variant_id || variant.temp_id}
-              {...(mode === 'edit' ? {
-                draggable: true,
-                onDragStart: (e: React.DragEvent) => handleDragStart(e, idx),
-                onDragOver: (e: React.DragEvent) => handleDragOver(e, idx),
-                onDragEnd: handleDragEnd,
-              } : {})}
-              className={cn(
-                "flex items-start gap-2 p-2 sm:p-3 rounded-lg border bg-muted/30 transition-all duration-200 ease-out",
-                mode === 'edit' && "cursor-move select-none",
-                mode === 'edit' && draggedIndex === idx && "opacity-100 scale-[1.02] border-primary shadow-lg ring-2 ring-primary/20",
-                mode === 'edit' && draggedIndex !== null && draggedIndex !== idx && "border-primary/50 bg-primary/5",
-                isChanged && "border-amber-500"
-              )}
-            >
-              {mode === 'edit' && (
-                <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab active:cursor-grabbing shrink-0 mt-1 touch-none" />
-              )}
-              {isChanged && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { e.stopPropagation(); onResetVariant(idx) }}
-                  className="h-7 w-7 p-0 cursor-pointer shrink-0 mt-0.5"
-                  title="Reset variant to original values"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              <button
-                type="button"
-                onClick={() => onSelectVariantImage(idx)}
-                className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center cursor-pointer border-2 border-dashed border-border hover:border-primary transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-              >
-                {variantImageUrl ? (
-                  <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
-                )}
-              </button>
-              <div className="flex-1 min-w-0 space-y-2">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <Input
-                      value={variant.sku ?? ''}
-                      onChange={(e) => mode === 'edit' && onUpdateVariant(idx, 'sku', e.target.value)}
-                      placeholder="SKU"
-                      readOnly={mode === 'create'}
-                      className={cn(
-                        "h-8 sm:h-8 text-xs sm:text-xs flex-1 min-w-0",
-                        mode === 'create' ? "cursor-default bg-muted/50" : "cursor-text"
-                      )}
-                    />
-                  </div>
-                  <div className="flex items-start gap-1">
-                    <div className="relative flex items-center h-8 rounded-md border border-input bg-transparent dark:bg-input/30 overflow-hidden min-w-[120px] sm:min-w-[120px] transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300">
-                      <span className="pl-2 text-xs text-muted-foreground shrink-0">€</span>
-                      <input
-                        type="number"
-                        value={variant.price_excl}
-                        onChange={(e) => onUpdateVariant(idx, 'price_excl', e.target.value)}
-                        step="1"
-                        placeholder="0.00"
-                        className="flex-1 h-full px-1 text-xs bg-transparent border-0 outline-none cursor-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <div className="flex flex-col border-l border-input">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const currentPrice = parseFloat(String(variant.price_excl)) || 0
-                            onUpdateVariant(idx, 'price_excl', (currentPrice + 1).toFixed(2))
-                          }}
-                          className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center"
-                          title="Increase price"
-                        >
-                          <ChevronUp className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const currentPrice = parseFloat(String(variant.price_excl)) || 0
-                            onUpdateVariant(idx, 'price_excl', Math.max(0, currentPrice - 1).toFixed(2))
-                          }}
-                          className="h-4 px-1 hover:bg-accent transition-colors cursor-pointer flex items-center justify-center border-t border-input"
-                          title="Decrease price"
-                        >
-                          <ChevronDown className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                    {priceDifferent && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => mode === 'edit' ? pickFromSourceVariant(idx, 'price_excl') : onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
-                        className="h-8 px-2 text-xs cursor-pointer shrink-0"
-                        title={mode === 'edit' ? "Copy price from source" : "Reset price to original value"}
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1">
-                    <Input
-                      value={variant.content_by_language[activeLanguage]?.title || ''}
-                      onChange={(e) => onUpdateVariantTitle(idx, activeLanguage, e.target.value)}
-                      placeholder="Variant title"
-                      className="h-8 text-xs cursor-text flex-1"
-                    />
-                    {titleDifferent && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => mode === 'edit' ? pickFromSourceVariant(idx, 'title') : onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
-                        className="h-8 px-2 text-xs cursor-pointer shrink-0"
-                        title={mode === 'edit' ? "Copy title from source" : "Reset title to original value"}
-                      >
-                        <RotateCcw className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {variant.is_default && (
-                    <Badge variant="outline" className="text-xs px-2 py-0.5 border-blue-500/70 text-blue-700 dark:text-blue-400">
-                      Default
-                    </Badge>
-                  )}
-                  {titleDifferent && (
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
-                      Title is different
-                    </Badge>
-                  )}
-                  {priceDifferent && (
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
-                      Price is different
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              {!variant.is_default && (
-                <div className="flex flex-col gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onRemoveVariant(idx)}
-                    className="h-7 w-7 p-0 cursor-pointer hover:bg-destructive/10"
-                    title="Remove variant"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          )
+        {activeVariants.map((variant, idx) => {
+          const actualIdx = variants.indexOf(variant)
+          return renderVariant(variant, actualIdx, false)
         })}
       </div>
+      
+      {/* Deleted Variants Section */}
+      {deletedVariants.length > 0 && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-dashed border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Deleted Variants ({deletedVariants.length})
+              </span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {deletedVariants.map((variant, idx) => {
+              const actualIdx = variants.indexOf(variant)
+              return renderVariant(variant, actualIdx, true)
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }

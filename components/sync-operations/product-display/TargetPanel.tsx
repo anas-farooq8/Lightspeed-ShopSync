@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
@@ -12,8 +12,8 @@ import { toSafeExternalHref, isSameImageInfo, getImageUrl } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 interface TargetPanelProps {
-  mode?: 'create' | 'edit'  // New prop for edit mode
-  sourceProduct?: ProductData  // Source product for comparison in edit mode
+  mode?: 'create' | 'edit'
+  sourceProduct?: ProductData
   shopTld: string
   shopName: string
   baseUrl: string
@@ -28,7 +28,6 @@ interface TargetPanelProps {
   retranslatingField?: string | null
   translating?: boolean
   error?: string | null
-  /** Pre-fetched source images (create-preview: same metadata for all targets, no extra fetch). */
   sourceImages?: ProductImageMeta[] | null
   onLanguageChange: (lang: string) => void
   onUpdateField: (lang: string, field: keyof ProductContent, value: string) => void
@@ -39,9 +38,8 @@ interface TargetPanelProps {
   onResetShop: () => void
   onUpdateVariant: (idx: number, field: 'sku' | 'price_excl', value: string | number) => void
   onUpdateVariantTitle: (idx: number, lang: string, title: string) => void
-  onAddVariant: () => void
   onRemoveVariant: (idx: number) => void
-  onMoveVariant: (from: number, to: number) => void
+  onRestoreVariant: (idx: number) => void
   onResetVariant: (idx: number) => void
   onResetAllVariants: () => void
   onSelectVariantImage: (idx: number) => void
@@ -49,6 +47,8 @@ interface TargetPanelProps {
   onUpdateVisibility: (visibility: string) => void
   onResetVisibility: () => void
   onResetProductImage: () => void
+  onSetDefaultVariant: (idx: number) => void
+  onRestoreDefaultVariant: () => void
 }
 
 export function TargetPanel({
@@ -78,16 +78,17 @@ export function TargetPanel({
   onResetShop,
   onUpdateVariant,
   onUpdateVariantTitle,
-  onAddVariant,
   onRemoveVariant,
-  onMoveVariant,
+  onRestoreVariant,
   onResetVariant,
   onResetAllVariants,
   onSelectVariantImage,
   onSelectProductImage,
   onUpdateVisibility,
   onResetVisibility,
-  onResetProductImage
+  onResetProductImage,
+  onSetDefaultVariant,
+  onRestoreDefaultVariant
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -144,18 +145,36 @@ export function TargetPanel({
   const shopUrl = toSafeExternalHref(baseUrl)
   const visibilityChanged = data.visibility !== data.originalVisibility
   
-  // In EDIT mode, compare target visibility with source visibility
-  const sourceVisibility = mode === 'edit' && sourceProduct ? sourceProduct.visibility : data.originalVisibility
-  const isDifferentFromSource = mode === 'edit' && sourceVisibility && data.visibility !== sourceVisibility
-  const targetMatchesSource = mode === 'edit' && data.visibility === sourceVisibility
+  // Get source visibility from source product
+  const sourceVisibility = sourceProduct?.visibility
   
-  // Show "Pick from Source" if current differs from source (even if also differs from original)
-  // Show "Reset" if current differs from original
-  const showPickFromSource = mode === 'edit' && isDifferentFromSource
-  const showReset = visibilityChanged
+  // VISIBILITY BUTTON LOGIC:
+  // CREATE mode: In create mode, originalVisibility IS the source visibility
+  //              So we check if current differs from original (which is source)
+  //              Show "Pick from Source" when changed
+  // EDIT mode: originalVisibility is the target's original value
+  //            Show "Pick from Source" if differs from source
+  //            Show "Reset" if differs from original target
+  const showVisibilityPickFromSource = mode === 'create' 
+    ? visibilityChanged  // In create mode, any change means it differs from source
+    : (sourceVisibility && data.visibility !== sourceVisibility)  // In edit mode, check against source
+  const showVisibilityReset = mode === 'edit' && visibilityChanged
   
   const targetProductImageUrl = getImageUrl(data.productImage)
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
+  
+  // PRODUCT IMAGE BUTTON LOGIC:
+  // CREATE mode: originalProductImage IS the source image
+  //              Show "Pick from Source" when changed or order changed
+  // EDIT mode: originalProductImage is the target's original image
+  //            Show "Reset" when changed or order changed
+  const showProductImagePickFromSource = mode === 'create' && (productImageChanged || data.imageOrderChanged)
+  const showProductImageReset = mode === 'edit' && (productImageChanged || data.imageOrderChanged)
+  
+  // Get product admin URL for edit mode
+  const productAdminUrl = mode === 'edit' && data.targetProductId && shopUrl 
+    ? `${shopUrl}/admin/products/${data.targetProductId}` 
+    : null
 
   return (
     <Card className="border-border/50 flex flex-col h-fit overflow-hidden relative">
@@ -183,6 +202,17 @@ export function TargetPanel({
             </CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="secondary">Target</Badge>
+              {mode === 'edit' && data.targetMatchedByDefaultVariant !== undefined && (
+                <Badge variant="outline" className={data.targetMatchedByDefaultVariant ? 'border-green-500 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950 dark:text-green-300' : 'border-orange-500 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950 dark:text-orange-300'}>
+                  {data.targetMatchedByDefaultVariant ? <><CheckCircle2 className="h-3 w-3 mr-1" />Default Match</> : <><AlertCircle className="h-3 w-3 mr-1" />Non-default Match</>}
+                </Badge>
+              )}
+              {productAdminUrl && (
+                <a href={productAdminUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 font-medium cursor-pointer">
+                  <ExternalLink className="h-3 w-3" />
+                  Product #{data.targetProductId}
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -190,7 +220,7 @@ export function TargetPanel({
 
       <CardContent className="space-y-3 sm:space-y-4 pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
         <div className="flex flex-row gap-3 sm:gap-5 min-w-0">
-          <div className="shrink-0 flex flex-col items-start">
+          <div className="shrink-0 flex flex-col items-start gap-2">
             <div className="relative group">
               <button
                 type="button"
@@ -203,18 +233,31 @@ export function TargetPanel({
                   <Package className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground/30" />
                 )}
               </button>
-              {productImageChanged && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => { e.stopPropagation(); onResetProductImage() }}
-                  className="absolute top-1 right-1 h-7 w-7 rounded-full bg-background/90 hover:bg-background shadow-md cursor-pointer"
-                  title="Reset product image and restore original image order"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              )}
             </div>
+            {showProductImagePickFromSource && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onResetProductImage}
+                className="w-full h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                title="Pick from source and restore original image order"
+              >
+                <ArrowDownToLine className="h-3 w-3 mr-1" />
+                Pick from source
+              </Button>
+            )}
+            {showProductImageReset && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onResetProductImage}
+                className="w-full h-9 px-2 text-xs cursor-pointer"
+                title="Reset to original and restore original image order"
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Reset
+              </Button>
+            )}
           </div>
           <div className="flex-1 min-w-0 grid grid-cols-2 gap-x-2 sm:gap-x-6 gap-y-2 sm:gap-y-4 text-[13px] sm:text-sm md:text-base">
             {/* Row 1: Visibility | Price */}
@@ -243,27 +286,28 @@ export function TargetPanel({
                     ))}
                   </SelectContent>
                 </Select>
-                {showPickFromSource && (
+                {showVisibilityPickFromSource && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => onUpdateVisibility(sourceVisibility)}
+                    onClick={() => mode === 'create' ? onResetVisibility() : (sourceVisibility && onUpdateVisibility(sourceVisibility))}
                     className="h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                    title="Set visibility from source product"
+                    title="Pick visibility from source product"
                   >
                     <ArrowDownToLine className="h-3 w-3 mr-1" />
-                    Pick
+                    Pick from source
                   </Button>
                 )}
-                {showReset && (
+                {showVisibilityReset && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={onResetVisibility}
                     className="h-9 px-2 text-xs cursor-pointer"
-                    title="Reset visibility to original value"
+                    title="Reset visibility to original target value"
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Reset
                   </Button>
                 )}
               </div>
@@ -329,12 +373,13 @@ export function TargetPanel({
             orderChanged={data.orderChanged}
             onUpdateVariant={onUpdateVariant}
             onUpdateVariantTitle={onUpdateVariantTitle}
-            onAddVariant={onAddVariant}
             onRemoveVariant={onRemoveVariant}
-            onMoveVariant={onMoveVariant}
+            onRestoreVariant={onRestoreVariant}
             onResetVariant={onResetVariant}
             onResetAllVariants={onResetAllVariants}
             onSelectVariantImage={onSelectVariantImage}
+            onSetDefaultVariant={onSetDefaultVariant}
+            onRestoreDefaultVariant={onRestoreDefaultVariant}
           />
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">

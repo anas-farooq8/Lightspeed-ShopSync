@@ -77,7 +77,7 @@ export function sortLanguages(languages: Language[]): Language[] {
 /** Get default language code from sorted languages, fallback to first or 'nl'. */
 export function getDefaultLanguageCode(languages: Language[]): string {
   const sorted = sortLanguages(languages)
-  return sorted.find((l) => l.is_default)?.code ?? sorted[0]?.code ?? 'nl'
+  return sorted.find((l) => l.is_default)?.code ?? sorted[0]?.code ?? ''
 }
 
 // ─── Images ─────────────────────────────────────────────────────────────────
@@ -469,9 +469,9 @@ export function reconstructResults(
 export function getOriginLabel(origin: TranslationOrigin | undefined): string {
   switch (origin) {
     case 'copied':
-      return 'Copied from NL'
+      return 'Copied from Source'
     case 'translated':
-      return 'Translated from NL'
+      return 'Translated from Source'
     case 'manual':
       return 'Manually edited'
     default:

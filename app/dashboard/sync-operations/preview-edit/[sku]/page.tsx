@@ -84,9 +84,10 @@ export default function PreviewEditPage() {
     updateField,
     updateVariant,
     updateVariantTitle,
-    addVariant,
     removeVariant,
-    moveVariant,
+    restoreVariant,
+    setDefaultVariant,
+    restoreDefaultVariant,
     updateVisibility,
     resetVisibility,
     selectVariantImage,
@@ -327,7 +328,9 @@ export default function PreviewEditPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku, productIdParam, targetShopsParam])
 
-  useEffect(() => cleanup, [cleanup])
+  useEffect(() => {
+    return cleanup
+  }, [cleanup])
 
   // Fetch target images when switching tabs (on-demand)
   useEffect(() => {
@@ -387,13 +390,13 @@ export default function PreviewEditPage() {
   // Render methods - memoize callbacks for better performance
   const handleLanguageChange = useCallback((tld: string) => (lang: string) => {
     setActiveLanguages(prev => ({ ...prev, [tld]: lang }))
-  }, [])
+  }, [setActiveLanguages])
 
   const handleSelectVariantImage = useCallback((tld: string) => (idx: number) => {
     setSelectingImageForVariant(idx)
     setSelectingProductImage(false)
     setShowImageDialog(true)
-  }, [])
+  }, [setSelectingImageForVariant, setSelectingProductImage, setShowImageDialog])
 
   const handleSelectProductImage = useCallback((tld: string) => () => {
     const imgs = targetData[tld]?.images ?? []
@@ -401,7 +404,7 @@ export default function PreviewEditPage() {
     setSelectingProductImage(true)
     setSelectingImageForVariant(null)
     setShowImageDialog(true)
-  }, [targetData])
+  }, [targetData, setSelectingProductImage, setSelectingImageForVariant, setShowImageDialog])
 
   const renderTargetPanel = useCallback((tld: string) => (
     <TargetPanel
@@ -430,9 +433,8 @@ export default function PreviewEditPage() {
       onResetShop={() => resetShop(tld)}
       onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
       onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
-      onAddVariant={() => addVariant(tld)}
       onRemoveVariant={(idx) => removeVariant(tld, idx)}
-      onMoveVariant={(from, to) => moveVariant(tld, from, to)}
+      onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
@@ -440,6 +442,8 @@ export default function PreviewEditPage() {
       onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
       onResetVisibility={() => resetVisibility(tld)}
       onResetProductImage={() => resetProductImage(tld)}
+      onSetDefaultVariant={(idx) => setDefaultVariant(tld, idx)}
+      onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
     />
   ), [
     details,
@@ -461,9 +465,10 @@ export default function PreviewEditPage() {
     resetShop,
     updateVariant,
     updateVariantTitle,
-    addVariant,
     removeVariant,
-    moveVariant,
+    restoreVariant,
+    setDefaultVariant,
+    restoreDefaultVariant,
     resetVariant,
     resetAllVariants,
     updateVisibility,

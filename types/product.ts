@@ -116,8 +116,12 @@ export interface EditableVariant {
   originalSku?: string | null
   originalPrice?: number
   originalTitle?: Record<string, string>
+  originalIsDefault?: boolean
   content_by_language: Record<string, VariantContent>
-  removed?: boolean
+  deleted?: boolean
+  deletedAt?: number
+  originalIndex?: number
+  previousDefaultIndex?: number
 }
 
 // Translation types
@@ -204,4 +208,5 @@ export interface EditableTargetData {
   sourceProduct?: ProductData // Store source product for comparison in edit mode
   targetProductId?: number // Store target product ID for edit mode
   targetImagesLink?: string | null // Store target product images link for fetching
+  targetMatchedByDefaultVariant?: boolean // Store whether target was matched by default variant (edit mode)
 }

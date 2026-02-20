@@ -37,6 +37,7 @@ import type {
   ProductContent,
   TranslatableField,
   TranslationOrigin,
+  TranslationMetaByLang,
 } from '@/types/product'
 
 // ─── Module-level pure helpers ──────────────────────────────────────────────
@@ -64,6 +65,7 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
       sourceProduct: td.sourceProduct,
       targetProductId: td.targetProductId,
       targetImagesLink: td.targetImagesLink,
+      targetMatchedByDefaultVariant: td.targetMatchedByDefaultVariant,
     }
   }
   return result
@@ -349,6 +351,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         sku: v.sku || '',
         originalSku: v.sku || '',
         originalPrice: v.price_excl,
+        originalIsDefault: v.is_default,
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
@@ -493,6 +496,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         sku: v.sku || '',
         originalSku: v.sku || '',
         originalPrice: v.price_excl,
+        originalIsDefault: v.is_default,
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
@@ -514,6 +518,17 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         ? { src: targetProduct.product_image.src, thumb: targetProduct.product_image.thumb, title: targetProduct.product_image.title }
         : null
 
+      // Initialize translationMeta with 'existing' for all fields
+      const initialTranslationMeta: TranslationMetaByLang = {}
+      targetLanguages.forEach(lang => {
+        initialTranslationMeta[lang.code] = {
+          title: 'existing',
+          fulltitle: 'existing',
+          description: 'existing',
+          content: 'existing'
+        }
+      })
+
       newTargetData[tld] = {
         content_by_language,
         variants,
@@ -530,10 +545,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalProductImage: initialProductImage,
         orderChanged: false,
         imageOrderChanged: false,
-        translationMeta: {},
+        translationMeta: initialTranslationMeta,
         sourceProduct: sourceProduct,
         targetProductId: targetProduct.product_id,
         targetImagesLink: targetImagesLink,
+        targetMatchedByDefaultVariant: targetProduct.matched_by_default_variant,
       }
 
       newActiveLanguages[tld] = defaultLang
@@ -751,16 +767,31 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       
       const newVariants = [...updated[tld].variants]
       const variant = newVariants[variantIndex]
+      
+      // For SKU field, validate uniqueness
+      if (field === 'sku') {
+        const newSku = String(value).toLowerCase().trim()
+        if (newSku) {
+          // Check if SKU already exists in other variants (including deleted ones)
+          const skuExists = newVariants.some((v, idx) => 
+            idx !== variantIndex && 
+            v.sku?.toLowerCase().trim() === newSku
+          )
+          if (skuExists) {
+            alert('This SKU already exists. Please use a unique SKU.')
+            return prev
+          }
+        }
+      }
+      
       const newValue = field === 'price_excl' ? parseFloat(value as string) || 0 : value
       
       newVariants[variantIndex] = { ...variant, [field]: newValue }
       const updatedVariant = newVariants[variantIndex]
       
-      const isChanged = mode === 'create'
-        ? field === 'price_excl' && newValue !== variant.originalPrice
-        : field === 'sku' 
-          ? newValue !== variant.originalSku
-          : newValue !== variant.originalPrice
+      const isChanged = field === 'sku' 
+        ? newValue !== variant.originalSku
+        : newValue !== variant.originalPrice
       
       const key = getVariantKey(variant)
       const newDirtyVariants = new Set(updated[tld].dirtyVariants)
@@ -769,8 +800,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       } else {
         const variantTitle = updatedVariant.content_by_language[activeLanguages[tld]]?.title || ''
         const originalTitle = updatedVariant.originalTitle?.[activeLanguages[tld]] || ''
-        const skuMatch = mode === 'create' || updatedVariant.sku === updatedVariant.originalSku
-        if (variantTitle === originalTitle && skuMatch && updatedVariant.price_excl === updatedVariant.originalPrice) {
+        const skuMatch = updatedVariant.sku === updatedVariant.originalSku
+        const isDefaultMatch = updatedVariant.is_default === (updatedVariant.originalIsDefault ?? false)
+        if (variantTitle === originalTitle && skuMatch && updatedVariant.price_excl === updatedVariant.originalPrice && isDefaultMatch) {
           newDirtyVariants.delete(key)
         }
       }
@@ -788,7 +820,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       setIsDirty(anyDirty)
       return updated
     })
-  }, [mode])
+  }, [mode, activeLanguages])
 
   const updateVariantTitle = useCallback((tld: string, variantIndex: number, langCode: string, title: string) => {
     setTargetData(prev => {
@@ -845,17 +877,25 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!updated[tld]) return prev
       
       const targetLanguages = details.shops[tld]?.languages ?? []
+      
+      // Get all existing SKUs (including deleted variants) for uniqueness check
+      const existingSkus = new Set(
+        updated[tld].variants
+          .filter(v => v.sku)
+          .map(v => v.sku?.toLowerCase().trim())
+      )
+      
       const newVariant: EditableVariant = {
         variant_id: Date.now(),
         temp_id: `new-${Date.now()}`,
         sku: '',
         is_default: false,
-        sort_order: updated[tld].variants.length,
         price_excl: 0,
         image: null,
         originalSku: '',
         originalPrice: 0,
         originalTitle: {},
+        originalIsDefault: false,
         content_by_language: Object.fromEntries(
           targetLanguages.map(lang => [lang.code, { title: '' }])
         )
@@ -864,13 +904,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const newDirtyVariants = new Set(updated[tld].dirtyVariants)
       newDirtyVariants.add(getVariantKey(newVariant))
       
-      const originalVariants = details?.source.find(p => p.product_id === selectedSourceProductId)?.variants || []
-      const orderChanged = updated[tld].variants.length + 1 !== originalVariants.length
-      
       updated[tld] = {
         ...updated[tld],
         variants: [...updated[tld].variants, newVariant],
-        orderChanged,
         dirty: true,
         dirtyVariants: newDirtyVariants
       }
@@ -889,20 +925,41 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!updated[tld]) return prev
       const variants = updated[tld].variants
       if (variantIndex < 0 || variantIndex >= variants.length) return prev
-      const removedKey = getVariantKey(variants[variantIndex])
-      const newVariants = variants.filter((_, idx) => idx !== variantIndex)
-      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
-      newDirtyVariants.delete(removedKey)
       
-      const originalVariants = details?.source.find(p => p.product_id === selectedSourceProductId)?.variants || []
-      const orderChanged = newVariants.length !== originalVariants.length || !newVariants.every((v, i) => originalVariants[i]?.variant_id === v.variant_id)
+      const variant = variants[variantIndex]
       
-      updated[tld] = {
-        ...updated[tld],
-        variants: newVariants,
-        orderChanged,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
-        dirtyVariants: newDirtyVariants
+      // For new variants (temp_id), actually remove them
+      if (variant.temp_id) {
+        const removedKey = getVariantKey(variant)
+        const newVariants = variants.filter((_, idx) => idx !== variantIndex)
+        const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+        newDirtyVariants.delete(removedKey)
+        
+        updated[tld] = {
+          ...updated[tld],
+          variants: newVariants,
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirtyVariants: newDirtyVariants
+        }
+      } else {
+        // For existing variants, mark as deleted (soft delete)
+        const newVariants = [...variants]
+        newVariants[variantIndex] = {
+          ...variant,
+          deleted: true,
+          deletedAt: Date.now(),
+          originalIndex: variantIndex
+        }
+        
+        const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+        newDirtyVariants.add(getVariantKey(variant))
+        
+        updated[tld] = {
+          ...updated[tld],
+          variants: newVariants,
+          dirty: true,
+          dirtyVariants: newDirtyVariants
+        }
       }
       
       const anyDirty = Object.values(updated).some(
@@ -913,33 +970,52 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     })
   }, [details, selectedSourceProductId])
 
-  const moveVariant = useCallback((tld: string, fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return
+  const restoreVariant = useCallback((tld: string, variantIndex: number) => {
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
       const variants = updated[tld].variants
-      if (fromIndex < 0 || fromIndex >= variants.length || toIndex < 0 || toIndex >= variants.length) return prev
+      if (variantIndex < 0 || variantIndex >= variants.length) return prev
+      
+      const variant = variants[variantIndex]
+      if (!variant.deleted) return prev
+      
+      // Find the original position
+      const originalIndex = variant.originalIndex ?? variantIndex
+      
+      // Remove from current position
       const newVariants = [...variants]
-      const [movedVariant] = newVariants.splice(fromIndex, 1)
-      newVariants.splice(toIndex, 0, movedVariant)
+      const [restoredVariant] = newVariants.splice(variantIndex, 1)
       
-      newVariants.forEach((v, idx) => {
-        v.sort_order = idx
-      })
+      // Remove deleted flag
+      delete restoredVariant.deleted
+      delete restoredVariant.deletedAt
+      delete restoredVariant.originalIndex
       
-      const currentOrder = newVariants.map(v => v.variant_id)
-      const originalVariants = details?.source.find(p => p.product_id === selectedSourceProductId)?.variants || []
-      const originalOrder = originalVariants.map(v => v.variant_id)
-      const orderChanged = currentOrder.length !== originalOrder.length || !currentOrder.every((id, idx) => id === originalOrder[idx])
+      // Insert back at original position (clamped to valid range)
+      const insertIndex = Math.min(originalIndex, newVariants.filter(v => !v.deleted).length)
+      newVariants.splice(insertIndex, 0, restoredVariant)
       
-      const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
+      // Check if this variant is still dirty after restoration
+      const key = getVariantKey(restoredVariant)
+      const isDirty = 
+        restoredVariant.sku !== restoredVariant.originalSku ||
+        restoredVariant.price_excl !== restoredVariant.originalPrice ||
+        restoredVariant.is_default !== restoredVariant.originalIsDefault ||
+        Object.keys(restoredVariant.content_by_language).some(
+          lang => restoredVariant.content_by_language[lang]?.title !== restoredVariant.originalTitle?.[lang]
+        )
+      
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      if (!isDirty) {
+        newDirtyVariants.delete(key)
+      }
       
       updated[tld] = {
         ...updated[tld],
         variants: newVariants,
-        orderChanged,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || orderChanged || visibilityChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+        dirtyVariants: newDirtyVariants
       }
       
       const anyDirty = Object.values(updated).some(
@@ -948,7 +1024,156 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       setIsDirty(anyDirty)
       return updated
     })
-  }, [details, selectedSourceProductId])
+  }, [])
+
+  const setDefaultVariant = useCallback((tld: string, variantIndex: number) => {
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      const variants = updated[tld].variants
+      if (variantIndex < 0 || variantIndex >= variants.length) return prev
+      
+      // Find current default variant index
+      const currentDefaultIndex = variants.findIndex(v => v.is_default)
+      
+      // Update all variants: set the selected one as default, others as non-default
+      const newVariants = variants.map((v, idx) => ({
+        ...v,
+        is_default: idx === variantIndex,
+        previousDefaultIndex: idx === currentDefaultIndex ? variantIndex : v.previousDefaultIndex
+      }))
+      
+      // Mark the changed variants as dirty
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      newVariants.forEach((v, idx) => {
+        const originalIsDefault = v.originalIsDefault ?? false
+        if (v.is_default !== originalIsDefault) {
+          newDirtyVariants.add(getVariantKey(v))
+        } else {
+          // Check if other fields are dirty
+          const skuChanged = v.sku !== v.originalSku
+          const priceChanged = v.price_excl !== v.originalPrice
+          const titleChanged = Object.keys(v.content_by_language).some(
+            lang => v.content_by_language[lang]?.title !== v.originalTitle?.[lang]
+          )
+          if (!skuChanged && !priceChanged && !titleChanged) {
+            newDirtyVariants.delete(getVariantKey(v))
+          }
+        }
+      })
+      
+      updated[tld] = {
+        ...updated[tld],
+        variants: newVariants,
+        dirtyVariants: newDirtyVariants,
+        dirty: true
+      }
+      
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [])
+
+  const undoSetDefaultVariant = useCallback((tld: string, variantIndex: number) => {
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      const variants = updated[tld].variants
+      if (variantIndex < 0 || variantIndex >= variants.length) return prev
+      
+      const variant = variants[variantIndex]
+      const originalIsDefault = variant.originalIsDefault ?? false
+      
+      // Restore all variants to their original default state
+      const newVariants = variants.map((v) => ({
+        ...v,
+        is_default: v.originalIsDefault ?? false,
+        previousDefaultIndex: undefined
+      }))
+      
+      // Update dirty variants
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      newVariants.forEach((v) => {
+        const originalIsDefault = v.originalIsDefault ?? false
+        if (v.is_default !== originalIsDefault) {
+          newDirtyVariants.add(getVariantKey(v))
+        } else {
+          // Check if other fields are dirty
+          const skuChanged = v.sku !== v.originalSku
+          const priceChanged = v.price_excl !== v.originalPrice
+          const titleChanged = Object.keys(v.content_by_language).some(
+            lang => v.content_by_language[lang]?.title !== v.originalTitle?.[lang]
+          )
+          if (!skuChanged && !priceChanged && !titleChanged) {
+            newDirtyVariants.delete(getVariantKey(v))
+          }
+        }
+      })
+      
+      updated[tld] = {
+        ...updated[tld],
+        variants: newVariants,
+        dirtyVariants: newDirtyVariants,
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+      }
+      
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [])
+
+  const restoreDefaultVariant = useCallback((tld: string) => {
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      const variants = updated[tld].variants
+      
+      // Restore all variants to their original default state
+      const newVariants = variants.map((v) => ({
+        ...v,
+        is_default: v.originalIsDefault ?? false,
+        previousDefaultIndex: undefined
+      }))
+      
+      // Update dirty variants
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      newVariants.forEach((v) => {
+        const originalIsDefault = v.originalIsDefault ?? false
+        if (v.is_default !== originalIsDefault) {
+          newDirtyVariants.add(getVariantKey(v))
+        } else {
+          // Check if other fields are dirty
+          const skuChanged = v.sku !== v.originalSku
+          const priceChanged = v.price_excl !== v.originalPrice
+          const titleChanged = Object.keys(v.content_by_language).some(
+            lang => v.content_by_language[lang]?.title !== v.originalTitle?.[lang]
+          )
+          if (!skuChanged && !priceChanged && !titleChanged) {
+            newDirtyVariants.delete(getVariantKey(v))
+          }
+        }
+      })
+      
+      updated[tld] = {
+        ...updated[tld],
+        variants: newVariants,
+        dirtyVariants: newDirtyVariants,
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+      }
+      
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [])
 
   // ─── Visibility ───────────────────────────────────────────────────────────
   const updateVisibility = useCallback((tld: string, visibility: string) => {
@@ -1075,9 +1300,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   }, [])
 
   const resetProductImage = useCallback((tld: string) => {
-    if (mode === 'create' && !details) return
+    if (!details) return
+    
     if (mode === 'create') {
-      const sourceProduct = details!.source.find(p => p.product_id === selectedSourceProductId)
+      // CREATE MODE: Pick from source and restore original order
+      const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
       if (!sourceProduct) return
       
       setTargetData(prev => {
@@ -1090,24 +1317,51 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           sort_order: idx
         }))
         
+        // Get the original product image from source
+        const sourceProductImage: ImageInfo | null = sourceProduct.product_image
+          ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
+          : resetImages[0]
+            ? { src: resetImages[0].src, thumb: resetImages[0].thumb, title: resetImages[0].title }
+            : null
+        
         updated[tld] = {
           ...updated[tld],
           images: resetImages,
+          productImage: sourceProductImage,
+          imageOrderChanged: false,
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
+        }
+        
+        const anyDirty = Object.values(updated).some(
+          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        )
+        setIsDirty(anyDirty)
+        return updated
+      })
+    } else {
+      // EDIT MODE: Reset to original target values and restore original order
+      setTargetData(prev => {
+        const updated = { ...prev }
+        if (!updated[tld]) return prev
+        
+        // Restore original image order
+        const originalImages = updated[tld].images.map((img, idx) => ({
+          ...img,
+          sort_order: updated[tld].originalImageOrder[idx] ?? idx
+        }))
+        
+        updated[tld] = {
+          ...updated[tld],
+          images: originalImages,
           productImage: updated[tld].originalProductImage,
           imageOrderChanged: false,
           dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
         }
-        return updated
-      })
-    } else {
-      setTargetData(prev => {
-        const updated = { ...prev }
-        if (!updated[tld]) return prev
-        updated[tld] = {
-          ...updated[tld],
-          productImage: updated[tld].originalProductImage,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
-        }
+        
+        const anyDirty = Object.values(updated).some(
+          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        )
+        setIsDirty(anyDirty)
         return updated
       })
     }
@@ -1251,6 +1505,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!variant) return prev
       
       const key = getVariantKey(variant)
+      
+      // Handle newly added variants (temp_id) - remove them
       if (variant.temp_id) {
         const newVariants = updated[tld].variants.filter((_, idx) => idx !== variantIndex)
         const newDirtyVariants = new Set(updated[tld].dirtyVariants)
@@ -1268,6 +1524,38 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         return updated
       }
       
+      // For edit mode, reset to original target values (not source)
+      if (mode === 'edit') {
+        const targetLanguages = details.shops[tld]?.languages ?? []
+        
+        const newVariants = [...updated[tld].variants]
+        newVariants[variantIndex] = {
+          ...variant,
+          sku: variant.originalSku || '',
+          price_excl: variant.originalPrice ?? 0,
+          is_default: variant.originalIsDefault ?? variant.is_default,
+          content_by_language: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              { title: variant.originalTitle?.[lang.code] || '' }
+            ])
+          )
+        }
+        
+        const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+        newDirtyVariants.delete(key)
+        
+        updated[tld] = {
+          ...updated[tld],
+          variants: newVariants,
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirtyVariants: newDirtyVariants
+        }
+        
+        return updated
+      }
+      
+      // For create mode, reset to source variant values
       const sourceVariant = sourceProduct.variants.find(v => v.variant_id === variant.variant_id)
       if (!sourceVariant) return prev
       
@@ -1307,52 +1595,85 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       
       return updated
     })
-  }, [details, selectedSourceProductId])
+  }, [details, selectedSourceProductId, mode])
 
   const resetAllVariants = useCallback((tld: string) => {
     if (!details || !selectedSourceProductId) return
-    
-    const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
-    if (!sourceProduct) return
-    
-    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
-    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
-    const targetLanguages = details.shops[tld]?.languages ?? []
     
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
       
-      const newVariants = sourceProduct.variants.map(v => ({
-        ...v,
-        sku: v.sku || '',
-        originalSku: v.sku || '',
-        originalPrice: v.price_excl,
-        originalTitle: Object.fromEntries(
-          targetLanguages.map(lang => [
-            lang.code,
-            sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
-          ])
-        ),
-        content_by_language: Object.fromEntries(
-          targetLanguages.map(lang => [
-            lang.code,
-            { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
-          ])
-        )
-      }))
+      const targetLanguages = details.shops[tld]?.languages ?? []
       
-      updated[tld] = {
-        ...updated[tld],
-        variants: newVariants,
-        orderChanged: false,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
-        dirtyVariants: new Set()
+      if (mode === 'edit') {
+        // EDIT MODE: Reset to the original target variants (from targetData initialization)
+        // Filter out only the original variants (those without temp_id)
+        const originalVariants = updated[tld].variants.filter(v => !v.temp_id).map(v => {
+          const contentByLang: Record<string, { title: string }> = {}
+          targetLanguages.forEach(lang => {
+            contentByLang[lang.code] = { title: v.originalTitle?.[lang.code] || '' }
+          })
+          
+          return {
+            ...v,
+            sku: v.originalSku || '',
+            price_excl: v.originalPrice ?? 0,
+            is_default: v.originalIsDefault ?? v.is_default,
+            deleted: false,
+            deletedAt: undefined,
+            originalIndex: undefined,
+            content_by_language: contentByLang
+          }
+        })
+        
+        updated[tld] = {
+          ...updated[tld],
+          variants: originalVariants,
+          orderChanged: false,
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirtyVariants: new Set()
+        }
+      } else {
+        // CREATE MODE: Reset to source variants
+        const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
+        if (!sourceProduct) return prev
+        
+        const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+        const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
+        
+        const newVariants = sourceProduct.variants.map(v => ({
+          ...v,
+          sku: v.sku || '',
+          originalSku: v.sku || '',
+          originalPrice: v.price_excl,
+          originalIsDefault: v.is_default,
+          originalTitle: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
+            ])
+          ),
+          content_by_language: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
+            ])
+          )
+        }))
+        
+        updated[tld] = {
+          ...updated[tld],
+          variants: newVariants,
+          orderChanged: false,
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirtyVariants: new Set()
+        }
       }
       
       return updated
     })
-  }, [details, selectedSourceProductId])
+  }, [details, selectedSourceProductId, mode])
 
   const resetShop = useCallback((tld: string) => {
     if (!details || !selectedSourceProductId) return
@@ -1456,7 +1777,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     
-    if (langCode === sourceDefaultLang) {
+    // In CREATE mode, don't allow re-translating same language (it's just a copy, use reset instead)
+    // In EDIT mode, allow it for "Pick from source" functionality
+    if (langCode === sourceDefaultLang && mode === 'create') {
       alert('Cannot re-translate content in the same language as source.')
       return
     }
@@ -1499,11 +1822,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         const newDirtyFields = new Set(updated[tld].dirtyFields)
         newDirtyFields.delete(fieldKey)
 
+        // Use the origin from getBaseValueForField ('copied' or 'translated')
         const newTranslationMeta = {
           ...updated[tld].translationMeta,
           [langCode]: {
             ...updated[tld].translationMeta?.[langCode],
-            [field]: 'translated' as const
+            [field]: origin
           }
         }
 
@@ -1512,19 +1836,23 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           initialContentRef.current[tld][langCode] = value
         }
 
-        if (!originalTranslatedContentRef.current[tld]) originalTranslatedContentRef.current[tld] = {}
-        if (!originalTranslatedContentRef.current[tld][langCode]) {
-          originalTranslatedContentRef.current[tld][langCode] = {
-            title: '', fulltitle: '', description: '', content: ''
+        // In CREATE mode, update the original refs (so this becomes the new baseline)
+        // In EDIT mode, DON'T update original refs (keep the original target values for reset)
+        if (mode === 'create') {
+          if (!originalTranslatedContentRef.current[tld]) originalTranslatedContentRef.current[tld] = {}
+          if (!originalTranslatedContentRef.current[tld][langCode]) {
+            originalTranslatedContentRef.current[tld][langCode] = {
+              title: '', fulltitle: '', description: '', content: ''
+            }
           }
-        }
-        originalTranslatedContentRef.current[tld][langCode][field] = value
+          originalTranslatedContentRef.current[tld][langCode][field] = value
 
-        if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
-        if (!originalTranslationMetaRef.current[tld][langCode]) {
-          originalTranslationMetaRef.current[tld][langCode] = {}
+          if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
+          if (!originalTranslationMetaRef.current[tld][langCode]) {
+            originalTranslationMetaRef.current[tld][langCode] = {}
+          }
+          originalTranslationMetaRef.current[tld][langCode][field] = origin
         }
-        originalTranslationMetaRef.current[tld][langCode][field] = 'translated'
 
         updated[tld] = {
           ...updated[tld],
@@ -1548,7 +1876,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     } finally {
       setRetranslatingField(null)
     }
-  }, [details, selectedSourceProductId])
+  }, [details, selectedSourceProductId, mode])
 
   const retranslateLanguage = useCallback(async (tld: string, langCode: string) => {
     if (!details || !selectedSourceProductId) return
@@ -1728,7 +2056,10 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     updateVariantTitle,
     addVariant,
     removeVariant,
-    moveVariant,
+    restoreVariant,
+    setDefaultVariant,
+    undoSetDefaultVariant,
+    restoreDefaultVariant,
     updateVisibility,
     resetVisibility,
     selectVariantImage,

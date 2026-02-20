@@ -117,8 +117,10 @@ export default function PreviewCreatePage() {
     updateField,
     updateVariant,
     updateVariantTitle,
-    addVariant,
     removeVariant,
+    restoreVariant,
+    setDefaultVariant,
+    restoreDefaultVariant,
     updateVisibility,
     resetVisibility,
     selectVariantImage,
@@ -397,9 +399,8 @@ export default function PreviewCreatePage() {
       onResetShop={() => resetShop(tld)}
       onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
       onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
-      onAddVariant={() => addVariant(tld)}
       onRemoveVariant={(idx) => removeVariant(tld, idx)}
-      onMoveVariant={() => {}}
+      onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
@@ -407,8 +408,10 @@ export default function PreviewCreatePage() {
       onUpdateVisibility={(visibility) => updateVisibility(tld, visibility)}
       onResetVisibility={() => resetVisibility(tld)}
       onResetProductImage={() => resetProductImage(tld)}
+      onSetDefaultVariant={(idx) => setDefaultVariant(tld, idx)}
+      onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, addVariant, removeVariant, resetVariant, resetAllVariants, updateVisibility, resetVisibility, resetProductImage])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetAllVariants, updateVisibility, resetVisibility, resetProductImage])
 
   if (loading) {
     return (
