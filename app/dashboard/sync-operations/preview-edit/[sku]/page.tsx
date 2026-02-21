@@ -303,6 +303,20 @@ export default function PreviewEditPage() {
       changes.push('Product image changed')
     }
 
+    const imagesAddedFromSource = data.images.filter((img: { addedFromSource?: boolean }) => img.addedFromSource).length
+    if (imagesAddedFromSource > 0) {
+      changes.push(`${imagesAddedFromSource} image${imagesAddedFromSource !== 1 ? 's' : ''} added from source`)
+    }
+
+    const imagesRemovedCount = data.removedImageSrcs.size
+    if (imagesRemovedCount > 0) {
+      changes.push(`${imagesRemovedCount} image${imagesRemovedCount !== 1 ? 's' : ''} removed`)
+    }
+
+    if (data.imageOrderChanged) {
+      changes.push('Image order changed')
+    }
+
     return {
       shopName,
       shopTld: tld,

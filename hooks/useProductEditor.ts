@@ -202,9 +202,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       productImages[sourceProduct?.product_id ?? 0] ??
       []
     // Exclude removed/deleted images from selection (cannot pick deleted)
-    const filtered = data?.removedImageSrcs?.size
+    let filtered = data?.removedImageSrcs?.size
       ? raw.filter((img: { src?: string }) => !data.removedImageSrcs.has(img.src ?? ''))
       : raw
+    // Edit mode: only show existing target images (not added from source) for product/variant picker
+    if (mode === 'edit') {
+      filtered = filtered.filter((img: { addedFromSource?: boolean }) => !img.addedFromSource)
+    }
     const productOrSrc = mode === 'create'
       ? (sourceProduct?.product_image ? { product_image: sourceProduct.product_image } : data?.productImage?.src ?? null)
       : (data?.productImage ? { product_image: data.productImage } : null)

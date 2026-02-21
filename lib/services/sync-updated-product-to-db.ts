@@ -6,8 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sortBySortOrder } from '@/lib/utils'
-import type { UpdateVariantInfo, UpdateImageInfo, VariantImageForDb } from './update-product'
+import type { UpdateVariantInfo, UpdateImageInfo, VariantImageForDb, ProductImageForDb } from './update-product'
 
 const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
 
@@ -23,12 +22,13 @@ interface SyncUpdatedProductInput {
     description?: string
     content?: string
   }>
-  /** Final variant list after update (for determining product image from variants) */
   intendedVariants: UpdateVariantInfo[]
   intendedImages: UpdateImageInfo[]
   createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }>
   deletedVariantIds: number[]
   updatedVariants: Array<{ variantId: number; variant: UpdateVariantInfo }>
+  /** Product image from API only - no fallback */
+  productImageForDb?: ProductImageForDb
   /** Variant images from API - variantId -> image (for updated variants) */
   updatedVariantImages?: Record<number, VariantImageForDb>
   /** Variant images from API - index -> image (for created variants) */
@@ -56,19 +56,15 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
     createdVariantsForDb,
     deletedVariantIds,
     updatedVariants,
+    productImageForDb,
     updatedVariantImages,
     createdVariantImages,
   } = input
 
   const now = new Date().toISOString()
 
-  // Product image: first image in intended order (sort_order 1)
-  const sortedImages = sortBySortOrder(intendedImages)
-  const productImage = sortedImages[0]
-    ? { src: sortedImages[0].src, thumb: sortedImages[0].thumb, title: sortedImages[0].title }
-    : intendedVariants[0]?.image
-      ? { src: intendedVariants[0].image!.src, thumb: intendedVariants[0].image!.thumb, title: intendedVariants[0].image!.title }
-      : null
+  // Product image: from API only (productImageForDb). No fallback to intended/source URLs.
+  const productImage = productImageForDb ?? null
 
   const hasImages = intendedImages.length > 0 || intendedVariants.some((v) => v.image)
   const imagesLink = hasImages
@@ -128,8 +124,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
 
   // 4. Update changed variants
   for (const { variantId, variant } of updatedVariants) {
-    const variantImage = updatedVariantImages?.[variantId] ?? variant.image
-    console.log(`[DEBUG] sync-updated variant ${variantId} (${variant.sku}): using ${updatedVariantImages?.[variantId] ? 'API response' : 'intended'}`)
+    const variantImage = updatedVariantImages?.[variantId] ?? null
     const { error: variantError } = await supabase
       .from('variants')
       .update({
@@ -174,7 +169,6 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
     if (!variant) continue
 
     const variantImage = createdVariantImages?.[index] ?? null
-    console.log(`[DEBUG] sync-updated new variant index=${index} (${variant.sku}): using ${createdVariantImages?.[index] ? 'API response' : 'null (no fallback)'}`)
     const { error: variantError } = await supabase.from('variants').insert({
       shop_id: shopId,
       lightspeed_variant_id: variantId,

@@ -65,6 +65,7 @@ interface UpdateProductRequest {
       title?: string
       sort_order: number
       id: string
+      addedFromSource?: boolean
     }>
   }
   /** Target shop's language configuration from product-details API */
@@ -215,6 +216,14 @@ export async function PUT(request: NextRequest) {
 
     const targetClient = getLightspeedClient(targetShopTld)
 
+    // Fetch current product images from Lightspeed (for diff: delete, detect new)
+    let currentImages: Array<{ id: number; sortOrder: number; src: string; thumb?: string; title?: string }> = []
+    try {
+      currentImages = await targetClient.getProductImages(lightspeedProductId, defaultLanguage)
+    } catch (imgErr) {
+      console.warn('[API] Could not fetch current product images:', imgErr)
+    }
+
     const result = await updateProduct({
       targetClient,
       productId: lightspeedProductId,
@@ -223,6 +232,7 @@ export async function PUT(request: NextRequest) {
       currentVisibility: productRow?.visibility ?? 'visible',
       currentContentByLanguage,
       currentVariants,
+      currentImages,
       intendedVisibility: updateProductData.visibility,
       intendedContentByLanguage: updateProductData.content_by_language,
       intendedVariants: updateProductData.variants.map((v) => ({
@@ -233,6 +243,14 @@ export async function PUT(request: NextRequest) {
         price_excl: v.price_excl,
         image: v.image,
         content_by_language: v.content_by_language ?? {},
+      })),
+      intendedImages: updateProductData.images.map((img) => ({
+        src: img.src,
+        thumb: img.thumb,
+        title: img.title,
+        sort_order: img.sort_order,
+        id: img.id,
+        addedFromSource: img.addedFromSource,
       })),
     })
 
@@ -295,6 +313,7 @@ export async function PUT(request: NextRequest) {
         createdVariantsForDb: result.createdVariantsForDb ?? [],
         deletedVariantIds: result.deletedVariants ?? [],
         updatedVariants: updatedVariantsList as Array<{ variantId: number; variant: import('@/lib/services/update-product').UpdateVariantInfo }>,
+        productImageForDb: result.productImageForDb,
         updatedVariantImages: result.updatedVariantImages,
         createdVariantImages: result.createdVariantImages,
       })

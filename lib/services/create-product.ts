@@ -3,6 +3,12 @@
  * 
  * Orchestrates the complete product creation flow from source to target shop
  * Based on CREATE_SYNC_ARCHITECTURE.md specification
+ *
+ * Notes on multi-language:
+ * - Product details (title, description, etc.) are created in default language first,
+ *   then updated for all additional languages after base product creation.
+ * - Variant titles are initially created per the default language, then
+ *   updated for each language (if available in content_by_language) right after product/variant creation. 
  */
 
 import { LightspeedAPIClient } from './lightspeed-api'
@@ -23,6 +29,10 @@ export interface VariantInfo {
   sort_order: number
   price_excl: number
   image: ImageInfo | null
+  /**
+   * Per-language titles for this variant.
+   * E.g. { "en": {title: ...}, "fr": {title: ... } }
+   */
   content_by_language: Record<string, { title?: string }>
 }
 
@@ -86,6 +96,9 @@ function toImageForDb(res: unknown): { src: string; thumb?: string; title?: stri
 /**
  * Main create product orchestrator
  * Follows the 6-step process from CREATE_SYNC_ARCHITECTURE.md
+ * 
+ * Variant titles in all supported languages are set after initial creation.
+ * Product details are also updated post-creation for all target languages.
  */
 export async function createProduct(
   input: CreateProductInput
@@ -148,7 +161,6 @@ export async function createProduct(
     // ============================================================
     console.log('[STEP 3] Processing images and variants...')
     
-    // Track which variants have been created
     const createdVariants = new Set<number>()
     const variantIdMap = new Map<number, number>() // source variant index -> created variant id
     let autoDefaultUsed = false
@@ -161,7 +173,6 @@ export async function createProduct(
 
     for (let imgIdx = 0; imgIdx < sortedImages.length; imgIdx++) {
       const image = sortedImages[imgIdx]
-      // Find variants that use this image. Match by src (unique per image).
       const variantsForImage = variants
         .filter(v => v.image?.src === image.src)
         .sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1)) // default first
@@ -169,7 +180,6 @@ export async function createProduct(
       if (variantsForImage.length > 0) {
         console.log(`[STEP 3] Image #${imgIdx + 1} "${image.title}" (sort_order=${image.sort_order}) used by ${variantsForImage.length} variant(s)`)
         
-        // Download and encode image once
         const imageData = await downloadImage(image.src)
 
         for (const variant of variantsForImage) {
@@ -180,7 +190,8 @@ export async function createProduct(
             continue
           }
 
-          const variantTitle = sanitizeVariantTitle(
+          // Only set title in default language at this stage
+          const defaultLangTitle = sanitizeVariantTitle(
             variant.content_by_language[defaultLanguage]?.title,
             variant.sku
           )
@@ -188,7 +199,7 @@ export async function createProduct(
           if (variant.is_default && !autoDefaultUsed) {
             // Update auto-created default variant
             console.log(`[STEP 3]   → Updating auto default variant with SKU: ${variant.sku}`)
-            const updateRes = await targetClient.updateVariant(autoDefaultVariantId, {
+            await targetClient.updateVariant(autoDefaultVariantId, {
               variant: {
                 product: productId,
                 isDefault: true,
@@ -196,7 +207,7 @@ export async function createProduct(
                 sku: variant.sku,
                 articleCode: variant.sku,
                 priceExcl: variant.price_excl,
-                title: variantTitle,
+                title: defaultLangTitle,
                 image: {
                   attachment: imageData.base64,
                   filename: (image.title?.trim() || 'image') + '.' + imageData.extension,
@@ -218,7 +229,7 @@ export async function createProduct(
                 sku: variant.sku,
                 articleCode: variant.sku,
                 priceExcl: variant.price_excl,
-                title: variantTitle,
+                title: defaultLangTitle,
                 image: {
                   attachment: imageData.base64,
                   filename: (image.title?.trim() || 'image') + '.' + imageData.extension,
@@ -238,7 +249,7 @@ export async function createProduct(
         console.log(`[STEP 4] Uploading product-only image: "${image.title}"`)
         const imageData = await downloadImage(image.src)
         
-        const createImgRes = await targetClient.createProductImage(productId, {
+        await targetClient.createProductImage(productId, {
           productImage: {
             attachment: imageData.base64,
             filename: (image.title?.trim() || 'image') + '.' + imageData.extension
@@ -256,12 +267,11 @@ export async function createProduct(
     for (let i = 0; i < variants.length; i++) {
       const variant = variants[i]
       
-      // Skip if already created
       if (createdVariants.has(i)) {
         continue
       }
 
-      const variantTitle = sanitizeVariantTitle(
+      const defaultLangTitle = sanitizeVariantTitle(
         variant.content_by_language[defaultLanguage]?.title,
         variant.sku
       )
@@ -277,7 +287,7 @@ export async function createProduct(
             sku: variant.sku,
             articleCode: variant.sku,
             priceExcl: variant.price_excl,
-            title: variantTitle,
+            title: defaultLangTitle,
           }
         }, defaultLanguage)
         
@@ -296,7 +306,7 @@ export async function createProduct(
             sku: variant.sku,
             articleCode: variant.sku,
             priceExcl: variant.price_excl,
-            title: variantTitle,
+            title: defaultLangTitle,
           }
         }, defaultLanguage)
         
@@ -308,7 +318,7 @@ export async function createProduct(
     }
 
     // ============================================================
-    // MULTI-LANGUAGE: Update product and variants for additional languages
+    // MULTI-LANGUAGE: Update product details and variant titles for all additional languages
     // ============================================================
     const additionalLanguages = targetLanguages.filter(lang => lang !== defaultLanguage)
     
@@ -323,7 +333,7 @@ export async function createProduct(
           continue
         }
 
-        // Update product content
+        // Update product content in this language
         console.log(`[MULTI-LANG] Updating product content for language: ${lang}`)
         await targetClient.updateProduct(productId, {
           product: {
@@ -335,7 +345,7 @@ export async function createProduct(
         }, lang)
         console.log(`[MULTI-LANG] ✓ Updated product for ${lang}`)
 
-        // Update variant titles
+        // Now update each variant for this language, if a title is provided
         for (let i = 0; i < variants.length; i++) {
           const variant = variants[i]
           const variantId = variantIdMap.get(i)
@@ -345,19 +355,19 @@ export async function createProduct(
             continue
           }
 
-          const variantTitle = sanitizeVariantTitle(
+          // For each language, look for the localized title (optional per variant)
+          const variantLangTitle = sanitizeVariantTitle(
             variant.content_by_language[lang]?.title,
             variant.sku
           )
           
-          if (variantTitle) {
-            await targetClient.updateVariant(variantId, {
-              variant: {
-                title: variantTitle,
-              }
-            }, lang)
-            console.log(`[MULTI-LANG] ✓ Updated variant ${variantId} for ${lang}`)
-          }
+          // Always make the update for this language for the variant, even if fallback to sku.
+          await targetClient.updateVariant(variantId, {
+            variant: {
+              title: variantLangTitle,
+            }
+          }, lang)
+          console.log(`[MULTI-LANG] ✓ Updated variant ${variantId} for ${lang}`)
         }
       }
     }
@@ -367,7 +377,6 @@ export async function createProduct(
 
     // ============================================================
     // FETCH: Get product image and variant images from target
-    // (Create variant returns image: false - we need to fetch)
     // ============================================================
     const [productImagesRes, variantsRes] = await Promise.all([
       targetClient.getProductImages(productId, defaultLanguage),
@@ -445,4 +454,3 @@ export async function createProduct(
     }
   }
 }
-
