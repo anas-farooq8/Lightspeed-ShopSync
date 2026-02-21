@@ -15,38 +15,9 @@ import { ProductHeader } from '@/components/sync-operations/product-display/Prod
 import { SourcePanel } from '@/components/sync-operations/product-display/SourcePanel'
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
-import { useProductEditor } from '@/hooks/useProductEditor'
+import { useProductEditor, patchImagesIntoTargetData } from '@/hooks/useProductEditor'
 import { sortImagesForDisplay } from '@/lib/utils'
 import type { ProductImage } from '@/types/product'
-
-function patchImagesIntoTargetData(
-  setTargetData: any,
-  shopTlds: string[],
-  images: ProductImage[],
-  srcProduct: any
-): void {
-  if (!images.length) return
-  // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
-  const sortedByOrder = [...images].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
-  const productImageCandidate = sortedByOrder[0]
-  const fallbackProductImage = productImageCandidate
-    ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
-    : null
-  setTargetData((prev: any) => {
-    const updated = { ...prev }
-    shopTlds.forEach(tld => {
-      if (!updated[tld]) return
-      updated[tld] = {
-        ...updated[tld],
-        images: [...images],
-        originalImageOrder: images.map((_: any, idx: number) => idx),
-        productImage: updated[tld].productImage ?? fallbackProductImage,
-        originalProductImage: updated[tld].originalProductImage ?? fallbackProductImage,
-      }
-    })
-    return updated
-  })
-}
 
 export default function PreviewCreatePage() {
   const params = useParams()
@@ -248,7 +219,7 @@ export default function PreviewCreatePage() {
     if (allShopsCreated) {
       setTimeout(() => navigateBack(), 1500)
     }
-  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess, productImages])
+  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
 
   // Create confirmation dialog content (counts match what will be created) - all target shops
   const createConfirmationContent = useMemo(() => {
@@ -379,6 +350,7 @@ export default function PreviewCreatePage() {
   const renderTargetPanel = useCallback((tld: string) => (
     <TargetPanel
       mode="create"
+      sourceProduct={sourceProduct}
       shopTld={tld}
       shopName={details?.shops?.[tld]?.name ?? details?.targets[tld]?.[0]?.shop_name ?? tld}
       baseUrl={details?.shops?.[tld]?.base_url ?? details?.targets[tld]?.[0]?.base_url ?? ''}
@@ -470,21 +442,17 @@ export default function PreviewCreatePage() {
               identifier={{ label: 'Preview Create - SKU', value: sku }}
               targetTabs={{ tlds: sortedTargetShops, activeTab: activeTargetTld }}
             />
-
             <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
-              <div>
-                <SourcePanel
-                  product={sourceProduct}
-                  languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
-                  hasDuplicates={hasSourceDuplicates}
-                  allProducts={details.source}
-                  selectedProductId={selectedSourceProductId}
-                  onProductSelect={handleSourceProductSelect}
-                  sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-                  sourceSwitching={sourceSwitching}
-                />
-              </div>
-
+              <SourcePanel
+                product={sourceProduct}
+                languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
+                hasDuplicates={hasSourceDuplicates}
+                allProducts={details.source}
+                selectedProductId={selectedSourceProductId}
+                onProductSelect={handleSourceProductSelect}
+                sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+                sourceSwitching={sourceSwitching}
+              />
               {sortedTargetShops.map(tld => (
                 <TabsContent key={tld} value={tld} className="mt-0">
                   {renderTargetPanel(tld)}
@@ -495,10 +463,7 @@ export default function PreviewCreatePage() {
         </Tabs>
       ) : (
         <div className="w-full p-4 sm:p-6">
-          <ProductHeader
-            onBack={handleBack}
-            identifier={{ label: 'Preview Create - SKU', value: sku }}
-          />
+          <ProductHeader onBack={handleBack} identifier={{ label: 'Preview Create - SKU', value: sku }} />
           <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
             <SourcePanel
               product={sourceProduct}

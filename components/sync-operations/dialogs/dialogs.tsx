@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Package, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, sortBySortOrder } from '@/lib/utils'
 
 // ─── Generic ConfirmDialog ──────────────────────────────────────────────────
 
@@ -433,9 +433,7 @@ export function AddVariantsFromSourceDialog({
 }) {
   const [selected, setSelected] = useState<VariantForSelection[]>([])
 
-  const allVariantsSorted = useMemo(() => {
-    return [...sourceVariants].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
-  }, [sourceVariants])
+  const allVariantsSorted = useMemo(() => sortBySortOrder(sourceVariants), [sourceVariants])
 
   const handleToggle = useCallback((v: VariantForSelection) => {
     if (targetVariantSkus.has((v.sku || '').toLowerCase().trim())) return
@@ -447,8 +445,7 @@ export function AddVariantsFromSourceDialog({
   }, [targetVariantSkus])
 
   const handleConfirm = useCallback(() => {
-    const ordered = [...selected].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
-    onConfirm(ordered)
+    onConfirm(sortBySortOrder(selected))
     setSelected([])
     onOpenChange(false)
   }, [onConfirm, selected, onOpenChange])

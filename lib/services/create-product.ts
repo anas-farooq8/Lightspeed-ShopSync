@@ -7,6 +7,7 @@
 
 import { LightspeedAPIClient } from './lightspeed-api'
 import { downloadImage, clearImageCache } from './image-handler'
+import { sortBySortOrder } from '@/lib/utils'
 
 export interface ImageInfo {
   src: string
@@ -137,8 +138,7 @@ export async function createProduct(
     const variantIdMap = new Map<number, number>() // source variant index -> created variant id
     let autoDefaultUsed = false
 
-    // Sort images by sort_order
-    const sortedImages = [...images].sort((a, b) => a.sort_order - b.sort_order)
+    const sortedImages = sortBySortOrder(images)
 
     for (const image of sortedImages) {
       // Find variants that use this image. Match by src (unique per image).

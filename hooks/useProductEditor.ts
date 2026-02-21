@@ -72,15 +72,14 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
   return result
 }
 
-function patchImagesIntoTargetData(
+export function patchImagesIntoTargetData(
   setTargetData: (updater: (prev: Record<string, EditableTargetData>) => Record<string, EditableTargetData>) => void,
   shopTlds: string[],
   images: ProductImage[],
-  srcProduct: ProductData
+  _srcProduct: ProductData
 ): void {
   if (!images.length) return
-  // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
-  const sortedByOrder = [...images].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+  const sortedByOrder = sortImagesForDisplay([...images], null)
   const productImageCandidate = sortedByOrder[0]
   const fallbackProductImage: ImageInfo | null = productImageCandidate
     ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
@@ -389,8 +388,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         )
       }))
 
-      // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
-      const sortedSourceImages = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+      const sortedSourceImages = sortImagesForDisplay([...sourceImages], sourceProduct.product_image?.src ?? null)
       const firstBySortOrder = sortedSourceImages[0]
       const initialProductImage: ImageInfo | null = sourceProduct.product_image
         ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
@@ -1554,7 +1552,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         if (!updated[tld]) return prev
         
         const sourceImages = productImages[sourceProduct.product_id] ?? []
-        const sortedSource = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+        const sortedSource = sortImagesForDisplay([...sourceImages], sourceProduct.product_image?.src ?? null)
         const sourceProductImage: ImageInfo | null = sourceProduct.product_image
           ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
           : sortedSource[0]
@@ -2102,7 +2100,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           )
         }))
         const sourceImages = updated[tld].images
-        const sortedSource = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+        const sortedSource = sortImagesForDisplay([...sourceImages], sourceProduct.product_image?.src ?? null)
         resetProductImage = sourceProduct.product_image
           ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
           : sortedSource[0]

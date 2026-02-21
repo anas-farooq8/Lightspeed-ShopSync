@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { sortBySortOrder } from '@/lib/utils'
 import type { UpdateVariantInfo, UpdateImageInfo } from './update-product'
 
 const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
@@ -56,7 +57,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
   const now = new Date().toISOString()
 
   // Product image: first image in intended order (sort_order 1)
-  const sortedImages = [...intendedImages].sort((a, b) => a.sort_order - b.sort_order)
+  const sortedImages = sortBySortOrder(intendedImages)
   const productImage = sortedImages[0]
     ? { src: sortedImages[0].src, thumb: sortedImages[0].thumb, title: sortedImages[0].title }
     : intendedVariants[0]?.image

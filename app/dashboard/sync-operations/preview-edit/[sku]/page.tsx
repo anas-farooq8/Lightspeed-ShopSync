@@ -19,7 +19,7 @@ import { SourcePanel } from '@/components/sync-operations/product-display/Source
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
 import { useProductEditor } from '@/hooks/useProductEditor'
-import { getVariantKey } from '@/lib/utils'
+import { getVariantKey, sortBySortOrder } from '@/lib/utils'
 import type { ProductImage } from '@/types/product'
 
 export default function PreviewEditPage() {
@@ -166,9 +166,9 @@ export default function PreviewEditPage() {
 
     try {
       const activeVariants = data.variants.filter(v => !v.deleted)
-      const intendedImages = data.images
-        .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
-        .sort((a, b) => a.sort_order - b.sort_order)
+      const intendedImages = sortBySortOrder(
+        data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
+      )
       const updateProductData = {
         visibility: data.visibility,
         content_by_language: data.content_by_language,
@@ -607,21 +607,17 @@ export default function PreviewEditPage() {
               identifier={{ label: 'Preview Edit - SKU', value: sku }}
               targetTabs={{ tlds: sortedTargetShops, activeTab: activeTargetTld }}
             />
-
             <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
-              <div>
-                <SourcePanel
-                  product={sourceProduct}
-                  languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
-                  hasDuplicates={hasSourceDuplicates}
-                  allProducts={details.source}
-                  selectedProductId={selectedSourceProductId}
-                  onProductSelect={handleSourceProductSelect}
-                  sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-                  sourceSwitching={sourceSwitching}
-                />
-              </div>
-
+              <SourcePanel
+                product={sourceProduct}
+                languages={details.shops[sourceProduct.shop_tld]?.languages ?? []}
+                hasDuplicates={hasSourceDuplicates}
+                allProducts={details.source}
+                selectedProductId={selectedSourceProductId}
+                onProductSelect={handleSourceProductSelect}
+                sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+                sourceSwitching={sourceSwitching}
+              />
               {sortedTargetShops.map(tld => (
                 <TabsContent key={tld} value={tld} className="mt-0">
                   {renderTargetPanel(tld)}
@@ -632,10 +628,7 @@ export default function PreviewEditPage() {
         </Tabs>
       ) : (
         <div className="w-full p-4 sm:p-6">
-          <ProductHeader
-            onBack={handleBack}
-            identifier={{ label: 'Preview Edit - SKU', value: sku }}
-          />
+          <ProductHeader onBack={handleBack} identifier={{ label: 'Preview Edit - SKU', value: sku }} />
           <div className="grid gap-4 sm:gap-6 min-w-0 grid-cols-1 lg:grid-cols-2">
             <SourcePanel
               product={sourceProduct}

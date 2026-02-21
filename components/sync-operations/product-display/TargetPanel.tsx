@@ -9,7 +9,7 @@ import { EditableLanguageContentTabs } from '@/components/sync-operations/produc
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, isSameImageInfo, getImageUrl, sortImagesForDisplay } from '@/lib/utils'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl, sortImagesForDisplay, sortBySortOrder } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 function EditModeImagesSection({
@@ -33,9 +33,9 @@ function EditModeImagesSection({
 
   const rawOriginal = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
   const originalImages = sortImagesForDisplay(rawOriginal, productImageSrc)
-  const addedImages = images
-    .filter((img: ProductImageMeta & { addedFromSource?: boolean }) => img.addedFromSource)
-    .sort((a, b) => (a.sort_order ?? a.sortOrder ?? 0) - (b.sort_order ?? b.sortOrder ?? 0))
+  const addedImages = sortBySortOrder(
+    images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => img.addedFromSource)
+  )
 
   const gridClass = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3"
 

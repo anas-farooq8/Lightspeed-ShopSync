@@ -118,6 +118,11 @@ export function getDisplayProductImage(
   return match ? { src: match.src, thumb: match.thumb, title: match.title } : null
 }
 
+/** Sort by sort_order (or sortOrder) ascending. Use for variants, images, or any item with sort_order. */
+export function sortBySortOrder<T extends { sort_order?: number; sortOrder?: number }>(items: T[]): T[] {
+  return [...items].sort((a, b) => (a.sort_order ?? a.sortOrder ?? 999) - (b.sort_order ?? b.sortOrder ?? 999))
+}
+
 /**
  * Sort images for display: product image (matching productImageSrc) first, then by sortOrder.
  * When multiple have sortOrder=1, the one matching productImageSrc is shown first.
@@ -127,7 +132,7 @@ export function sortImagesForDisplay<T extends ImageWithSortOrder>(
   productImageSrc?: string | null
 ): T[] {
   if (!images.length) return []
-  const sorted = [...images].sort((a, b) => (a.sortOrder ?? a.sort_order ?? 999) - (b.sortOrder ?? b.sort_order ?? 999))
+  const sorted = sortBySortOrder(images)
   if (!productImageSrc) return sorted
   const matchIdx = sorted.findIndex((img) => (img.src ?? '') === productImageSrc)
   if (matchIdx <= 0) return sorted
