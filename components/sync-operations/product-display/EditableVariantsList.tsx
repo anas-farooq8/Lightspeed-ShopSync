@@ -90,6 +90,8 @@ export function EditableVariantsList({
   const renderVariant = (variant: EditableVariant, idx: number, isDeleted: boolean = false) => {
     const isChanged = dirtyVariants.has(getVariantKey(variant))
     const variantImageUrl = variant.image?.src || variant.image?.thumb
+    const isImageRemoved = removedImageSrcs && variantImageUrl && removedImageSrcs.has(variant.image?.src ?? '')
+    const displayImageUrl = isImageRemoved ? null : variantImageUrl
     const sourceVariant = findSourceVariantBySku(variant.sku)
     
     // Compare against original values
@@ -145,8 +147,8 @@ export function EditableVariantsList({
               !isDeleted && "cursor-pointer hover:border-primary"
             )}
           >
-            {variantImageUrl ? (
-              <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
+            {displayImageUrl ? (
+              <img src={displayImageUrl} alt="" className="w-full h-full object-cover" />
             ) : (
               <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
             )}

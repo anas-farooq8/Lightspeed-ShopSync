@@ -46,7 +46,7 @@ export interface CreateProductInput {
   images: ImageInfo[] // ordered product images
 }
 
-/** Product image for DB: { src, thumb, title } from Lightspeed API response */
+/** Product/variant image for DB: { src, thumb, title } from Lightspeed API response */
 export type ProductImageForDb = { src: string; thumb?: string; title?: string } | null
 
 export interface CreateProductResult {
@@ -57,6 +57,8 @@ export interface CreateProductResult {
   createdVariantsForDb?: Array<{ variantId: number; sku: string; index: number }>
   /** First image created (product or variant) - use for product.image in DB */
   productImageForDb?: ProductImageForDb
+  /** Variant images from Lightspeed API - index -> { src, thumb, title } */
+  variantImagesForDb?: Record<number, { src: string; thumb?: string; title?: string }>
   error?: string
   details?: any
 }
@@ -71,6 +73,14 @@ function sanitizeVariantTitle(title: string | undefined | null, sku: string): st
     return trimmed
   }
   return sku || 'Variant'
+}
+
+/** Extract { src, thumb, title } from API response. Lightspeed can return image: false or image: { src, thumb, title }. */
+function toImageForDb(res: unknown): { src: string; thumb?: string; title?: string } | null {
+  if (res === null || res === undefined || res === false) return null
+  if (typeof res !== 'object' || !('src' in res) || typeof (res as { src?: unknown }).src !== 'string') return null
+  const obj = res as { src: string; thumb?: string; title?: string }
+  return { src: obj.src, thumb: obj.thumb, title: obj.title }
 }
 
 /**
@@ -142,8 +152,9 @@ export async function createProduct(
     const createdVariants = new Set<number>()
     const variantIdMap = new Map<number, number>() // source variant index -> created variant id
     let autoDefaultUsed = false
-    /** First image created (product or variant) - store for product.image in DB */
+    /** Product image and variant images - filled from fetch after creation */
     let productImageForDb: ProductImageForDb = null
+    const variantImagesForDb: Record<number, { src: string; thumb?: string; title?: string }> = {}
 
     const sortedImages = sortBySortOrder(images)
     console.log(`[CREATE] Sorted images (first created = product image):`, sortedImages.map((img, i) => `#${i + 1} sort_order=${img.sort_order} "${img.title}"`).join(', '))
@@ -192,12 +203,6 @@ export async function createProduct(
                 }
               }
             }, defaultLanguage)
-            if (!productImageForDb) {
-              const img = updateRes.variant.image
-              productImageForDb = (img?.src ? { src: img.src, thumb: img.thumb, title: img.title } : { src: image.src, thumb: image.thumb, title: image.title })
-              console.log(`[CREATE] [PRODUCT_IMAGE] First created: variant update (default) →`, JSON.stringify(productImageForDb))
-            }
-            
             variantIdMap.set(variantIndex, autoDefaultVariantId)
             createdVariants.add(variantIndex)
             autoDefaultUsed = true
@@ -220,12 +225,6 @@ export async function createProduct(
                 }
               }
             }, defaultLanguage)
-            if (!productImageForDb) {
-              const img = createResponse.variant.image
-              productImageForDb = (img?.src ? { src: img.src, thumb: img.thumb, title: img.title } : { src: image.src, thumb: image.thumb, title: image.title })
-              console.log(`[CREATE] [PRODUCT_IMAGE] First created: variant create (${variant.sku}) →`, JSON.stringify(productImageForDb))
-            }
-            
             const newVariantId = createResponse.variant.id
             variantIdMap.set(variantIndex, newVariantId)
             createdVariants.add(variantIndex)
@@ -245,11 +244,6 @@ export async function createProduct(
             filename: (image.title?.trim() || 'image') + '.' + imageData.extension
           }
         }, defaultLanguage)
-        if (!productImageForDb) {
-          const img = createImgRes.productImage
-          productImageForDb = (img?.src ? { src: img.src, thumb: img.thumb, title: img.title } : { src: image.src, thumb: image.thumb, title: image.title })
-          console.log(`[CREATE] [PRODUCT_IMAGE] First created: product image →`, JSON.stringify(productImageForDb))
-        }
         console.log(`[STEP 4] ✓ Uploaded product image`)
       }
     }
@@ -314,11 +308,6 @@ export async function createProduct(
     }
 
     // ============================================================
-    // STEP 6: (Optional) Normalize product image ordering
-    // ============================================================
-    console.log('[STEP 6] Skipping image order normalization (display uses sortOrder=1 from images)')
-
-    // ============================================================
     // MULTI-LANGUAGE: Update product and variants for additional languages
     // ============================================================
     const additionalLanguages = targetLanguages.filter(lang => lang !== defaultLanguage)
@@ -376,10 +365,57 @@ export async function createProduct(
     // Clear image cache
     clearImageCache()
 
+    // ============================================================
+    // FETCH: Get product image and variant images from target
+    // (Create variant returns image: false - we need to fetch)
+    // ============================================================
+    const [productImagesRes, variantsRes] = await Promise.all([
+      targetClient.getProductImages(productId, defaultLanguage),
+      targetClient.getVariants(productId, defaultLanguage),
+    ])
+
+    // Variant images: from fetched variants by variantId (compute first - needed for product image)
+    const fetchedVariants = variantsRes.variants ?? []
+    for (const [index, variantId] of variantIdMap) {
+      const fv = fetchedVariants.find((v) => v.id === variantId)
+      const img = toImageForDb(fv?.image)
+      if (img) {
+        variantImagesForDb[index] = img
+      }
+    }
+
+    // Product image: our first image = sortedImages[0]. When both product-only and variant
+    // image get sortOrder=1, title matching can fail. Prefer variant image when first
+    // image is variant-attached (we have it from getVariants). Otherwise use product images.
+    const firstImage = sortedImages[0]
+    const variantsUsingFirst = firstImage
+      ? variants.filter((v) => v.image?.src === firstImage.src).sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1))
+      : []
+    if (variantsUsingFirst.length > 0) {
+      const firstVariantIndex = variants.indexOf(variantsUsingFirst[0])
+      productImageForDb = variantImagesForDb[firstVariantIndex] ?? null
+      if (productImageForDb) {
+        console.log(`[DEBUG] productImageForDb from variant (${variantsUsingFirst[0].sku}) - avoids sortOrder=1 ambiguity`)
+      }
+    }
+    if (!productImageForDb) {
+      const firstImageTitle = (firstImage?.title ?? '').trim().toLowerCase()
+      const sortOrder1Images = productImagesRes.filter((img) => img.sortOrder === 1)
+      const productImg =
+        sortOrder1Images.find((img) => (img.title ?? '').trim().toLowerCase() === firstImageTitle) ??
+        sortOrder1Images[0] ??
+        productImagesRes[0]
+      productImageForDb = toImageForDb(productImg)
+      if (productImagesRes.length > 0) {
+        console.log(`[DEBUG] productImageForDb from product images: sortOrder=1 count=${sortOrder1Images.length}, title="${firstImageTitle}", matched:`, productImg ? 'yes' : 'no')
+      }
+    }
+
     console.log('[CREATE] ✓✓✓ Product creation complete!')
     console.log(`[CREATE] Product ID: ${productId}`)
     console.log(`[CREATE] Variants created: ${createdVariants.size}`)
-    console.log(`[CREATE] [PRODUCT_IMAGE] Final for DB:`, productImageForDb ? JSON.stringify(productImageForDb) : 'null')
+    console.log(`[DEBUG] productImageForDb final:`, productImageForDb ? JSON.stringify(productImageForDb) : 'null')
+    console.log(`[DEBUG] variantImagesForDb:`, JSON.stringify(variantImagesForDb))
 
     // Return createdVariants with index for DB sync mapping
     const createdVariantsList = Array.from(variantIdMap.entries()).map(([index, variantId]) => ({
@@ -394,6 +430,7 @@ export async function createProduct(
       createdVariants: createdVariantsList.map(({ variantId, sku }) => ({ variantId, sku })),
       createdVariantsForDb: createdVariantsList,
       productImageForDb,
+      variantImagesForDb: Object.keys(variantImagesForDb).length > 0 ? variantImagesForDb : undefined,
     }
   } catch (error) {
     console.error('[CREATE] ✗✗✗ Product creation failed:', error)

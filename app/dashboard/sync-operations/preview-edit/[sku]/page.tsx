@@ -363,14 +363,18 @@ export default function PreviewEditPage() {
                 targetProduct.product_id,
                 targetProduct.images_link,
                 firstTarget
-              ).then((targetImages: ProductImage[]) => {
+              )              .then((targetImages: ProductImage[]) => {
                 setTargetData(prev => {
                   const updated = { ...prev }
                   if (updated[firstTarget]) {
+                    const editable = targetImages.map((img, idx) => {
+                      const order = img.sort_order ?? (img as { sortOrder?: number }).sortOrder ?? idx
+                      return { ...img, id: String(img.id ?? idx), src: img.src ?? '', sort_order: order, originalSortOrder: order }
+                    })
                     updated[firstTarget] = {
                       ...updated[firstTarget],
-                      images: targetImages,
-                      originalImageOrder: targetImages.map((_, idx) => idx),
+                      images: editable,
+                      originalImageOrder: editable.map((_, idx) => idx),
                     }
                   }
                   return updated
@@ -424,16 +428,21 @@ export default function PreviewEditPage() {
       setTargetData(prev => {
         const updated = { ...prev }
         if (updated[activeTargetTld]) {
-          updated[activeTargetTld] = {
-            ...updated[activeTargetTld],
-            images: cached.map((img, idx) => ({
+          const editable = cached.map((img, idx) => {
+            const order = Number(img.sortOrder ?? idx)
+            return {
               id: String(img.id ?? `img-${idx}`),
               src: img.src ?? '',
               thumb: img.thumb,
               title: img.title,
-              sort_order: Number(img.sortOrder ?? idx)
-            })),
-            originalImageOrder: cached.map((_, idx) => idx),
+              sort_order: order,
+              originalSortOrder: order,
+            }
+          })
+          updated[activeTargetTld] = {
+            ...updated[activeTargetTld],
+            images: editable,
+            originalImageOrder: editable.map((_, idx) => idx),
           }
         }
         return updated
@@ -449,10 +458,20 @@ export default function PreviewEditPage() {
       setTargetData(prev => {
         const updated = { ...prev }
         if (updated[activeTargetTld]) {
+          const editable = targetImages.map((img, idx) => {
+            const order = img.sort_order ?? (img as { sortOrder?: number }).sortOrder ?? idx
+            return {
+              ...img,
+              id: String(img.id ?? idx),
+              src: img.src ?? '',
+              sort_order: order,
+              originalSortOrder: order,
+            }
+          })
           updated[activeTargetTld] = {
             ...updated[activeTargetTld],
-            images: targetImages,
-            originalImageOrder: targetImages.map((_, idx) => idx),
+            images: editable,
+            originalImageOrder: editable.map((_, idx) => idx),
           }
         }
         return updated

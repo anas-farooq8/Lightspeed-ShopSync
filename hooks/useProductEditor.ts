@@ -74,6 +74,11 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
   return result
 }
 
+function toEditableImage(img: { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }, idx: number) {
+  const order = img.sort_order ?? img.sortOrder ?? idx
+  return { ...img, id: String(img.id ?? idx), src: img.src ?? '', sort_order: order, originalSortOrder: order }
+}
+
 export function patchImagesIntoTargetData(
   setTargetData: (updater: (prev: Record<string, EditableTargetData>) => Record<string, EditableTargetData>) => void,
   shopTlds: string[],
@@ -83,7 +88,8 @@ export function patchImagesIntoTargetData(
   if (!images.length) return
   const productOrSrc = srcProduct?.product_image ? { product_image: srcProduct.product_image } : null
   const sortedByOrder = sortImagesForDisplay([...images], productOrSrc)
-  const productImageCandidate = sortedByOrder[0]
+  const editableImages = sortedByOrder.map((img, idx) => toEditableImage(img, idx))
+  const productImageCandidate = editableImages[0]
   const fallbackProductImage: ImageInfo | null = productImageCandidate
     ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
     : null
@@ -93,8 +99,8 @@ export function patchImagesIntoTargetData(
       if (!updated[tld]) return
       updated[tld] = {
         ...updated[tld],
-        images: [...sortedByOrder],
-        originalImageOrder: sortedByOrder.map((_, idx) => idx),
+        images: editableImages,
+        originalImageOrder: editableImages.map((_, i) => i),
         productImage: updated[tld].productImage ?? fallbackProductImage,
         originalProductImage: updated[tld].originalProductImage ?? fallbackProductImage,
       }
@@ -400,11 +406,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ? { src: firstBySortOrder.src, thumb: firstBySortOrder.thumb, title: firstBySortOrder.title }
           : null
 
+      const editableSourceImages = sortedSourceImages.map((img, idx) => toEditableImage(img, idx))
       newTargetData[tld] = {
         content_by_language,
         variants,
-        images: [...sortedSourceImages],
-        originalImageOrder: sortedSourceImages.map((_, idx) => idx),
+        images: editableSourceImages,
+        originalImageOrder: editableSourceImages.map((_, idx) => idx),
         removedImageSrcs: new Set(),
         dirty: false,
         dirtyFields: new Set(),
@@ -1433,43 +1440,28 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!updated[tld]) return prev
 
       const img = updated[tld].images.find(i => (i.src ?? '') === imageSrc)
-      const isAddedFromSource = !!(img as { addedFromSource?: boolean })?.addedFromSource
+      const deletedImageInfo = img ? { src: img.src, thumb: img.thumb, title: img.title } : { src: imageSrc, thumb: undefined as string | undefined, title: undefined as string | undefined }
+
+      const newRemoved = new Set(updated[tld].removedImageSrcs)
+      if (img?.src) newRemoved.add(img.src)
+      else newRemoved.add(imageSrc)
 
       const newVariants = updated[tld].variants.map(v => {
-        if ((v.image?.src ?? '') === imageSrc) {
-          return { ...v, image: null as { src?: string; thumb?: string; title?: string } | null }
-        }
-        return v
+        const vSrc = v.image?.src ?? ''
+        const matchesDeleted = vSrc && newRemoved.has(vSrc)
+        return matchesDeleted ? { ...v, image: null as { src?: string; thumb?: string; title?: string } | null } : v
       })
-
-      let newImages = updated[tld].images
-      let newRemoved = new Set(updated[tld].removedImageSrcs)
-
-      if (isAddedFromSource) {
-        newImages = updated[tld].images.filter(i => (i.src ?? '') !== imageSrc)
-      } else {
-        newRemoved.add(imageSrc)
-      }
-
-      const remainingImages = isAddedFromSource
-        ? newImages
-        : updated[tld].images.filter(i => !newRemoved.has(i.src ?? ''))
-      const newProductImage =
-        (updated[tld].productImage?.src ?? '') === imageSrc
-          ? remainingImages[0]
-            ? { src: remainingImages[0].src, thumb: remainingImages[0].thumb, title: remainingImages[0].title }
-            : null
-          : updated[tld].productImage
-
+      const remainingImages = updated[tld].images.filter(i => !newRemoved.has(i.src ?? ''))
+      const newProductImage = isSameImageInfo(updated[tld].productImage ?? null, deletedImageInfo)
+        ? (remainingImages[0] ? { src: remainingImages[0].src, thumb: remainingImages[0].thumb, title: remainingImages[0].title } : null)
+        : updated[tld].productImage
       updated[tld] = {
         ...updated[tld],
-        images: newImages,
         removedImageSrcs: newRemoved,
         variants: newVariants,
         productImage: newProductImage,
         dirty: true,
       }
-
       const anyDirty = Object.values(updated).some(
         td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
@@ -1479,33 +1471,32 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   }, [])
 
   const restoreImageToTarget = useCallback((tld: string, imageSrc: string) => {
-    const sourceImgs = productImages[selectedSourceProductId ?? 0]
+    const sourceImgs = productImages[selectedSourceProductId ?? 0] ?? []
     const srcProduct = details?.source?.find(p => p.product_id === selectedSourceProductId)
     const productOrSrc = srcProduct?.product_image ? { product_image: srcProduct.product_image } : null
+    const sourceSrcSet = new Set(sourceImgs.map((i: { src?: string }) => i.src ?? '').filter(Boolean))
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
       const newRemoved = new Set(updated[tld].removedImageSrcs)
       newRemoved.delete(imageSrc)
       const remainingImages = updated[tld].images.filter(i => !newRemoved.has(i.src ?? ''))
-      // Reset sort_order to match source panel order (so display follows source: Y,R,B)
-      let newImages = updated[tld].images
-      if (sourceImgs?.length) {
-        const sourceOrder = sortImagesForDisplay([...sourceImgs], productOrSrc)
-        const srcToOrder = new Map<string, number>()
-        sourceOrder.forEach((img, idx) => {
-          const s = img.src ?? ''
-          if (s) srcToOrder.set(s, idx)
-        })
-        newImages = updated[tld].images.map(img => ({
-          ...img,
-          sort_order: srcToOrder.get(img.src ?? '') ?? 999
-        }))
-      }
-      // Product image = first by sort_order (source order) among restored images
+      // Restore sort_order: source images use source order; target images use originalSortOrder
+      const sourceOrder = sourceImgs.length ? sortImagesForDisplay([...sourceImgs], productOrSrc) : []
+      const srcToOrder = new Map<string, number>()
+      sourceOrder.forEach((img, idx) => {
+        const s = img.src ?? ''
+        if (s) srcToOrder.set(s, idx)
+      })
+      const newImages = updated[tld].images.map(img => ({
+        ...img,
+        sort_order: sourceSrcSet.has(img.src ?? '')
+          ? (srcToOrder.get(img.src ?? '') ?? 999)
+          : (img.originalSortOrder ?? img.sort_order ?? 999),
+      }))
       let newProductImage = updated[tld].productImage
       if (remainingImages.length > 0) {
-        const remainingWithOrder = newImages.filter(img => !newRemoved.has(img.src ?? ''))
+        const remainingWithOrder = newImages.filter(i => !newRemoved.has(i.src ?? ''))
         const sorted = sortImagesForDisplay(remainingWithOrder, null)
         const first = sorted[0]
         newProductImage = first ? { src: first.src, thumb: first.thumb, title: first.title } : null
@@ -1531,21 +1522,23 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const updated = { ...prev }
       if (!updated[tld]) return prev
       const currentImages = updated[tld].images
-      const maxSortOrder = currentImages.length > 0
-        ? Math.max(...currentImages.map(img => img.sort_order ?? 0))
-        : -1
-      const newImages: ProductImage[] = imagesToAdd.map((img, idx) => ({
-        id: String(img.id),
-        src: img.src ?? '',
-        thumb: img.thumb,
-        title: img.title,
-        sort_order: maxSortOrder + 1 + idx,
-        addedFromSource: true
-      }))
-      const combined = [...currentImages, ...newImages]
+      const newImages: ProductImage[] = imagesToAdd.map((img) => {
+        const srcOrder = img.sort_order ?? (img as { sortOrder?: number }).sortOrder ?? 999
+        return {
+          id: String(img.id),
+          src: img.src ?? '',
+          thumb: img.thumb,
+          title: img.title,
+          sort_order: srcOrder,
+          originalSortOrder: srcOrder,
+          addedFromSource: true,
+        }
+      })
+      const combined = [...currentImages, ...newImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+      const withCleanOrder = combined.map((img, idx) => ({ ...img, sort_order: idx + 1 }))
       updated[tld] = {
         ...updated[tld],
-        images: combined,
+        images: withCleanOrder,
         originalImageOrder: updated[tld].originalImageOrder,
         imageOrderChanged: true,
         dirty: true
@@ -1596,18 +1589,21 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       let available = updated[tld].images ?? []
       let nextIdx = available.findIndex(i => (i.src ?? '') === sourceProductImage.src)
 
-      // In edit mode, if source image is not in target, add it
-      if (mode === 'edit' && nextIdx < 0) {
+      // If image is not in target, add it (same for create and edit)
+      if (nextIdx < 0) {
         const sourceImg = sourceImages.find(i => (i.src ?? '') === sourceProductImage.src) ?? sortedSource.find(i => (i.src ?? '') === sourceProductImage.src)
         if (sourceImg) {
+          const srcOrder = (sourceImg as { sort_order?: number; sortOrder?: number }).sort_order ?? (sourceImg as { sortOrder?: number }).sortOrder ?? 999
           const maxSortOrder = available.length > 0 ? Math.max(...available.map(img => img.sort_order ?? 0)) : -1
+          const order = maxSortOrder + 1
           const newImg: ProductImage = {
             id: String(sourceImg.id),
             src: sourceImg.src ?? '',
             thumb: sourceImg.thumb,
             title: sourceImg.title,
-            sort_order: maxSortOrder + 1,
-            addedFromSource: true
+            sort_order: order,
+            originalSortOrder: order,
+            addedFromSource: true,
           }
           available = [...available, newImg]
           nextIdx = available.length - 1
@@ -1644,7 +1640,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         images: newImages,
         removedImageSrcs: newRemoved,
         productImage: sourceProductImage,
-        imageOrderChanged: mode === 'create' ? imageOrderChanged : true,
+        imageOrderChanged: imageOrderChanged,
         dirty: true
       }
       setIsDirty(true)

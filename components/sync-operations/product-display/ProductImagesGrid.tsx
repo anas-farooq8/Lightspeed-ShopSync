@@ -219,10 +219,10 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
                   </div>
                 )}
               </button>
-              {onRemoveImage && src && (
+              {onRemoveImage && img.src && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onRemoveImage(src) }}
+                  onClick={(e) => { e.stopPropagation(); onRemoveImage(img.src as string) }}
                   className="absolute top-1 right-1 w-7 h-7 rounded-md bg-destructive/90 hover:bg-destructive text-destructive-foreground flex items-center justify-center cursor-pointer transition-colors"
                   title="Remove image"
                 >

@@ -165,6 +165,7 @@ export async function POST(request: NextRequest) {
           createdVariantsForDb: result.createdVariantsForDb,
           images: sourceProductData.images,
           productImageForDb: result.productImageForDb,
+          variantImagesForDb: result.variantImagesForDb,
         })
         console.log('[API] ✓ Product synced to database')
       } catch (dbError) {

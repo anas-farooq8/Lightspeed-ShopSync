@@ -295,6 +295,8 @@ export async function PUT(request: NextRequest) {
         createdVariantsForDb: result.createdVariantsForDb ?? [],
         deletedVariantIds: result.deletedVariants ?? [],
         updatedVariants: updatedVariantsList as Array<{ variantId: number; variant: import('@/lib/services/update-product').UpdateVariantInfo }>,
+        updatedVariantImages: result.updatedVariantImages,
+        createdVariantImages: result.createdVariantImages,
       })
       console.log('[API] ✓ Product update synced to database')
     } catch (dbError) {

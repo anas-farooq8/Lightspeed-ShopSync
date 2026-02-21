@@ -27,6 +27,8 @@ interface SyncCreatedProductInput {
   images: ImageInfo[]
   /** First image created (product or variant) from Lightspeed API - use for product.image */
   productImageForDb?: ProductImageForDb
+  /** Variant images from Lightspeed API - index -> { src, thumb, title } */
+  variantImagesForDb?: Record<number, { src: string; thumb?: string; title?: string }>
 }
 
 /**
@@ -44,6 +46,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     createdVariantsForDb,
     images,
     productImageForDb: productImageFromApi,
+    variantImagesForDb,
   } = input
 
   const now = new Date().toISOString()
@@ -51,7 +54,8 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
   // Product image: use first created image from Lightspeed API response (product or variant).
   // If not provided, use null (no fallback).
   const productImageForProduct = productImageFromApi ?? null
-  console.log('[DB] Product image for sync:', productImageForProduct ? JSON.stringify(productImageForProduct) : 'null')
+  console.log('[DEBUG] sync-created-product: productImageFromApi:', productImageFromApi ? JSON.stringify(productImageFromApi) : 'null')
+  console.log('[DEBUG] sync-created-product: variantImagesForDb keys:', variantImagesForDb ? Object.keys(variantImagesForDb) : 'none')
 
   // images_link: Lightspeed product images API URL. Set when product has images, else null.
   const hasImages = images.length > 0 || variants.some(v => v.image)
@@ -98,6 +102,10 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     const variant = variants[index]
     if (!variant) continue
 
+    // Use variant image from Lightspeed API response only. No fallback to source - use null when no response.
+    const variantImage = variantImagesForDb?.[index] ?? null
+    console.log(`[DEBUG] sync variant index=${index} sku=${variant.sku}: using ${variantImagesForDb?.[index] ? 'API response' : 'null (no fallback)'}`)
+
     const { error: variantError } = await supabase.from('variants').insert({
       shop_id: shopId,
       lightspeed_variant_id: variantId,
@@ -106,7 +114,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
       is_default: variant.is_default,
       sort_order: variant.sort_order ?? index,
       price_excl: variant.price_excl,
-      image: variant.image,
+      image: variantImage,
     })
 
     if (variantError) {

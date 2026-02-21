@@ -474,16 +474,18 @@ function DeletedImagesSection({
                   </div>
                 )}
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onRestore(src ?? '')}
-                className="absolute top-1 right-1 w-7 h-7 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center cursor-pointer p-0"
-                title="Restore image"
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-              </Button>
+              {img.src && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRestore(img.src!)}
+                  className="absolute top-1 right-1 w-7 h-7 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center cursor-pointer p-0"
+                  title="Restore image"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           )
         })}

@@ -7,7 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sortBySortOrder } from '@/lib/utils'
-import type { UpdateVariantInfo, UpdateImageInfo } from './update-product'
+import type { UpdateVariantInfo, UpdateImageInfo, VariantImageForDb } from './update-product'
 
 const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
 
@@ -29,6 +29,10 @@ interface SyncUpdatedProductInput {
   createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }>
   deletedVariantIds: number[]
   updatedVariants: Array<{ variantId: number; variant: UpdateVariantInfo }>
+  /** Variant images from API - variantId -> image (for updated variants) */
+  updatedVariantImages?: Record<number, VariantImageForDb>
+  /** Variant images from API - index -> image (for created variants) */
+  createdVariantImages?: Record<number, VariantImageForDb>
 }
 
 /**
@@ -52,6 +56,8 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
     createdVariantsForDb,
     deletedVariantIds,
     updatedVariants,
+    updatedVariantImages,
+    createdVariantImages,
   } = input
 
   const now = new Date().toISOString()
@@ -122,6 +128,8 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
 
   // 4. Update changed variants
   for (const { variantId, variant } of updatedVariants) {
+    const variantImage = updatedVariantImages?.[variantId] ?? variant.image
+    console.log(`[DEBUG] sync-updated variant ${variantId} (${variant.sku}): using ${updatedVariantImages?.[variantId] ? 'API response' : 'intended'}`)
     const { error: variantError } = await supabase
       .from('variants')
       .update({
@@ -129,7 +137,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
         is_default: variant.is_default,
         sort_order: variant.sort_order,
         price_excl: variant.price_excl,
-        image: variant.image,
+        image: variantImage,
       })
       .eq('shop_id', shopId)
       .eq('lightspeed_variant_id', variantId)
@@ -165,6 +173,8 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
     const variant = intendedVariants[index]
     if (!variant) continue
 
+    const variantImage = createdVariantImages?.[index] ?? null
+    console.log(`[DEBUG] sync-updated new variant index=${index} (${variant.sku}): using ${createdVariantImages?.[index] ? 'API response' : 'null (no fallback)'}`)
     const { error: variantError } = await supabase.from('variants').insert({
       shop_id: shopId,
       lightspeed_variant_id: variantId,
@@ -173,7 +183,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
       is_default: variant.is_default,
       sort_order: variant.sort_order,
       price_excl: variant.price_excl,
-      image: variant.image,
+      image: variantImage,
     })
 
     if (variantError) {

@@ -100,6 +100,8 @@ export interface ProductImage {
   id: string
   /** True when image was added from source (edit mode) */
   addedFromSource?: boolean
+  /** Original sort_order when loaded (for restore in edit mode) */
+  originalSortOrder?: number
 }
 
 // Editable types for preview-create page
