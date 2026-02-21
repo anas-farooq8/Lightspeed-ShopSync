@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2, SquarePlus } from 'lucide-react'
+import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2, SquarePlus, ArrowDownToLine } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getVariantKey } from '@/lib/utils'
 import type { EditableVariant, ProductData } from '@/types/product'
@@ -10,6 +10,7 @@ import type { EditableVariant, ProductData } from '@/types/product'
 interface EditableVariantsListProps {
   mode?: 'create' | 'edit'
   sourceProduct?: ProductData
+  sourceDefaultLang?: string
   variants: EditableVariant[]
   activeLanguage: string
   dirtyVariants: Set<string | number>
@@ -24,11 +25,14 @@ interface EditableVariantsListProps {
   onSetDefaultVariant: (idx: number) => void
   onRestoreDefaultVariant: () => void
   onAddVariantsFromSource?: () => void
+  onResetVariantImage?: (idx: number) => void
+  removedImageSrcs?: Set<string>
 }
 
 export function EditableVariantsList({
   mode = 'create',
   sourceProduct,
+  sourceDefaultLang: sourceDefaultLangProp,
   variants,
   activeLanguage,
   dirtyVariants,
@@ -42,7 +46,9 @@ export function EditableVariantsList({
   onSelectVariantImage,
   onSetDefaultVariant,
   onRestoreDefaultVariant,
-  onAddVariantsFromSource
+  onAddVariantsFromSource,
+  onResetVariantImage,
+  removedImageSrcs,
 }: EditableVariantsListProps) {
   
   // Split variants into active and deleted
@@ -75,8 +81,8 @@ export function EditableVariantsList({
       onUpdateVariant(idx, 'sku', sourceVariant.sku || '')
     } else if (field === 'price_excl') {
       onUpdateVariant(idx, 'price_excl', sourceVariant.price_excl)
-    } else if (field === 'title') {
-      const sourceDefaultLang = 'nl'
+    } else     if (field === 'title') {
+      const sourceDefaultLang = sourceDefaultLangProp || 'nl'
       const sourceTitle = sourceVariant.content_by_language?.[sourceDefaultLang]?.title || ''
       onUpdateVariantTitle(idx, activeLanguage, sourceTitle)
     }
@@ -90,7 +96,12 @@ export function EditableVariantsList({
     const priceDifferent = variant.price_excl !== variant.originalPrice
     const titleDifferent = variant.content_by_language?.[activeLanguage]?.title !== variant.originalTitle?.[activeLanguage]
     const skuDifferent = variant.sku !== variant.originalSku
-    
+    const imageDifferent = (variant.image?.src ?? '') !== (variant.originalImage?.src ?? '')
+    const originalImageDeleted = !!(
+      variant.originalImage?.src &&
+      removedImageSrcs?.has(variant.originalImage.src)
+    )
+
     // Check if default status has changed
     const defaultChanged = variant.originalIsDefault !== undefined && variant.is_default !== variant.originalIsDefault
     
@@ -108,30 +119,52 @@ export function EditableVariantsList({
       >
         {isChanged && !isDeleted && !defaultChanged && (
           <Button
-            variant="ghost"
+            variant={mode === 'create' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => onResetVariant(idx)}
-            className="h-7 w-7 p-0 cursor-pointer shrink-0 mt-0.5"
-            title="Reset variant to original values"
+            className={mode === 'create' ? 'h-7 px-2 text-xs cursor-pointer shrink-0 mt-0.5 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-7 w-7 p-0 cursor-pointer shrink-0 mt-0.5'}
+            title={mode === 'create' ? 'Pick from source' : 'Reset variant to original values'}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            {mode === 'create' ? (
+              <><ArrowDownToLine className="h-3.5 w-3.5" /></>
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" />
+            )}
           </Button>
         )}
-        <button
-          type="button"
-          onClick={() => !isDeleted && onSelectVariantImage(idx)}
-          disabled={isDeleted}
-          className={cn(
-            "w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-lg overflow-hidden bg-muted flex items-center justify-center border-2 border-dashed border-border transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
-            !isDeleted && "cursor-pointer hover:border-primary"
+        <div className="shrink-0 flex flex-col items-center gap-1">
+          <button
+            type="button"
+            onClick={() => !isDeleted && onSelectVariantImage(idx)}
+            disabled={isDeleted}
+            className={cn(
+              "w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted flex items-center justify-center border-2 border-dashed border-border transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+              !isDeleted && "cursor-pointer hover:border-primary"
+            )}
+          >
+            {variantImageUrl ? (
+              <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
+            )}
+          </button>
+          {imageDifferent && variant.originalImage && !isDeleted && onResetVariantImage && (
+            <Button
+              variant={mode === 'create' ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => onResetVariantImage(idx)}
+              disabled={originalImageDeleted}
+              className={mode === 'create' ? 'h-6 px-1.5 text-[10px] cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-6 px-1.5 text-[10px] cursor-pointer'}
+              title={originalImageDeleted ? 'Original image was removed' : mode === 'create' ? 'Pick from source' : 'Reset variant image'}
+            >
+              {mode === 'create' ? (
+                <><ArrowDownToLine className="h-3 w-3 mr-0.5" /> Pick</>
+              ) : (
+                <><RotateCcw className="h-3 w-3 mr-0.5" /> Reset image</>
+              )}
+            </Button>
           )}
-        >
-          {variantImageUrl ? (
-            <img src={variantImageUrl} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
-          )}
-        </button>
+        </div>
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex-1 min-w-0 space-y-1">
@@ -185,13 +218,13 @@ export function EditableVariantsList({
               </div>
               {priceDifferent && !isDeleted && (
                 <Button
-                  variant="ghost"
+                  variant={mode === 'create' ? 'outline' : 'ghost'}
                   size="sm"
-                  onClick={() => onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
-                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
-                  title="Reset price to original value"
+                  onClick={() => mode === 'create' ? pickFromSourceVariant(idx, 'price_excl') : onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
+                  className={mode === 'create' ? 'h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-8 px-2 text-xs cursor-pointer shrink-0'}
+                  title={mode === 'create' ? 'Pick from source' : 'Reset price to original value'}
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  {mode === 'create' ? <ArrowDownToLine className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
                 </Button>
               )}
             </div>
@@ -212,13 +245,13 @@ export function EditableVariantsList({
               </div>
               {titleDifferent && !isDeleted && (
                 <Button
-                  variant="ghost"
+                  variant={mode === 'create' ? 'outline' : 'ghost'}
                   size="sm"
-                  onClick={() => onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
-                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
-                  title="Reset title to original value"
+                  onClick={() => mode === 'create' ? pickFromSourceVariant(idx, 'title') : onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
+                  className={mode === 'create' ? 'h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-8 px-2 text-xs cursor-pointer shrink-0'}
+                  title={mode === 'create' ? 'Pick from source' : 'Reset title to original value'}
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  {mode === 'create' ? <ArrowDownToLine className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
                 </Button>
               )}
             </div>
@@ -247,6 +280,11 @@ export function EditableVariantsList({
             {!isNewVariant && priceDifferent && (
               <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
                 Price is different
+              </Badge>
+            )}
+            {!isNewVariant && imageDifferent && (
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 text-xs px-2 py-0.5">
+                Image is different
               </Badge>
             )}
             {isDeleted && (

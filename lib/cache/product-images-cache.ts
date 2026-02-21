@@ -85,12 +85,7 @@ export async function fetchAndCacheImages(
       if (!res.ok) return []
 
       const raw: ProductImage[] = await res.json()
-      const sorted = [...(Array.isArray(raw) ? raw : [])].sort((a, b) => {
-        const oa = a.sortOrder ?? 999
-        const ob = b.sortOrder ?? 999
-        if (oa !== ob) return oa - ob
-        return (a.id ?? 999) - (b.id ?? 999)
-      })
+      const sorted = [...(Array.isArray(raw) ? raw : [])].sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
       setCachedImages(productId, shopTld, sorted)
       return sorted
     } catch {

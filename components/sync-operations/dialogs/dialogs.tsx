@@ -101,6 +101,8 @@ export interface CreateProductConfirmationContent {
   variantCount: number
   imageCount: number
   sku: string
+  /** Edit mode only: list of changes that will be applied */
+  changes?: string[]
 }
 
 export function CreateProductConfirmationDialog({
@@ -151,11 +153,25 @@ export function CreateProductConfirmationDialog({
                           </span>
                           <span className="break-words">{c.shopName}</span>
                         </div>
-                        <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
-                          <li>• {c.variantCount} variant{c.variantCount !== 1 ? 's' : ''}</li>
-                          <li>• {c.imageCount} image{c.imageCount !== 1 ? 's' : ''}</li>
-                          <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{c.sku}</code></li>
-                        </ul>
+                        {isEdit && c.changes && c.changes.length > 0 ? (
+                          <>
+                            <p className="text-xs font-medium text-foreground">Changes:</p>
+                            <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
+                              {c.changes.map((change, i) => (
+                                <li key={i}>• {change}</li>
+                              ))}
+                            </ul>
+                            <p className="text-xs text-muted-foreground">
+                              SKU: <code className="bg-muted px-1 py-0.5 rounded font-mono break-all">{c.sku}</code>
+                            </p>
+                          </>
+                        ) : (
+                          <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
+                            <li>• {c.variantCount} variant{c.variantCount !== 1 ? 's' : ''}</li>
+                            <li>• {c.imageCount} image{c.imageCount !== 1 ? 's' : ''}</li>
+                            <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{c.sku}</code></li>
+                          </ul>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -241,6 +257,13 @@ export function ImageSelectionDialog({
           <DialogTitle className="text-base sm:text-lg break-words">{title}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-4">
+          {images.length === 0 && !showNoImageOption && title === 'Select Product Image' && (
+            <div className="col-span-full text-center py-8 text-muted-foreground text-sm">
+              <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No product images available to select.</p>
+              <p className="text-xs mt-1">Restore deleted images to choose a product image.</p>
+            </div>
+          )}
           {showNoImageOption && (
             <div
               onClick={() => handleSelect(null)}

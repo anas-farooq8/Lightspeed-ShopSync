@@ -107,8 +107,8 @@ export function EditableLanguageContentTabs({
   const canRetranslate = activeLanguage !== sourceDefaultLang && onRetranslateField
   const isSameLanguage = activeLanguage === sourceDefaultLang
   const resetLanguageTooltip = isSameLanguage 
-    ? "Reset all fields to original values"
-    : "Reset all fields to original translated values"
+    ? "Reset all fields to original values for this language"
+    : "Reset all fields to original translated values for this language"
   
   const originBadgeColors: Record<TranslationOrigin, string> = {
     copied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',

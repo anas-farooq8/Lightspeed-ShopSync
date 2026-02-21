@@ -19,6 +19,7 @@ import { SourcePanel } from '@/components/sync-operations/product-display/Source
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
 import { useProductEditor } from '@/hooks/useProductEditor'
+import { getVariantKey } from '@/lib/utils'
 import type { ProductImage } from '@/types/product'
 
 export default function PreviewEditPage() {
@@ -104,6 +105,7 @@ export default function PreviewEditPage() {
     resetField,
     resetLanguage,
     resetVariant,
+    resetVariantImage,
     resetAllVariants,
     resetShop,
     retranslateField,
@@ -127,6 +129,9 @@ export default function PreviewEditPage() {
       alert('No data available for this shop')
       return
     }
+    if (!data.dirty) {
+      return
+    }
     setShowCreateConfirmation(true)
   }, [sourceProduct, details, activeTargetTld, targetData, setShowCreateConfirmation])
 
@@ -137,6 +142,11 @@ export default function PreviewEditPage() {
     const data = targetData[tld]
     
     if (!data) {
+      setShowCreateConfirmation(false)
+      return
+    }
+
+    if (!data.dirty) {
       setShowCreateConfirmation(false)
       return
     }
@@ -156,10 +166,14 @@ export default function PreviewEditPage() {
 
     try {
       const activeVariants = data.variants.filter(v => !v.deleted)
+      const intendedImages = data.images
+        .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
+        .sort((a, b) => a.sort_order - b.sort_order)
       const updateProductData = {
         visibility: data.visibility,
         content_by_language: data.content_by_language,
         variants: activeVariants.map(v => ({
+          variant_id: v.addedFromSource ? null : v.variant_id,
           sku: v.sku || '',
           is_default: v.is_default,
           sort_order: v.sort_order || 0,
@@ -167,9 +181,7 @@ export default function PreviewEditPage() {
           image: v.image,
           content_by_language: v.content_by_language
         })),
-        images: data.images
-          .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
-          .sort((a, b) => a.sort_order - b.sort_order)
+        images: intendedImages
       }
 
       console.log('[UI] Updating product in shop:', tld)
@@ -229,7 +241,7 @@ export default function PreviewEditPage() {
     }
   }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, updateSuccess, navigateBack, sku, setShowCreateConfirmation, setUpdating, setUpdateErrors, setUpdateSuccess])
 
-  // Update confirmation dialog content (counts match what will be updated)
+  // Update confirmation dialog content (changes that will be applied)
   const updateConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
     const tld = activeTargetTld
@@ -238,15 +250,65 @@ export default function PreviewEditPage() {
 
     const shopName = details.shops?.[tld]?.name ?? tld
     const activeVariants = data.variants.filter(v => !v.deleted)
-    const variantCount = activeVariants.length
-    const imageCount = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length
+    const skuVal = activeVariants[0]?.sku || sourceProduct.sku || sku
+
+    const changes: string[] = []
+
+    if (data.visibility !== data.originalVisibility) {
+      changes.push(`Visibility: ${data.originalVisibility} → ${data.visibility}`)
+    }
+
+    if (data.dirtyFields.size > 0) {
+      const fields = new Set<string>()
+      Array.from(data.dirtyFields).forEach(f => {
+        const parts = f.split('.')
+        if (parts.length >= 2) fields.add(parts[1])
+      })
+      const fieldLabels: Record<string, string> = {
+        title: 'Title',
+        fulltitle: 'Full title',
+        description: 'Description',
+        content: 'Content',
+      }
+      const names = Array.from(fields).map(f => fieldLabels[f] || f).filter(Boolean)
+      if (names.length > 0) {
+        changes.push(`Product content: ${names.join(', ')} changed`)
+      }
+    }
+
+    const deletedCount = data.variants.filter(v => v.deleted).length
+    if (deletedCount > 0) {
+      changes.push(`${deletedCount} variant${deletedCount !== 1 ? 's' : ''} removed`)
+    }
+
+    const addedCount = data.variants.filter(v => v.addedFromSource).length
+    if (addedCount > 0) {
+      changes.push(`${addedCount} variant${addedCount !== 1 ? 's' : ''} added from source`)
+    }
+
+    const updatedCount = data.variants.filter(
+      v => !v.deleted && !v.addedFromSource && data.dirtyVariants.has(getVariantKey(v))
+    ).length
+    if (updatedCount > 0) {
+      changes.push(`${updatedCount} variant${updatedCount !== 1 ? 's' : ''} updated`)
+    }
+
+    if (data.orderChanged) {
+      changes.push('Variant order changed')
+    }
+
+    const productImageChanged = data.productImage?.src !== data.originalProductImage?.src
+    if (productImageChanged) {
+      changes.push('Product image changed')
+    }
 
     return {
       shopName,
       shopTld: tld,
-      variantCount,
-      imageCount,
-      sku: activeVariants[0]?.sku || sourceProduct.sku || sku
+      variantCount: activeVariants.length,
+      imageCount: data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length,
+      sku: skuVal,
+      changes: changes.length > 0 ? changes : ['No specific changes tracked'],
     }
   }, [details, sourceProduct, activeTargetTld, targetData, sku])
 
@@ -446,6 +508,7 @@ export default function PreviewEditPage() {
       onRemoveVariant={(idx) => removeVariant(tld, idx)}
       onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
+      onResetVariantImage={(idx) => resetVariantImage(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
       onSelectProductImage={handleSelectProductImage(tld)}
@@ -483,6 +546,7 @@ export default function PreviewEditPage() {
     setDefaultVariant,
     restoreDefaultVariant,
     resetVariant,
+    resetVariantImage,
     resetAllVariants,
     updateVisibility,
     resetVisibility,
@@ -685,7 +749,7 @@ export default function PreviewEditPage() {
             </Button>
             <Button
               onClick={handleUpdateClick}
-              disabled={updating || updateSuccess[activeTargetTld]}
+              disabled={updating || updateSuccess[activeTargetTld] || !targetData[activeTargetTld]?.dirty}
               className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
             >
               {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

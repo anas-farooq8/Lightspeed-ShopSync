@@ -16,6 +16,7 @@ import { SourcePanel } from '@/components/sync-operations/product-display/Source
 import { TargetPanel } from '@/components/sync-operations/product-display/TargetPanel'
 import { useProductNavigation } from '@/hooks/useProductNavigation'
 import { useProductEditor } from '@/hooks/useProductEditor'
+import { sortImagesForDisplay } from '@/lib/utils'
 import type { ProductImage } from '@/types/product'
 
 function patchImagesIntoTargetData(
@@ -97,6 +98,8 @@ export default function PreviewCreatePage() {
     hasMultipleTargets,
     dialogImages,
     dialogSelectedImage,
+    removeImageFromTarget,
+    restoreImageToTarget,
     setDetails,
     setLoading,
     setError,
@@ -130,6 +133,7 @@ export default function PreviewCreatePage() {
     resetField,
     resetLanguage,
     resetVariant,
+    resetVariantImage,
     resetAllVariants,
     resetShop,
     retranslateField,
@@ -199,9 +203,10 @@ export default function PreviewCreatePage() {
           image: v.image,
           content_by_language: v.content_by_language
         })),
-        images: data.images
-          .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
-          .sort((a, b) => a.sort_order - b.sort_order)
+        images: (() => {
+          const filtered = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
+          return sortImagesForDisplay(filtered, sourceProduct?.product_image?.src ?? null)
+        })()
       }
 
       const response = await fetch('/api/create-product', {
@@ -243,7 +248,7 @@ export default function PreviewCreatePage() {
     if (allShopsCreated) {
       setTimeout(() => navigateBack(), 1500)
     }
-  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
+  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess, productImages])
 
   // Create confirmation dialog content (counts match what will be created) - all target shops
   const createConfirmationContent = useMemo(() => {
@@ -401,6 +406,7 @@ export default function PreviewCreatePage() {
       onRemoveVariant={(idx) => removeVariant(tld, idx)}
       onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
+      onResetVariantImage={(idx) => resetVariantImage(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
       onSelectProductImage={handleSelectProductImage(tld)}
@@ -409,8 +415,10 @@ export default function PreviewCreatePage() {
       onResetProductImage={() => resetProductImage(tld)}
       onSetDefaultVariant={(idx) => setDefaultVariant(tld, idx)}
       onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
+      onRemoveImageFromSource={(imgSrc) => removeImageFromTarget(tld, imgSrc)}
+      onRestoreImageFromSource={(imgSrc) => restoreImageToTarget(tld, imgSrc)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetAllVariants, updateVisibility, resetVisibility, resetProductImage])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
 
   if (loading) {
     return (

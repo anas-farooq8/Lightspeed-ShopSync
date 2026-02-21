@@ -82,6 +82,35 @@ export class LightspeedAPIClient {
   }
 
   /**
+   * Make authenticated DELETE request (returns void, 204 No Content)
+   */
+  private async requestDelete(
+    endpoint: string,
+    language: string
+  ): Promise<void> {
+    if (!language) {
+      throw new Error('Language code is required for API requests')
+    }
+
+    const url = `${this.baseUrl}/${language}${endpoint}`
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': this.getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(
+        `Lightspeed API error (${response.status}): ${errorText}`
+      )
+    }
+  }
+
+  /**
    * Create a new product
    */
   async createProduct(
@@ -195,6 +224,53 @@ export class LightspeedAPIClient {
       payload,
       language
     )
+  }
+
+  /**
+   * Delete a product image
+   */
+  async deleteProductImage(
+    productId: number,
+    imageId: number,
+    language: string
+  ): Promise<void> {
+    return this.requestDelete(
+      `/products/${productId}/images/${imageId}.json`,
+      language
+    )
+  }
+
+  /**
+   * Delete a variant
+   */
+  async deleteVariant(variantId: number, language: string): Promise<void> {
+    return this.requestDelete(`/variants/${variantId}.json`, language)
+  }
+
+  /**
+   * Get product images from Lightspeed
+   */
+  async getProductImages(
+    productId: number,
+    language: string
+  ): Promise<LightspeedProductImage[]> {
+    const response = await fetch(
+      `${this.baseUrl}/${language}/products/${productId}/images.json?fields=id,sortOrder,title,thumb,src`,
+      {
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Lightspeed API error (${response.status}): ${errorText}`)
+    }
+
+    const json = await response.json()
+    return json.productImages ?? []
   }
 }
 

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, memo } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
-import { Star, Package, X } from 'lucide-react'
+import { Star, Package, X, Trash2 } from 'lucide-react'
 import { getCachedImages, fetchAndCacheImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
 import { sortImagesForDisplay } from '@/lib/utils'
 import {
@@ -88,6 +88,8 @@ interface ProductImagesGridProps {
   className?: string
   /** Optional element to render after the last image (e.g. add button in edit mode). */
   trailingElement?: React.ReactNode
+  /** When provided, show delete icon on each image (create mode). */
+  onRemoveImage?: (imageSrc: string) => void
 }
 
 function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | null): ProductImage[] {
@@ -101,7 +103,7 @@ function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | nul
   return sortImagesForDisplay(withOrder, productImageSrc)
 }
 
-function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productImageSrc, className, trailingElement }: ProductImagesGridProps) {
+function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productImageSrc, className, trailingElement, onRemoveImage }: ProductImagesGridProps) {
   const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -112,6 +114,12 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   const images = usePreFetched
     ? normalizeImages(imagesProp, productImageSrc)
     : sortImagesForDisplay(fetchedImages, productImageSrc)
+
+  // Clear tooltip only when the actual image set changes (add/remove), not on every render
+  const imagesKey = useMemo(() => images.map(i => i.src ?? i.id ?? '').join('|'), [images])
+  useEffect(() => {
+    setTooltip(null)
+  }, [imagesKey])
 
   useEffect(() => {
     if (usePreFetched) return
@@ -202,6 +210,16 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
                   </div>
                 )}
               </button>
+              {onRemoveImage && src && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onRemoveImage(src) }}
+                  className="absolute top-1 right-1 w-7 h-7 rounded-md bg-destructive/90 hover:bg-destructive text-destructive-foreground flex items-center justify-center cursor-pointer transition-colors"
+                  title="Remove image"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           )
         })}

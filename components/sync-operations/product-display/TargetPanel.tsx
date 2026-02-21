@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star, Undo2 } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
@@ -26,9 +26,10 @@ function EditModeImagesSection({
   const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
   const [previewImage, setPreviewImage] = useState<{ src?: string; thumb?: string; title?: string } | null>(null)
 
+  const imagesKey = useMemo(() => images.map(i => (i.src ?? i.id ?? '')).join('|'), [images])
   useEffect(() => {
     setTooltip(null)
-  }, [images])
+  }, [imagesKey])
 
   const rawOriginal = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
   const originalImages = sortImagesForDisplay(rawOriginal, productImageSrc)
@@ -189,7 +190,9 @@ interface TargetPanelProps {
   onRestoreDefaultVariant: () => void
   onAddImagesFromSource?: () => void
   onRemoveImageFromSource?: (imageSrc: string) => void
+  onRestoreImageFromSource?: (imageSrc: string) => void
   onAddVariantsFromSource?: () => void
+  onResetVariantImage?: (idx: number) => void
 }
 
 export function TargetPanel({
@@ -232,7 +235,9 @@ export function TargetPanel({
   onRestoreDefaultVariant,
   onAddImagesFromSource,
   onRemoveImageFromSource,
+  onRestoreImageFromSource,
   onAddVariantsFromSource,
+  onResetVariantImage,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -314,6 +319,9 @@ export function TargetPanel({
   //            Show "Reset" when changed or order changed
   const showProductImagePickFromSource = mode === 'create' && (productImageChanged || data.imageOrderChanged)
   const showProductImageReset = mode === 'edit' && (productImageChanged || data.imageOrderChanged)
+  // Disable Pick from Source when source product image is deleted (cannot restore)
+  const sourceProductImageSrc = sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? ''
+  const productImagePickFromSourceDisabled = mode === 'create' && !!sourceProductImageSrc && data.removedImageSrcs.has(sourceProductImageSrc)
   
   // Get product admin URL for edit mode
   const productAdminUrl = mode === 'edit' && data.targetProductId && shopUrl 
@@ -383,8 +391,9 @@ export function TargetPanel({
                 variant="outline"
                 size="sm"
                 onClick={onResetProductImage}
-                className="w-full h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                title="Pick from source and restore original image order"
+                disabled={productImagePickFromSourceDisabled}
+                className="w-full h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={productImagePickFromSourceDisabled ? 'Source product image was removed' : 'Pick from source and restore original image order'}
               >
                 <ArrowDownToLine className="h-3 w-3 mr-1" />
                 Pick from source
@@ -476,7 +485,7 @@ export function TargetPanel({
                 size="sm"
                 onClick={onResetShop}
                 className="h-9 px-3 text-xs cursor-pointer shrink-0"
-                title="Reset all fields, variants, and settings to original values"
+                title="Reset all fields to original values for this shop"
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
                 Reset Shop
@@ -511,6 +520,7 @@ export function TargetPanel({
           <EditableVariantsList
             mode={mode}
             sourceProduct={sourceProduct}
+            sourceDefaultLang={sourceDefaultLang}
             variants={data.variants}
             activeLanguage={activeLanguage}
             dirtyVariants={data.dirtyVariants}
@@ -525,6 +535,8 @@ export function TargetPanel({
             onSetDefaultVariant={onSetDefaultVariant}
             onRestoreDefaultVariant={onRestoreDefaultVariant}
             onAddVariantsFromSource={onAddVariantsFromSource}
+            onResetVariantImage={onResetVariantImage}
+            removedImageSrcs={data.removedImageSrcs}
           />
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
@@ -537,28 +549,104 @@ export function TargetPanel({
                   onRemoveImageFromSource={onRemoveImageFromSource}
                 />
               ) : (
-                <ProductImagesGrid
-                  productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
-                  imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
-                  shopTld={mode === 'edit' ? shopTld : sourceShopTld}
-                  images={data.images}
-                  productImageSrc={data.productImage?.src}
-                  trailingElement={mode === 'edit' && onAddImagesFromSource ? (
-                    <button
-                      type="button"
-                      onClick={onAddImagesFromSource}
-                      className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                      title="Add images from source"
-                    >
-                      <SquarePlus className="h-8 w-8 text-muted-foreground" />
-                    </button>
-                  ) : undefined}
-                />
+                <>
+                  <ProductImagesGrid
+                    productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
+                    imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
+                    shopTld={mode === 'edit' ? shopTld : sourceShopTld}
+                    images={mode === 'create' ? data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')) : data.images}
+                    productImageSrc={mode === 'create' ? null : data.productImage?.src}
+                    onRemoveImage={mode === 'create' && onRemoveImageFromSource ? onRemoveImageFromSource : undefined}
+                    trailingElement={mode === 'edit' && onAddImagesFromSource ? (
+                      <button
+                        type="button"
+                        onClick={onAddImagesFromSource}
+                        className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        title="Add images from source"
+                      >
+                        <SquarePlus className="h-8 w-8 text-muted-foreground" />
+                      </button>
+                    ) : undefined}
+                  />
+                  {mode === 'create' && data.removedImageSrcs.size > 0 && onRestoreImageFromSource && (
+                    <DeletedImagesSection
+                      images={sortImagesForDisplay(
+                        data.images.filter(img => data.removedImageSrcs.has(img.src ?? '')),
+                        sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null
+                      )}
+                      onRestore={onRestoreImageFromSource}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function DeletedImagesSection({
+  images,
+  onRestore,
+}: {
+  images: ProductImageMeta[]
+  onRestore: (imageSrc: string) => void
+}) {
+  const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
+  const imagesKey = useMemo(() => images.map(i => (i.src ?? i.id ?? '')).join('|'), [images])
+  useEffect(() => {
+    setTooltip(null)
+  }, [imagesKey])
+
+  return (
+    <>
+      <ImageTooltipPortal tooltip={tooltip} />
+      <div className="relative mt-4">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-dashed border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">
+            Deleted Images ({images.length})
+          </span>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 mt-3">
+        {images.map((img) => {
+          const src = img.src ?? img.thumb
+          const title = img.title
+          return (
+            <div
+              key={img.src ?? String(img.id)}
+              className="group relative opacity-70"
+              onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
+              onMouseLeave={title ? () => setTooltip(null) : undefined}
+            >
+              <div className="aspect-square rounded-lg overflow-hidden border border-border/40 bg-muted">
+                {src ? (
+                  <img src={src} alt={img.title || 'Deleted image'} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="h-8 w-8 text-muted-foreground/50" />
+                  </div>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onRestore(src ?? '')}
+                className="absolute top-1 right-1 w-7 h-7 rounded-md bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center cursor-pointer p-0"
+                title="Restore image"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }

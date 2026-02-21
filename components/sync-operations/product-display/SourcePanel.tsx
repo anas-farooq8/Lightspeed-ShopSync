@@ -37,7 +37,7 @@ function SourcePanelInner({
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const sortedLanguages = sortLanguages(languages)
   const displayImage = useMemo(
-    () => getDisplayProductImage(product, sourceImages ?? undefined),
+    () => getDisplayProductImage(product, sourceImages ?? undefined) ?? product.product_image ?? null,
     [product, sourceImages]
   )
   const imageUrl = useMemo(() => getImageUrl(displayImage), [displayImage])

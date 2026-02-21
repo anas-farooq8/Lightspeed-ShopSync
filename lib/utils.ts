@@ -103,39 +103,31 @@ type ImageWithSortOrder = { id?: number | string; src?: string; thumb?: string; 
 
 /**
  * Get the product image to display.
- * When images array is provided, use the image with sortOrder=1.
- * If multiple have sortOrder=1 (Lightspeed bug), prefer the one whose src matches product_image.
- * If no src match (e.g. cross-shop), use id ascending (first created = product image).
- * Fallback: product.product_image when no images or no sortOrder=1 match.
+ * When images array is provided, use the image with sortOrder=1 whose src matches product_image.
+ * If multiple have sortOrder=1, only the one matching product_image.src is used.
  */
 export function getDisplayProductImage(
   product: { product_image?: { src?: string; thumb?: string; title?: string } | null },
   images?: ImageWithSortOrder[] | null
 ): { src?: string; thumb?: string; title?: string } | null {
-  if (!images?.length) return product.product_image ?? null
+  if (!images?.length) return null
   const sortOrder1 = images.filter((img) => (img.sortOrder ?? img.sort_order ?? 999) === 1)
-  if (!sortOrder1.length) return product.product_image ?? null
+  if (!sortOrder1.length) return null
   const productSrc = product.product_image?.src ?? ''
-  const srcMatch = productSrc ? sortOrder1.find((img) => (img.src ?? '') === productSrc) : null
-  const match = srcMatch ?? [...sortOrder1].sort((a, b) => (Number(a.id) ?? 999) - (Number(b.id) ?? 999))[0]
-  return match ? { src: match.src, thumb: match.thumb, title: match.title } : product.product_image ?? null
+  const match = productSrc ? sortOrder1.find((img) => (img.src ?? '') === productSrc) : null
+  return match ? { src: match.src, thumb: match.thumb, title: match.title } : null
 }
 
 /**
- * Sort images for display: product image (matching productImageSrc) first, then by sortOrder, then by id.
- * When multiple have sortOrder=1, the one matching productImageSrc is first; else lowest id first.
+ * Sort images for display: product image (matching productImageSrc) first, then by sortOrder.
+ * When multiple have sortOrder=1, the one matching productImageSrc is shown first.
  */
 export function sortImagesForDisplay<T extends ImageWithSortOrder>(
   images: T[],
   productImageSrc?: string | null
 ): T[] {
   if (!images.length) return []
-  const sorted = [...images].sort((a, b) => {
-    const oa = a.sortOrder ?? a.sort_order ?? 999
-    const ob = b.sortOrder ?? b.sort_order ?? 999
-    if (oa !== ob) return oa - ob
-    return (Number(a.id) ?? 999) - (Number(b.id) ?? 999)
-  })
+  const sorted = [...images].sort((a, b) => (a.sortOrder ?? a.sort_order ?? 999) - (b.sortOrder ?? b.sort_order ?? 999))
   if (!productImageSrc) return sorted
   const matchIdx = sorted.findIndex((img) => (img.src ?? '') === productImageSrc)
   if (matchIdx <= 0) return sorted

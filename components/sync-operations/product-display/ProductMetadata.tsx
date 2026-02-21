@@ -37,7 +37,7 @@ function ProductMetadataInner({
   }, [imagesProp, product.images_link, product.product_id, product.shop_tld])
   const images = imagesProp ?? fetchedImages
   const displayImage = useMemo(
-    () => getDisplayProductImage(product, images ?? undefined),
+    () => getDisplayProductImage(product, images ?? undefined) ?? product.product_image ?? null,
     [product, images]
   )
   const imageUrl = useMemo(() => getImageUrl(displayImage), [displayImage])

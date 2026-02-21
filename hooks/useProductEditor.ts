@@ -26,6 +26,7 @@ import {
   storeTranslationsInMemo,
   isSameImageInfo,
   getVariantKey,
+  sortImagesForDisplay,
 } from '@/lib/utils'
 import type {
   ProductDetails,
@@ -187,18 +188,33 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
   const dialogImages = useMemo(() => {
     if (!showImageDialog || !sourceProduct) return []
+    const data = targetData[activeTargetTld]
     const raw =
-      targetData[activeTargetTld]?.images ??
+      data?.images ??
       productImages[sourceProduct?.product_id ?? 0] ??
       []
-    return [...raw].sort((a, b) => (a.sort_order ?? 999999) - (b.sort_order ?? 999999))
-  }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages])
+    // Create mode: exclude deleted images from selection (cannot pick deleted)
+    const filtered = mode === 'create' && data?.removedImageSrcs?.size
+      ? raw.filter((img: { src?: string }) => !data.removedImageSrcs.has(img.src ?? ''))
+      : raw
+    const productImageSrc = mode === 'create'
+      ? (sourceProduct?.product_image?.src ?? data?.productImage?.src ?? null)
+      : (data?.productImage?.src ?? null)
+    return sortImagesForDisplay(filtered, productImageSrc)
+  }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages, mode])
 
   const dialogSelectedImage = useMemo(() => {
-    if (selectingImageForVariant === null || !targetData[activeTargetTld]) return undefined
-    const variant = targetData[activeTargetTld].variants[selectingImageForVariant]
+    const data = targetData[activeTargetTld]
+    if (!data) return undefined
+    // Product image selection mode
+    if (selectingProductImage) {
+      return data.productImage ?? null
+    }
+    // Variant image selection mode
+    if (selectingImageForVariant === null) return undefined
+    const variant = data.variants[selectingImageForVariant]
     return variant?.image ?? null
-  }, [selectingImageForVariant, activeTargetTld, targetData])
+  }, [selectingImageForVariant, selectingProductImage, activeTargetTld, targetData])
 
   // ─── Image Fetching ───────────────────────────────────────────────────────
   const fetchProductImages = useCallback(async (
@@ -358,6 +374,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         originalSku: v.sku || '',
         originalPrice: v.price_excl,
         originalIsDefault: v.is_default,
+        originalImage: v.image ? { src: v.image.src, thumb: v.image.thumb, title: v.image.title } : null,
         originalTitle: Object.fromEntries(
           targetLanguages.map(lang => [
             lang.code,
@@ -1334,16 +1351,26 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
       const available = updated[tld].images ?? []
       if (!image) return prev
-      if (available.length <= 1) return prev
+      if (available.length <= 1 && mode !== 'create') return prev
 
       const nextProductImage: ImageInfo = { src: image.src, thumb: image.thumb, title: image.title }
+      const imageSrc = image.src ?? ''
 
-      const nextIdx = available.findIndex(i => (i.src ?? '') === (image.src ?? ''))
+      const nextIdx = available.findIndex(i => (i.src ?? '') === imageSrc)
       if (nextIdx < 0) {
-        updated[tld] = { ...updated[tld], productImage: nextProductImage, dirty: true }
+        updated[tld] = {
+          ...updated[tld],
+          productImage: nextProductImage,
+          dirty: true
+        }
+        const anyDirty = Object.values(updated).some(
+          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
+        )
+        setIsDirty(anyDirty)
         return updated
       }
 
+      // Ensure selected image has sort_order = 1 (Lightspeed rule: product image = sort_order 1)
       let primaryIdx = 0
       let bestOrder = Number.POSITIVE_INFINITY
       for (let i = 0; i < available.length; i++) {
@@ -1358,7 +1385,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const primaryOrder = available[primaryIdx]?.sort_order ?? 0
       const nextOrder = available[nextIdx]?.sort_order ?? nextIdx
 
-      const newImages = available.slice()
+      const newImages = available.map(img => ({ ...img }))
       if (doSwap) {
         newImages[primaryIdx] = { ...available[primaryIdx], sort_order: nextOrder }
         newImages[nextIdx] = { ...available[nextIdx], sort_order: primaryOrder }
@@ -1379,22 +1406,99 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     })
     setShowImageDialog(false)
     setSelectingProductImage(false)
-  }, [])
+  }, [mode])
 
   const removeImageFromTarget = useCallback((tld: string, imageSrc: string) => {
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      const img = updated[tld].images.find(i => (i.src ?? '') === imageSrc)
-      if (!img?.addedFromSource) return prev
-      const newImages = updated[tld].images
-        .filter(i => (i.src ?? '') !== imageSrc)
-        .map((i, idx) => ({ ...i, sort_order: idx }))
+
+      if (mode === 'create') {
+        const newRemoved = new Set(updated[tld].removedImageSrcs)
+        newRemoved.add(imageSrc)
+
+        const newVariants = updated[tld].variants.map(v => {
+          if ((v.image?.src ?? '') === imageSrc) {
+            return { ...v, image: null as { src?: string; thumb?: string; title?: string } | null }
+          }
+          return v
+        })
+
+        const remainingImages = updated[tld].images.filter(i => !newRemoved.has(i.src ?? ''))
+        const newProductImage =
+          (updated[tld].productImage?.src ?? '') === imageSrc
+            ? remainingImages[0]
+              ? { src: remainingImages[0].src, thumb: remainingImages[0].thumb, title: remainingImages[0].title }
+              : null
+            : updated[tld].productImage
+
+        updated[tld] = {
+          ...updated[tld],
+          removedImageSrcs: newRemoved,
+          variants: newVariants,
+          productImage: newProductImage,
+          dirty: true,
+        }
+      } else {
+        const img = updated[tld].images.find(i => (i.src ?? '') === imageSrc)
+        if (!img?.addedFromSource) return prev
+        const newImages = updated[tld].images
+          .filter(i => (i.src ?? '') !== imageSrc)
+          .map((i, idx) => ({ ...i, sort_order: idx }))
+        updated[tld] = {
+          ...updated[tld],
+          images: newImages,
+          imageOrderChanged: true,
+          dirty: true,
+        }
+      }
+
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [mode])
+
+  const restoreImageToTarget = useCallback((tld: string, imageSrc: string) => {
+    if (mode !== 'create') return
+    const sourceImgs = productImages[selectedSourceProductId ?? 0]
+    const productImageSrc = details?.source?.find(p => p.product_id === selectedSourceProductId)?.product_image?.src ?? null
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      const newRemoved = new Set(updated[tld].removedImageSrcs)
+      newRemoved.delete(imageSrc)
+      const remainingImages = updated[tld].images.filter(i => !newRemoved.has(i.src ?? ''))
+      // Reset sort_order to match source panel order (so display follows source: Y,R,B)
+      let newImages = updated[tld].images
+      if (sourceImgs?.length) {
+        const sourceOrder = sortImagesForDisplay([...sourceImgs], productImageSrc)
+        const srcToOrder = new Map<string, number>()
+        sourceOrder.forEach((img, idx) => {
+          const s = img.src ?? ''
+          if (s) srcToOrder.set(s, idx)
+        })
+        newImages = updated[tld].images.map(img => ({
+          ...img,
+          sort_order: srcToOrder.get(img.src ?? '') ?? 999
+        }))
+      }
+      // Product image = first by sort_order (source order) among restored images
+      let newProductImage = updated[tld].productImage
+      if (remainingImages.length > 0) {
+        const remainingWithOrder = newImages.filter(img => !newRemoved.has(img.src ?? ''))
+        const sorted = sortImagesForDisplay(remainingWithOrder, null)
+        const first = sorted[0]
+        newProductImage = first ? { src: first.src, thumb: first.thumb, title: first.title } : null
+      }
       updated[tld] = {
         ...updated[tld],
         images: newImages,
-        imageOrderChanged: true,
-        dirty: true
+        removedImageSrcs: newRemoved,
+        productImage: newProductImage,
+        dirty: true,
       }
       const anyDirty = Object.values(updated).some(
         td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
@@ -1402,7 +1506,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       setIsDirty(anyDirty)
       return updated
     })
-  }, [])
+  }, [mode, productImages, selectedSourceProductId, details])
 
   const addImagesToTarget = useCallback((tld: string, imagesToAdd: ProductImage[]) => {
     if (!imagesToAdd.length) return
@@ -1441,7 +1545,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (!details) return
     
     if (mode === 'create') {
-      // CREATE MODE: Pick from source and restore original order
+      // CREATE MODE: Pick from source - set product image to source's product image
       const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
       if (!sourceProduct) return
       
@@ -1450,25 +1554,60 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         if (!updated[tld]) return prev
         
         const sourceImages = productImages[sourceProduct.product_id] ?? []
-        const resetImages = sourceImages.map((img, idx) => ({
-          ...img,
-          sort_order: idx
-        }))
-        
-        // Get the original product image from source
-        const sortedReset = [...resetImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+        const sortedSource = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
         const sourceProductImage: ImageInfo | null = sourceProduct.product_image
           ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
-          : sortedReset[0]
-            ? { src: sortedReset[0].src, thumb: sortedReset[0].thumb, title: sortedReset[0].title }
+          : sortedSource[0]
+            ? { src: sortedSource[0].src, thumb: sortedSource[0].thumb, title: sortedSource[0].title }
             : null
+        
+        if (!sourceProductImage?.src) {
+          updated[tld] = {
+            ...updated[tld],
+            productImage: null,
+            dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
+          }
+          return updated
+        }
+        
+        // Restore the source product image if it was deleted
+        let newRemoved = new Set(updated[tld].removedImageSrcs)
+        newRemoved.delete(sourceProductImage.src)
+        
+        const available = updated[tld].images ?? []
+        const nextIdx = available.findIndex(i => (i.src ?? '') === sourceProductImage.src)
+        
+        let newImages = available.map(img => ({ ...img }))
+        let imageOrderChanged = updated[tld].imageOrderChanged
+        
+        if (nextIdx >= 0) {
+          // Ensure product image has sort_order = 1 (swap with current first)
+          let primaryIdx = 0
+          let bestOrder = Number.POSITIVE_INFINITY
+          for (let i = 0; i < available.length; i++) {
+            const order = available[i]?.sort_order ?? Number.POSITIVE_INFINITY
+            if (order < bestOrder) {
+              bestOrder = order
+              primaryIdx = i
+            }
+          }
+          const doSwap = primaryIdx !== nextIdx
+          if (doSwap) {
+            const primaryOrder = available[primaryIdx]?.sort_order ?? 0
+            const nextOrder = available[nextIdx]?.sort_order ?? nextIdx
+            newImages[primaryIdx] = { ...available[primaryIdx], sort_order: nextOrder }
+            newImages[nextIdx] = { ...available[nextIdx], sort_order: primaryOrder }
+            imageOrderChanged = true
+          }
+        }
         
         updated[tld] = {
           ...updated[tld],
-          images: resetImages,
+          images: newImages,
+          removedImageSrcs: newRemoved,
           productImage: sourceProductImage,
-          imageOrderChanged: false,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
+          imageOrderChanged,
+          dirty: true
         }
         
         const anyDirty = Object.values(updated).some(
@@ -1761,6 +1900,36 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       return updated
     })
   }, [details, selectedSourceProductId, mode])
+
+  const resetVariantImage = useCallback((tld: string, variantIndex: number) => {
+    setTargetData(prev => {
+      const updated = { ...prev }
+      if (!updated[tld]) return prev
+      const variant = updated[tld].variants[variantIndex]
+      if (!variant) return prev
+      if (!variant.originalImage) return prev
+      if (updated[tld].removedImageSrcs.has(variant.originalImage.src ?? '')) return prev
+      const newVariants = [...updated[tld].variants]
+      newVariants[variantIndex] = { ...variant, image: { ...variant.originalImage } }
+      const key = getVariantKey(variant)
+      const newDirtyVariants = new Set(updated[tld].dirtyVariants)
+      newDirtyVariants.delete(key)
+      if (!isSameImageInfo(newVariants[variantIndex].image, variant.originalImage)) {
+        newDirtyVariants.delete(key)
+      }
+      updated[tld] = {
+        ...updated[tld],
+        variants: newVariants,
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+        dirtyVariants: newDirtyVariants,
+      }
+      const anyDirty = Object.values(updated).some(
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
+      )
+      setIsDirty(anyDirty)
+      return updated
+    })
+  }, [])
 
   const resetAllVariants = useCallback((tld: string) => {
     if (!details || !selectedSourceProductId) return
@@ -2275,10 +2444,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     selectProductImage,
     addImagesToTarget,
     removeImageFromTarget,
+    restoreImageToTarget,
     resetProductImage,
     resetField,
     resetLanguage,
     resetVariant,
+    resetVariantImage,
     resetAllVariants,
     resetShop,
     retranslateField,

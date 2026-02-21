@@ -23,6 +23,7 @@ export interface CreateProductPayload {
 
 export interface UpdateProductPayload {
   product: {
+    visibility?: string
     title?: string
     fulltitle?: string
     description?: string
