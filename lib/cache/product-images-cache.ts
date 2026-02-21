@@ -1,3 +1,5 @@
+import { sortBySortOrder } from '@/lib/utils'
+
 /**
  * Product Images Cache
  *
@@ -85,7 +87,8 @@ export async function fetchAndCacheImages(
       if (!res.ok) return []
 
       const raw: ProductImage[] = await res.json()
-      const sorted = [...(Array.isArray(raw) ? raw : [])].sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999))
+      const arr = Array.isArray(raw) ? raw : []
+      const sorted = sortBySortOrder(arr)
       setCachedImages(productId, shopTld, sorted)
       return sorted
     } catch {

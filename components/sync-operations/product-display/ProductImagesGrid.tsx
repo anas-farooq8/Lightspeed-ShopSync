@@ -94,14 +94,19 @@ interface ProductImagesGridProps {
 }
 
 function normalizeImages(raw: ProductImageMeta[], productOrSrc?: ProductImagesGridProps['productOrSrc']): (ProductImage & { addedFromSource?: boolean })[] {
-  const withOrder = raw.map((img, idx) => ({
-    id: typeof img.id === 'number' ? img.id : idx,
-    sortOrder: img.sortOrder ?? img.sort_order ?? 999,
-    title: img.title,
-    thumb: img.thumb,
-    src: img.src,
-    addedFromSource: img.addedFromSource,
-  }))
+  const withOrder = raw.map((img, idx) => {
+    // Preserve id for sortBySortOrder tiebreaker (parse string to number when possible)
+    const rawId = img.id
+    const numId = typeof rawId === 'number' ? rawId : (typeof rawId === 'string' ? parseInt(rawId, 10) : idx)
+    return {
+      id: Number.isNaN(numId) ? idx : numId,
+      sortOrder: img.sortOrder ?? img.sort_order ?? 999,
+      title: img.title,
+      thumb: img.thumb,
+      src: img.src,
+      addedFromSource: img.addedFromSource,
+    }
+  })
   return sortImagesForDisplay(withOrder, productOrSrc)
 }
 

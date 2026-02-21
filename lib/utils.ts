@@ -116,9 +116,25 @@ export function getImageUrl(
   return url ?? null
 }
 
-/** Sort by sort_order (or sortOrder) ascending. Use for variants, images, or any item with sort_order. */
-export function sortBySortOrder<T extends { sort_order?: number; sortOrder?: number }>(items: T[]): T[] {
-  return [...items].sort((a, b) => (a.sort_order ?? a.sortOrder ?? 999) - (b.sort_order ?? b.sortOrder ?? 999))
+/** Compare id for tiebreaker (smaller first). Handles number, string, or missing. */
+function compareId(a: number | string | undefined, b: number | string | undefined): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
+  const na = typeof a === 'number' ? a : Number(a)
+  const nb = typeof b === 'number' ? b : Number(b)
+  if (Number.isNaN(na) || Number.isNaN(nb)) return String(a).localeCompare(String(b))
+  return na - nb
+}
+
+/** Sort by sort_order (or sortOrder) ascending. Tiebreaker: id (smaller first). */
+export function sortBySortOrder<T extends { sort_order?: number; sortOrder?: number; id?: number | string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const sa = a.sort_order ?? a.sortOrder ?? 999
+    const sb = b.sort_order ?? b.sortOrder ?? 999
+    if (sa !== sb) return sa - sb
+    return compareId(a.id, b.id)
+  })
 }
 
 /** Image with optional sortOrder for display logic */

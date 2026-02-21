@@ -198,6 +198,11 @@ create policy "Authenticated users can update variants"
   using ((select auth.uid()) is not null)
   with check ((select auth.uid()) is not null);
 
+create policy "Authenticated users can delete variants"
+  on variants for delete
+  to authenticated
+  using ((select auth.uid()) is not null);
+
 
 -- =========================
 -- VARIANT CONTENT (LANGUAGE-SPECIFIC)
