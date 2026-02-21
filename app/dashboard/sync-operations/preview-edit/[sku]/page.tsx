@@ -116,7 +116,7 @@ export default function PreviewEditPage() {
     if (isDirty) {
       setShowCloseConfirmation(true)
     } else {
-      navigateBack()
+      navigateBack('edit')
     }
   }, [isDirty, navigateBack, setShowCloseConfirmation])
 
@@ -168,7 +168,7 @@ export default function PreviewEditPage() {
           content_by_language: v.content_by_language
         })),
         images: data.images
-          .filter(img => !data.removedImageIds.has(img.id))
+          .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
           .sort((a, b) => a.sort_order - b.sort_order)
       }
 
@@ -216,7 +216,7 @@ export default function PreviewEditPage() {
       
       if (allShopsUpdated) {
         setTimeout(() => {
-          navigateBack()
+          navigateBack('edit')
         }, 1500)
       }
 
@@ -239,7 +239,7 @@ export default function PreviewEditPage() {
     const shopName = details.shops?.[tld]?.name ?? tld
     const activeVariants = data.variants.filter(v => !v.deleted)
     const variantCount = activeVariants.length
-    const imageCount = data.images.filter(img => !data.removedImageIds.has(img.id)).length
+    const imageCount = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length
 
     return {
       shopName,
@@ -524,7 +524,7 @@ export default function PreviewEditPage() {
       <UnsavedChangesDialog
         open={showCloseConfirmation}
         onOpenChange={setShowCloseConfirmation}
-        onDiscard={navigateBack}
+        onDiscard={() => navigateBack('edit')}
       />
 
       <CreateProductConfirmationDialog
@@ -621,7 +621,7 @@ export default function PreviewEditPage() {
           title: img.title,
           sort_order: img.sort_order
         }))}
-        targetImageIds={new Set(targetData[activeTargetTld]?.images?.map(img => String(img.id)) ?? [])}
+        targetImageSrcs={new Set(targetData[activeTargetTld]?.images?.map(img => img.src ?? '') ?? [])}
         onConfirm={(imgs) => {
           const toAdd: ProductImage[] = imgs.map(img => ({
             id: String(img.id),

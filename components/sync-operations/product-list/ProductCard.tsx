@@ -1,5 +1,6 @@
 "use client"
 
+import { memo, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,8 +20,12 @@ interface ProductCardProps {
   onEditClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
-export function ProductCard({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick, showEditButton = false, onEditClick }: ProductCardProps) {
+function ProductCardComponent({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick, showEditButton = false, onEditClick }: ProductCardProps) {
   const imageUrl = getImageUrl(product.product_image as { src?: string; thumb?: string } | null)
+  const sortedShops = useMemo(
+    () => sortShopsSourceFirstThenByTld(Object.entries(product.targets || {}).map(([tld, info]) => ({ tld, role: 'target', ...info }))),
+    [product.targets]
+  )
 
   return (
     <Card
@@ -105,9 +110,7 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
         {/* Shop Status Indicators (like table view) - Hidden for NULL SKU mode */}
         {!hideShopIndicators && (
           <div className="flex flex-wrap items-center justify-start gap-2 sm:gap-3 pt-1.5 sm:pt-2 border-t border-border/50">
-            {sortShopsSourceFirstThenByTld(
-              Object.entries(product.targets || {}).map(([tld, info]) => ({ tld, role: 'target', ...info }))
-            ).map(({ tld, status, total_matches = 0 }) => {
+            {sortedShops.map(({ tld, status, total_matches = 0 }) => {
               const exists = status === 'exists'
               return (
               <div key={tld} className="flex flex-col items-center gap-1">
@@ -165,3 +168,5 @@ export function ProductCard({ product, onClick, hideShopIndicators = false, show
     </Card>
   )
 }
+
+export const ProductCard = memo(ProductCardComponent)

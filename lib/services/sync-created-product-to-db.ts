@@ -8,10 +8,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { VariantInfo, ImageInfo } from './create-product'
 
+const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
+
 interface SyncCreatedProductInput {
   supabase: SupabaseClient
   shopId: string
   productId: number
+  defaultLanguage: string
   visibility: string
   contentByLanguage: Record<string, {
     title: string
@@ -32,6 +35,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     supabase,
     shopId,
     productId,
+    defaultLanguage,
     visibility,
     contentByLanguage,
     variants,
@@ -41,21 +45,27 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
 
   const now = new Date().toISOString()
 
-  // Product image: use first variant's image or first product image
-  const firstVariant = variants[0]
-  const productImage = firstVariant?.image ?? (images[0] ? {
-    src: images[0].src,
-    thumb: images[0].thumb,
-    title: images[0].title,
-  } : null)
+  // Product image: only the image with sort_order=1 (Lightspeed product image rule).
+  const sortedImages = [...images].sort((a, b) => a.sort_order - b.sort_order)
+  const productImageForProduct = sortedImages[0] ? {
+    src: sortedImages[0].src,
+    thumb: sortedImages[0].thumb,
+    title: sortedImages[0].title,
+  } : null
+
+  // images_link: Lightspeed product images API URL. Set when product has images, else null.
+  const hasImages = images.length > 0 || variants.some(v => v.image)
+  const imagesLink = hasImages
+    ? `${LIGHTSPEED_API_BASE}/${defaultLanguage}/products/${productId}/images.json`
+    : null
 
   // Insert product
   const { error: productError } = await supabase.from('products').insert({
     shop_id: shopId,
     lightspeed_product_id: productId,
     visibility,
-    image: productImage,
-    images_link: null, // Not available from create flow
+    image: productImageForProduct,
+    images_link: imagesLink,
     ls_created_at: now,
     ls_updated_at: now,
   })

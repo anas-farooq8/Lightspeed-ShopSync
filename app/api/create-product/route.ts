@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
           supabase,
           shopId,
           productId: result.productId!,
+          defaultLanguage,
           visibility: sourceProductData.visibility,
           contentByLanguage: sourceProductData.content_by_language,
           variants: sourceProductData.variants,

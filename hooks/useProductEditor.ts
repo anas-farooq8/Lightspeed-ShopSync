@@ -50,7 +50,7 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
       variants: td.variants.map(v => ({ ...v, content_by_language: { ...v.content_by_language } })),
       images: td.images.map(img => ({ ...img })),
       originalImageOrder: [...td.originalImageOrder],
-      removedImageIds: new Set(td.removedImageIds),
+      removedImageSrcs: new Set(td.removedImageSrcs),
       dirty: td.dirty,
       dirtyFields: new Set(td.dirtyFields),
       dirtyVariants: new Set(td.dirtyVariants),
@@ -78,16 +78,16 @@ function patchImagesIntoTargetData(
   srcProduct: ProductData
 ): void {
   if (!images.length) return
+  // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
+  const sortedByOrder = [...images].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+  const productImageCandidate = sortedByOrder[0]
+  const fallbackProductImage: ImageInfo | null = productImageCandidate
+    ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
+    : null
   setTargetData(prev => {
     const updated = { ...prev }
     shopTlds.forEach(tld => {
       if (!updated[tld]) return
-      const firstImage = images[0]
-      const fallbackProductImage: ImageInfo | null = srcProduct.product_image
-        ? null
-        : firstImage
-          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
-          : null
       updated[tld] = {
         ...updated[tld],
         images: [...images],
@@ -372,11 +372,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         )
       }))
 
-      const firstImage = sourceImages[0]
+      // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
+      const sortedSourceImages = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+      const firstBySortOrder = sortedSourceImages[0]
       const initialProductImage: ImageInfo | null = sourceProduct.product_image
         ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
-        : firstImage
-          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
+        : firstBySortOrder
+          ? { src: firstBySortOrder.src, thumb: firstBySortOrder.thumb, title: firstBySortOrder.title }
           : null
 
       newTargetData[tld] = {
@@ -384,7 +386,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         variants,
         images: [...sourceImages],
         originalImageOrder: sourceImages.map((_, idx) => idx),
-        removedImageIds: new Set(),
+        removedImageSrcs: new Set(),
         dirty: false,
         dirtyFields: new Set(),
         dirtyVariants: new Set(),
@@ -415,7 +417,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     if (options?.preserveExisting) {
       const anyDirty = Object.values(newTargetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
     } else {
@@ -541,7 +543,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         variants,
         images: targetImages,
         originalImageOrder: [],
-        removedImageIds: new Set(),
+        removedImageSrcs: new Set(),
         dirty: false,
         dirtyFields: new Set(),
         dirtyVariants: new Set(),
@@ -576,7 +578,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     if (options?.preserveExisting) {
       const anyDirty = Object.values(newTargetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
     } else {
@@ -609,7 +611,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       initialContentRef.current = snapshot.initialContent
       contentEditorReadyRef.current = snapshot.contentEditorReady
       const anyDirty = Object.values(snapshot.targetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return
@@ -753,13 +755,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
             [field]: value
           }
         },
-        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || visibilityChanged || productImageChanged,
+        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || visibilityChanged || productImageChanged,
         dirtyFields: newDirtyFields,
         translationMeta: newTranslationMeta
       }
 
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       
@@ -817,12 +819,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         variants: newVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
         dirtyVariants: newDirtyVariants
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -863,12 +865,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         variants: newVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
         dirtyVariants: newDirtyVariants
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -919,7 +921,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -987,7 +989,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
 
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1013,7 +1015,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         updated[tld] = {
           ...updated[tld],
           variants: newVariants,
-          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
           dirtyVariants: newDirtyVariants
         }
       } else {
@@ -1038,7 +1040,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1089,12 +1091,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         variants: newVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
         dirtyVariants: newDirtyVariants
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1145,7 +1147,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1192,11 +1194,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         ...updated[tld],
         variants: newVariants,
         dirtyVariants: newDirtyVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1239,11 +1241,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         ...updated[tld],
         variants: newVariants,
         dirtyVariants: newDirtyVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1265,11 +1267,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         visibility,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || isChanged || orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || isChanged || orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1283,7 +1285,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         visibility: updated[tld].originalVisibility,
-        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       return updated
     })
@@ -1316,7 +1318,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
 
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1336,7 +1338,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
       const nextProductImage: ImageInfo = { src: image.src, thumb: image.thumb, title: image.title }
 
-      const nextIdx = available.findIndex(i => i.id === image.id)
+      const nextIdx = available.findIndex(i => (i.src ?? '') === (image.src ?? ''))
       if (nextIdx < 0) {
         updated[tld] = { ...updated[tld], productImage: nextProductImage, dirty: true }
         return updated
@@ -1370,7 +1372,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: true
       }
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1379,14 +1381,14 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     setSelectingProductImage(false)
   }, [])
 
-  const removeImageFromTarget = useCallback((tld: string, imageId: string) => {
+  const removeImageFromTarget = useCallback((tld: string, imageSrc: string) => {
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      const img = updated[tld].images.find(i => String(i.id) === imageId)
+      const img = updated[tld].images.find(i => (i.src ?? '') === imageSrc)
       if (!img?.addedFromSource) return prev
       const newImages = updated[tld].images
-        .filter(i => String(i.id) !== imageId)
+        .filter(i => (i.src ?? '') !== imageSrc)
         .map((i, idx) => ({ ...i, sort_order: idx }))
       updated[tld] = {
         ...updated[tld],
@@ -1395,7 +1397,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: true
       }
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1428,7 +1430,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: true
       }
       const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
       )
       setIsDirty(anyDirty)
       return updated
@@ -1454,10 +1456,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         }))
         
         // Get the original product image from source
+        const sortedReset = [...resetImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
         const sourceProductImage: ImageInfo | null = sourceProduct.product_image
           ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
-          : resetImages[0]
-            ? { src: resetImages[0].src, thumb: resetImages[0].thumb, title: resetImages[0].title }
+          : sortedReset[0]
+            ? { src: sortedReset[0].src, thumb: sortedReset[0].thumb, title: sortedReset[0].title }
             : null
         
         updated[tld] = {
@@ -1465,11 +1468,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           images: resetImages,
           productImage: sourceProductImage,
           imageOrderChanged: false,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
         }
         
         const anyDirty = Object.values(updated).some(
-          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
         )
         setIsDirty(anyDirty)
         return updated
@@ -1491,11 +1494,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           images: originalImages,
           productImage: updated[tld].originalProductImage,
           imageOrderChanged: false,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
         }
         
         const anyDirty = Object.values(updated).some(
-          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
         )
         setIsDirty(anyDirty)
         return updated
@@ -1553,7 +1556,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
             [field]: originalValue
           }
         },
-        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
         dirtyFields: newDirtyFields,
         translationMeta: newTranslationMeta
       }
@@ -1616,7 +1619,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ...updated[tld].content_by_language,
           [langCode]: newContent
         },
-        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+        dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
         dirtyFields: newDirtyFields,
         translationMeta: newTranslationMeta
       }
@@ -1662,7 +1665,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         updated[tld] = {
           ...updated[tld],
           variants: newVariants,
-          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
           dirtyVariants: newDirtyVariants
         }
         return updated
@@ -1680,7 +1683,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ...updated[tld],
           variants: newVariants,
           orderChanged,
-          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || orderChanged,
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || orderChanged,
           dirtyVariants: newDirtyVariants
         }
         return updated
@@ -1710,7 +1713,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         updated[tld] = {
           ...updated[tld],
           variants: newVariants,
-          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
           dirtyVariants: newDirtyVariants
         }
         
@@ -1751,7 +1754,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       updated[tld] = {
         ...updated[tld],
         variants: newVariants,
-        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+        dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
         dirtyVariants: newDirtyVariants
       }
       
@@ -1794,7 +1797,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ...updated[tld],
           variants: originalVariants,
           orderChanged: false,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
           dirtyVariants: new Set()
         }
       } else {
@@ -1829,7 +1832,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ...updated[tld],
           variants: newVariants,
           orderChanged: false,
-          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
+          dirty: updated[tld].dirtyFields.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage),
           dirtyVariants: new Set()
         }
       }
@@ -1930,11 +1933,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           )
         }))
         const sourceImages = updated[tld].images
-        const firstImage = sourceImages[0]
+        const sortedSource = [...sourceImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
         resetProductImage = sourceProduct.product_image
           ? { src: sourceProduct.product_image.src, thumb: sourceProduct.product_image.thumb, title: sourceProduct.product_image.title }
-          : firstImage
-            ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
+          : sortedSource[0]
+            ? { src: sortedSource[0].src, thumb: sortedSource[0].thumb, title: sortedSource[0].title }
             : null
         resetImages = updated[tld].images
         resetOriginalImageOrder = updated[tld].originalImageOrder
@@ -1955,7 +1958,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyFields: new Set(),
         dirtyVariants: new Set(),
         orderChanged: false,
-        removedImageIds: new Set()
+        removedImageSrcs: new Set()
       }
       
       return updated
@@ -1963,7 +1966,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     
     const anyDirty = Object.entries(targetDataRef.current).some(([shopTld, td]) => {
       if (shopTld === tld) return false
-      return td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageIds.size > 0
+      return td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
     })
     setIsDirty(anyDirty)
   }, [details, selectedSourceProductId, mode])
@@ -2067,7 +2070,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
               [field]: value
             }
           },
-          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
           dirtyFields: newDirtyFields,
           translationMeta: newTranslationMeta
         }
@@ -2172,7 +2175,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
             ...updated[tld].content_by_language,
             [langCode]: newContent
           },
-          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageIds.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
+          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
           dirtyFields: newDirtyFields,
           translationMeta: newTranslationMeta
         }

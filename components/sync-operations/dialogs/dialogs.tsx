@@ -21,7 +21,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Package, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -113,11 +112,13 @@ export function CreateProductConfirmationDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  content: CreateProductConfirmationContent | null
+  content: CreateProductConfirmationContent | CreateProductConfirmationContent[] | null
   onConfirm: () => void
   mode?: 'create' | 'edit'
 }) {
   const isEdit = mode === 'edit'
+  const items = content ? (Array.isArray(content) ? content : [content]) : []
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="max-w-md">
@@ -130,30 +131,42 @@ export function CreateProductConfirmationDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 sm:space-y-3 pt-1 text-left">
-              {content ? (
+              {items.length > 0 ? (
                 <>
                   <p className="text-sm sm:text-base text-foreground font-medium break-words">
                     {isEdit
-                      ? 'Are you sure you want to update this product in the following shop?'
-                      : 'Are you sure you want to create this product in the following shop?'}
+                      ? items.length > 1
+                        ? 'Are you sure you want to update this product in the following shops?'
+                        : 'Are you sure you want to update this product in the following shop?'
+                      : items.length > 1
+                        ? 'Are you sure you want to create this product in the following shops?'
+                        : 'Are you sure you want to create this product in the following shop?'}
                   </p>
-                  <div className="rounded-lg border bg-muted/50 p-3 sm:p-4 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 font-medium">
-                      <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 shrink-0">
-                        {content.shopTld.toUpperCase()}
-                      </span>
-                      <span className="break-words">{content.shopName}</span>
-                    </div>
-                    <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
-                      <li>• {content.variantCount} variant{content.variantCount !== 1 ? 's' : ''}</li>
-                      <li>• {content.imageCount} image{content.imageCount !== 1 ? 's' : ''}</li>
-                      <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{content.sku}</code></li>
-                    </ul>
+                  <div className="space-y-3 max-h-[200px] overflow-y-auto">
+                    {items.map((c) => (
+                      <div key={c.shopTld} className="rounded-lg border bg-muted/50 p-3 sm:p-4 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 font-medium">
+                          <span className="inline-flex items-center justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 shrink-0">
+                            {c.shopTld.toUpperCase()}
+                          </span>
+                          <span className="break-words">{c.shopName}</span>
+                        </div>
+                        <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
+                          <li>• {c.variantCount} variant{c.variantCount !== 1 ? 's' : ''}</li>
+                          <li>• {c.imageCount} image{c.imageCount !== 1 ? 's' : ''}</li>
+                          <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{c.sku}</code></li>
+                        </ul>
+                      </div>
+                    ))}
                   </div>
                   <p className="text-xs sm:text-sm text-muted-foreground break-words">
                     {isEdit
-                      ? 'This will update the product in your Lightspeed store.'
-                      : 'This will create a new product in your Lightspeed store. The operation cannot be undone automatically.'}
+                      ? items.length > 1
+                        ? 'This will update the product in your Lightspeed stores.'
+                        : 'This will update the product in your Lightspeed store.'
+                      : items.length > 1
+                        ? 'This will create a new product in each of your Lightspeed stores. The operation cannot be undone automatically.'
+                        : 'This will create a new product in your Lightspeed store. The operation cannot be undone automatically.'}
                   </p>
                 </>
               ) : (
@@ -272,27 +285,27 @@ export function AddImagesFromSourceDialog({
   open,
   onOpenChange,
   sourceImages,
-  targetImageIds = new Set<string>(),
+  targetImageSrcs = new Set<string>(),
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceImages: ProductImageForSelection[]
-  targetImageIds?: Set<string>
+  targetImageSrcs?: Set<string>
   onConfirm: (images: ProductImageForSelection[]) => void
 }) {
   const [selected, setSelected] = useState<ProductImageForSelection[]>([])
 
   const handleToggle = useCallback((img: ProductImageForSelection) => {
-    if (targetImageIds.has(String(img.id))) return
+    if (targetImageSrcs.has(img.src ?? '')) return
     setSelected(prev => {
-      const idx = prev.findIndex(p => String(p.id) === String(img.id))
+      const idx = prev.findIndex(p => (p.src ?? '') === (img.src ?? ''))
       if (idx >= 0) {
         return prev.filter((_, i) => i !== idx)
       }
       return [...prev, img]
     })
-  }, [targetImageIds])
+  }, [targetImageSrcs])
 
   const handleConfirm = useCallback(() => {
     onConfirm(selected)
@@ -323,9 +336,9 @@ export function AddImagesFromSourceDialog({
             <p className="col-span-full text-muted-foreground text-sm">No images available from source.</p>
           ) : (
             sourceImages.map((img) => {
-              const order = selected.findIndex(p => String(p.id) === String(img.id)) + 1
+              const order = selected.findIndex(p => (p.src ?? '') === (img.src ?? '')) + 1
               const isSelected = order > 0
-              const alreadyInTarget = targetImageIds.has(String(img.id))
+              const alreadyInTarget = targetImageSrcs.has(img.src ?? '')
               return (
                 <button
                   key={String(img.id)}
@@ -559,20 +572,21 @@ export function TargetShopSelectionDialog({
                 key={shop.tld}
                 role="button"
                 tabIndex={canSelect ? 0 : -1}
+                aria-disabled={!canSelect}
                 className={cn(
-                  'flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border',
-                  !canSelect ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' : 'bg-background border-border hover:bg-muted/50 cursor-pointer transition-colors'
+                  'w-full flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border text-left transition-colors',
+                  !canSelect ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' : 'bg-background border-border hover:bg-muted/50 cursor-pointer'
                 )}
                 onClick={() => handleToggle(shop.tld, canSelect)}
                 onKeyDown={(e) => canSelect && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleToggle(shop.tld, true))}
               >
-                <span onClick={(e) => e.stopPropagation()} className="flex items-center shrink-0 mt-0.5 sm:mt-0">
-                  <Checkbox id={`shop-${shop.tld}`} checked={selectedShops.has(shop.tld)} disabled={!canSelect} onCheckedChange={() => handleToggle(shop.tld, canSelect)} className="cursor-pointer" />
+                <span className="flex items-center shrink-0 mt-0.5 sm:mt-0 pointer-events-none">
+                  <Checkbox checked={selectedShops.has(shop.tld)} disabled={!canSelect} className="cursor-pointer" />
                 </span>
                 <div className="flex-1 min-w-0">
-                  <Label htmlFor={`shop-${shop.tld}`} className={cn('font-medium text-sm sm:text-base break-words', canSelect ? 'cursor-pointer' : 'cursor-not-allowed')}>
+                  <span className={cn('font-medium text-sm sm:text-base break-words block', canSelect ? 'cursor-pointer' : 'cursor-not-allowed')}>
                     {shop.name}
-                  </Label>
+                  </span>
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1">
                     <Badge variant="outline" className="text-xs shrink-0">.{shop.tld}</Badge>
                     {exists ? (

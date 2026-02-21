@@ -88,7 +88,8 @@ export function ProductPanel({
                     key={`${product.product_id}-${product.images_link}`}
                     productId={product.product_id}
                     imagesLink={product.images_link} 
-                    shopTld={product.shop_tld} 
+                    shopTld={product.shop_tld}
+                    productImageSrc={product.product_image?.src}
                   />
                 </div>
               )}
@@ -177,7 +178,8 @@ export function ProductPanel({
                 key={`${product.product_id}-${product.images_link}`}
                 productId={product.product_id}
                 imagesLink={product.images_link} 
-                shopTld={product.shop_tld} 
+                shopTld={product.shop_tld}
+                productImageSrc={product.product_image?.src}
               />
             </div>
           )}

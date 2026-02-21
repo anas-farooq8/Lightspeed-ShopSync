@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, memo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, ExternalLink } from 'lucide-react'
@@ -7,7 +7,7 @@ import { VariantsList } from '@/components/sync-operations/product-display/Varia
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
 import { ProductImagesGrid, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { getVisibilityOption } from '@/lib/constants/product-ui'
-import { toSafeExternalHref, formatDateShort, sortLanguages, getDefaultLanguageCode, getImageUrl } from '@/lib/utils'
+import { toSafeExternalHref, formatDateShort, sortLanguages, getDefaultLanguageCode, getImageUrl, getDisplayProductImage } from '@/lib/utils'
 import type { ProductData, Language } from '@/types/product'
 
 interface SourcePanelProps {
@@ -23,7 +23,7 @@ interface SourcePanelProps {
   sourceSwitching?: boolean
 }
 
-export function SourcePanel({ 
+function SourcePanelInner({ 
   product, 
   languages,
   hasDuplicates,
@@ -36,8 +36,15 @@ export function SourcePanel({
   const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
   const sortedLanguages = sortLanguages(languages)
-  const imageUrl = getImageUrl(product.product_image)
-  const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
+  const displayImage = useMemo(
+    () => getDisplayProductImage(product, sourceImages ?? undefined),
+    [product, sourceImages]
+  )
+  const imageUrl = useMemo(() => getImageUrl(displayImage), [displayImage])
+  const defaultVariant = useMemo(
+    () => product.variants.find(v => v.is_default) || product.variants[0],
+    [product.variants]
+  )
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
 
@@ -143,6 +150,7 @@ export function SourcePanel({
                 imagesLink={product.images_link}
                 shopTld={product.shop_tld}
                 images={sourceImages ?? undefined}
+                productImageSrc={product.product_image?.src}
               />
             </div>
           )}
@@ -151,3 +159,5 @@ export function SourcePanel({
     </Card>
   )
 }
+
+export const SourcePanel = memo(SourcePanelInner)

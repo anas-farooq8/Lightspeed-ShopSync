@@ -4,6 +4,7 @@ import { useEffect, useState, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { Star, Package, X } from 'lucide-react'
 import { getCachedImages, fetchAndCacheImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
+import { sortImagesForDisplay } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -82,25 +83,25 @@ interface ProductImagesGridProps {
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
   images?: ProductImageMeta[] | null
+  /** Product image src - when provided, image matching this src is shown first (fixes duplicate sortOrder=1). */
+  productImageSrc?: string | null
   className?: string
   /** Optional element to render after the last image (e.g. add button in edit mode). */
   trailingElement?: React.ReactNode
 }
 
-function normalizeImages(raw: ProductImageMeta[]): ProductImage[] {
-  const order = (img: ProductImageMeta) => img.sortOrder ?? img.sort_order ?? 999
-  return [...raw]
-    .sort((a, b) => order(a) - order(b))
-    .map((img, idx) => ({
-      id: typeof img.id === 'number' ? img.id : idx,
-      sortOrder: order(img),
-      title: img.title,
-      thumb: img.thumb,
-      src: img.src,
-    }))
+function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | null): ProductImage[] {
+  const withOrder = raw.map((img, idx) => ({
+    id: typeof img.id === 'number' ? img.id : idx,
+    sortOrder: img.sortOrder ?? img.sort_order ?? 999,
+    title: img.title,
+    thumb: img.thumb,
+    src: img.src,
+  }))
+  return sortImagesForDisplay(withOrder, productImageSrc)
 }
 
-function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, className, trailingElement }: ProductImagesGridProps) {
+function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productImageSrc, className, trailingElement }: ProductImagesGridProps) {
   const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -108,7 +109,9 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
 
   const usePreFetched = imagesProp !== undefined && imagesProp !== null
-  const images = usePreFetched ? normalizeImages(imagesProp) : fetchedImages
+  const images = usePreFetched
+    ? normalizeImages(imagesProp, productImageSrc)
+    : sortImagesForDisplay(fetchedImages, productImageSrc)
 
   useEffect(() => {
     if (usePreFetched) return

@@ -25,16 +25,16 @@ function patchImagesIntoTargetData(
   srcProduct: any
 ): void {
   if (!images.length) return
+  // Product image = image with sort_order=1 (Lightspeed rule). Never use first variant.
+  const sortedByOrder = [...images].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+  const productImageCandidate = sortedByOrder[0]
+  const fallbackProductImage = productImageCandidate
+    ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
+    : null
   setTargetData((prev: any) => {
     const updated = { ...prev }
     shopTlds.forEach(tld => {
       if (!updated[tld]) return
-      const firstImage = images[0]
-      const fallbackProductImage = srcProduct.product_image
-        ? null
-        : firstImage
-          ? { src: firstImage.src, thumb: firstImage.thumb, title: firstImage.title }
-          : null
       updated[tld] = {
         ...updated[tld],
         images: [...images],
@@ -148,39 +148,45 @@ export default function PreviewCreatePage() {
 
   const handleCreateClick = useCallback(() => {
     if (!sourceProduct || !details) return
-    const data = targetData[activeTargetTld]
-    if (!data) {
-      alert('No data available for this shop')
+    const missing = sortedTargetShops.filter(tld => !targetData[tld])
+    if (missing.length > 0) {
+      alert(`No data available for shop(s): ${missing.join(', ')}`)
       return
     }
     setShowCreateConfirmation(true)
-  }, [sourceProduct, details, activeTargetTld, targetData])
+  }, [sourceProduct, details, sortedTargetShops, targetData])
 
   const handleConfirmCreate = useCallback(async () => {
     if (!sourceProduct || !details) return
 
-    const tld = activeTargetTld
-    const data = targetData[tld]
-    
-    if (!data) {
+    const shopsToCreate = sortedTargetShops.filter(tld => targetData[tld])
+    if (shopsToCreate.length === 0) {
       setShowCreateConfirmation(false)
       return
     }
 
     setShowCreateConfirmation(false)
     setCreating(true)
-    setCreateErrors(prev => {
-      const updated = { ...prev }
-      delete updated[tld]
-      return updated
-    })
-    setCreateSuccess(prev => {
-      const updated = { ...prev }
-      delete updated[tld]
-      return updated
-    })
+    setCreateErrors({})
+    setCreateSuccess({})
 
-    try {
+    const newSuccess: Record<string, boolean> = {}
+    const newErrors: Record<string, string> = {}
+
+    const createPromises = shopsToCreate.map(async (tld) => {
+      const data = targetData[tld]
+      if (!data) return { tld, success: false }
+
+      const shopId = details.shops?.[tld]?.id
+      const targetShopLanguages = details.shops?.[tld]?.languages
+
+      if (!shopId) {
+        throw new Error(`Shop ID not found for ${tld}`)
+      }
+      if (!targetShopLanguages || targetShopLanguages.length === 0) {
+        throw new Error(`Language configuration not found for ${tld}`)
+      }
+
       const activeVariants = data.variants.filter(v => !v.deleted)
       const sourceProductData = {
         visibility: data.visibility,
@@ -194,29 +200,13 @@ export default function PreviewCreatePage() {
           content_by_language: v.content_by_language
         })),
         images: data.images
-          .filter(img => !data.removedImageIds.has(img.id))
+          .filter(img => !data.removedImageSrcs.has(img.src ?? ''))
           .sort((a, b) => a.sort_order - b.sort_order)
-      }
-
-      console.log('[UI] Creating product in shop:', tld)
-      console.log('[UI] Product data:', sourceProductData)
-
-      const shopId = details.shops?.[tld]?.id
-      const targetShopLanguages = details.shops?.[tld]?.languages
-      
-      if (!shopId) {
-        throw new Error(`Shop ID not found for ${tld}`)
-      }
-
-      if (!targetShopLanguages || targetShopLanguages.length === 0) {
-        throw new Error(`Language configuration not found for ${tld}`)
       }
 
       const response = await fetch('/api/create-product', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           targetShopTld: tld,
           shopId,
@@ -231,49 +221,55 @@ export default function PreviewCreatePage() {
         throw new Error(result.error || 'Failed to create product')
       }
 
-      console.log('[UI] ✓ Product created successfully:', result)
+      return { tld, success: true }
+    })
 
-      setCreateSuccess(prev => ({ ...prev, [tld]: true }))
+    const results = await Promise.allSettled(createPromises)
 
-      const allShopsCreated = sortedTargetShops.every(
-        shop => createSuccess[shop] || shop === tld
-      )
-      
-      if (allShopsCreated) {
-        setTimeout(() => {
-          navigateBack()
-        }, 1500)
+    results.forEach((result, i) => {
+      const tld = shopsToCreate[i]
+      if (result.status === 'fulfilled') {
+        if (result.value.success) newSuccess[tld] = true
+      } else {
+        newErrors[tld] = result.reason instanceof Error ? result.reason.message : 'Unknown error occurred'
       }
+    })
 
-    } catch (err) {
-      console.error('[UI] Failed to create product:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
-      setCreateErrors(prev => ({ ...prev, [tld]: errorMessage }))
-    } finally {
-      setCreating(false)
+    setCreateSuccess(prev => ({ ...prev, ...newSuccess }))
+    setCreateErrors(prev => ({ ...prev, ...newErrors }))
+    setCreating(false)
+
+    const allShopsCreated = shopsToCreate.every(tld => newSuccess[tld])
+    if (allShopsCreated) {
+      setTimeout(() => navigateBack(), 1500)
     }
-  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, createSuccess, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
+  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
 
-  // Create confirmation dialog content (counts match what will be created)
+  // Create confirmation dialog content (counts match what will be created) - all target shops
   const createConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
-    const tld = activeTargetTld
-    const data = targetData[tld]
-    if (!data) return null
+    const items: Array<{ shopName: string; shopTld: string; variantCount: number; imageCount: number; sku: string }> = []
 
-    const shopName = details.shops?.[tld]?.name ?? tld
-    const activeVariants = data.variants.filter(v => !v.deleted)
-    const variantCount = activeVariants.length
-    const imageCount = data.images.filter(img => !data.removedImageIds.has(img.id)).length
+    for (const tld of sortedTargetShops) {
+      const data = targetData[tld]
+      if (!data) continue
 
-    return {
-      shopName,
-      shopTld: tld,
-      variantCount,
-      imageCount,
-      sku: activeVariants[0]?.sku || sourceProduct.sku || sku
+      const shopName = details.shops?.[tld]?.name ?? tld
+      const activeVariants = data.variants.filter(v => !v.deleted)
+      const variantCount = activeVariants.length
+      const imageCount = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length
+
+      items.push({
+        shopName,
+        shopTld: tld,
+        variantCount,
+        imageCount,
+        sku: activeVariants[0]?.sku || sourceProduct.sku || sku
+      })
     }
-  }, [details, sourceProduct, activeTargetTld, targetData, sku])
+
+    return items.length === 0 ? null : items.length === 1 ? items[0] : items
+  }, [details, sourceProduct, sortedTargetShops, targetData, sku])
 
   // Initial data fetch
   useEffect(() => {
@@ -544,38 +540,63 @@ export default function PreviewCreatePage() {
                 <span>Creating product...</span>
               </div>
             )}
-            {!creating && createSuccess[activeTargetTld] && (
-              <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>Product created successfully</span>
-              </div>
-            )}
-            {!creating && createErrors[activeTargetTld] && (
-              <div className="flex items-center gap-2 text-destructive">
-                <XCircle className="h-4 w-4" />
-                <span>Creation failed</span>
-              </div>
-            )}
+            {!creating && (() => {
+              const successCount = sortedTargetShops.filter(tld => createSuccess[tld]).length
+              const errorCount = sortedTargetShops.filter(tld => createErrors[tld]).length
+              const allDone = successCount + errorCount === sortedTargetShops.length
+              if (!allDone) return null
+              return (
+                <div className="flex flex-wrap items-center gap-2">
+                  {successCount > 0 && (
+                    <div className="flex items-center gap-2 text-green-600">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>
+                        {successCount === sortedTargetShops.length
+                          ? sortedTargetShops.length > 1
+                            ? `Product created in all ${sortedTargetShops.length} shops`
+                            : 'Product created successfully'
+                          : `Created in ${successCount} of ${sortedTargetShops.length} shop${sortedTargetShops.length > 1 ? 's' : ''}`}
+                      </span>
+                    </div>
+                  )}
+                  {errorCount > 0 && (
+                    <div className="flex items-center gap-2 text-destructive">
+                      <XCircle className="h-4 w-4 shrink-0" />
+                      <span>
+                        {errorCount === sortedTargetShops.length ? 'Creation failed' : `${errorCount} shop${errorCount > 1 ? 's' : ''} failed`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={creating}
-              className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
-            >
-              {createSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
-            </Button>
-            <Button
-              onClick={handleCreateClick}
-              disabled={creating || createSuccess[activeTargetTld]}
-              className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
-            >
-              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {createSuccess[activeTargetTld] ? '✓ Created' : 'Create Product'}
-            </Button>
+            {(() => {
+              const allCreated = sortedTargetShops.every(tld => createSuccess[tld])
+              return (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleBack}
+                    disabled={creating}
+                    className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
+                  >
+                    {allCreated ? 'Done' : 'Cancel'}
+                  </Button>
+                  <Button
+                    onClick={handleCreateClick}
+                    disabled={creating || allCreated}
+                    className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
+                  >
+                    {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {allCreated ? '✓ Created' : 'Create Product'}
+                  </Button>
+                </>
+              )
+            })()}
           </div>
         </div>
       </div>

@@ -1,7 +1,9 @@
+import { useMemo, memo, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Package, ExternalLink } from 'lucide-react'
 import { getVisibilityOption } from '@/lib/constants/product-ui'
-import { toSafeExternalHref, formatDateShort, getImageUrl } from '@/lib/utils'
+import { toSafeExternalHref, formatDateShort, getImageUrl, getDisplayProductImage } from '@/lib/utils'
+import { getCachedImages, fetchAndCacheImages } from '@/lib/cache/product-images-cache'
 import type { ProductData } from '@/types/product'
 
 interface ProductMetadataProps {
@@ -11,17 +13,38 @@ interface ProductMetadataProps {
   compactLayout?: boolean
   /** When true (compact + source), show "Source Product #id" on one line instead of Source badge + separate Product link */
   sourceProductLabelCombined?: boolean
+  /** Optional pre-fetched images (sortOrder from API). When provided, use sortOrder=1 for display. */
+  images?: Array<{ src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }> | null
 }
 
-export function ProductMetadata({ 
+function ProductMetadataInner({ 
   product, 
   defaultLanguage, 
   isSource = false,
   compactLayout = false,
-  sourceProductLabelCombined = false
+  sourceProductLabelCombined = false,
+  images: imagesProp
 }: ProductMetadataProps) {
-  const imageUrl = getImageUrl(product.product_image)
-  const defaultVariant = product.variants.find(v => v.is_default) || product.variants[0]
+  const [fetchedImages, setFetchedImages] = useState<typeof imagesProp>(null)
+  useEffect(() => {
+    if (imagesProp || !product.images_link || !product.product_id || !product.shop_tld) return
+    const cached = getCachedImages(product.product_id, product.shop_tld)
+    if (cached) {
+      setFetchedImages(cached)
+      return
+    }
+    fetchAndCacheImages(product.product_id, product.images_link, product.shop_tld).then(setFetchedImages)
+  }, [imagesProp, product.images_link, product.product_id, product.shop_tld])
+  const images = imagesProp ?? fetchedImages
+  const displayImage = useMemo(
+    () => getDisplayProductImage(product, images ?? undefined),
+    [product, images]
+  )
+  const imageUrl = useMemo(() => getImageUrl(displayImage), [displayImage])
+  const defaultVariant = useMemo(
+    () => product.variants.find(v => v.is_default) || product.variants[0],
+    [product.variants]
+  )
   const shopUrl = toSafeExternalHref(product.base_url)
   const productAdminUrl = shopUrl ? `${shopUrl}/admin/products/${product.product_id}` : null
   const visibilityInfo = getVisibilityOption(product.visibility)
@@ -129,3 +152,5 @@ export function ProductMetadata({
     </div>
   )
 }
+
+export const ProductMetadata = memo(ProductMetadataInner)

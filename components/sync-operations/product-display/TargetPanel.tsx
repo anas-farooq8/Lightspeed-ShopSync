@@ -9,17 +9,19 @@ import { EditableLanguageContentTabs } from '@/components/sync-operations/produc
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, isSameImageInfo, getImageUrl } from '@/lib/utils'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl, sortImagesForDisplay } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 function EditModeImagesSection({
   images,
+  productImageSrc,
   onAddImagesFromSource,
   onRemoveImageFromSource,
 }: {
   images: ProductImageMeta[]
+  productImageSrc?: string | null
   onAddImagesFromSource?: () => void
-  onRemoveImageFromSource?: (imageId: string) => void
+  onRemoveImageFromSource?: (imageSrc: string) => void
 }) {
   const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
   const [previewImage, setPreviewImage] = useState<{ src?: string; thumb?: string; title?: string } | null>(null)
@@ -28,7 +30,8 @@ function EditModeImagesSection({
     setTooltip(null)
   }, [images])
 
-  const originalImages = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
+  const rawOriginal = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
+  const originalImages = sortImagesForDisplay(rawOriginal, productImageSrc)
   const addedImages = images
     .filter((img: ProductImageMeta & { addedFromSource?: boolean }) => img.addedFromSource)
     .sort((a, b) => (a.sort_order ?? a.sortOrder ?? 0) - (b.sort_order ?? b.sortOrder ?? 0))
@@ -48,7 +51,7 @@ function EditModeImagesSection({
               const title = img.title
               return (
                 <div
-                  key={String(img.id)}
+                  key={img.src ?? String(img.id)}
                   className="group relative"
                   onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
                   onMouseLeave={title ? () => setTooltip(null) : undefined}
@@ -94,7 +97,7 @@ function EditModeImagesSection({
                 const title = img.title
                 return (
                   <div
-                    key={String(img.id)}
+                    key={img.src ?? String(img.id)}
                     className="group relative"
                     onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
                     onMouseLeave={title ? () => setTooltip(null) : undefined}
@@ -118,7 +121,7 @@ function EditModeImagesSection({
                     {onRemoveImageFromSource && (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onRemoveImageFromSource(String(img.id)) }}
+                        onClick={(e) => { e.stopPropagation(); onRemoveImageFromSource(img.src ?? '') }}
                         className="absolute top-1 right-1 w-7 h-7 rounded-md bg-destructive/90 hover:bg-destructive text-destructive-foreground flex items-center justify-center cursor-pointer transition-colors"
                         title="Remove image"
                       >
@@ -185,7 +188,7 @@ interface TargetPanelProps {
   onSetDefaultVariant: (idx: number) => void
   onRestoreDefaultVariant: () => void
   onAddImagesFromSource?: () => void
-  onRemoveImageFromSource?: (imageId: string) => void
+  onRemoveImageFromSource?: (imageSrc: string) => void
   onAddVariantsFromSource?: () => void
 }
 
@@ -529,6 +532,7 @@ export function TargetPanel({
               {mode === 'edit' && (onAddImagesFromSource != null || onRemoveImageFromSource != null) ? (
                 <EditModeImagesSection
                   images={data.images}
+                  productImageSrc={data.productImage?.src}
                   onAddImagesFromSource={onAddImagesFromSource}
                   onRemoveImageFromSource={onRemoveImageFromSource}
                 />
@@ -538,6 +542,7 @@ export function TargetPanel({
                   imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
                   shopTld={mode === 'edit' ? shopTld : sourceShopTld}
                   images={data.images}
+                  productImageSrc={data.productImage?.src}
                   trailingElement={mode === 'edit' && onAddImagesFromSource ? (
                     <button
                       type="button"

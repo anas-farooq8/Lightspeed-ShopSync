@@ -141,10 +141,8 @@ export async function createProduct(
     const sortedImages = [...images].sort((a, b) => a.sort_order - b.sort_order)
 
     for (const image of sortedImages) {
-      // Find variants that use this image
-      const variantsForImage = variants.filter(v => 
-        v.image?.src === image.src || v.image?.title === image.title
-      )
+      // Find variants that use this image. Match by src (unique per image).
+      const variantsForImage = variants.filter(v => v.image?.src === image.src)
 
       if (variantsForImage.length > 0) {
         console.log(`[STEP 3] Image "${image.title}" used by ${variantsForImage.length} variant(s)`)
@@ -293,8 +291,7 @@ export async function createProduct(
     // ============================================================
     // STEP 6: (Optional) Normalize product image ordering
     // ============================================================
-    // Skipping this step as per spec: "If we accept Lightspeed's natural creation order, we can skip this step entirely"
-    console.log('[STEP 6] Skipping image order normalization (accepting natural order)')
+    console.log('[STEP 6] Skipping image order normalization (display uses sortOrder=1 from images)')
 
     // ============================================================
     // MULTI-LANGUAGE: Update product and variants for additional languages

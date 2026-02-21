@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 export function useProductNavigation() {
@@ -6,20 +6,24 @@ export function useProductNavigation() {
   const searchParams = useSearchParams()
   const [navigating, setNavigating] = useState(false)
 
-  const navigateBack = (defaultTab: string = 'create') => {
+  const navigateBack = useCallback((defaultTab: string = 'create') => {
     setNavigating(true)
+
+    // Read from actual URL at navigation time to avoid stale params
+    const currentSearch = typeof window !== 'undefined' ? window.location.search : ''
+    const urlParams = new URLSearchParams(currentSearch || searchParams.toString())
+
     const params = new URLSearchParams()
-    
-    const tab = searchParams.get('tab') || defaultTab
-    const search = searchParams.get('search')
-    const page = searchParams.get('page')
-    const missingIn = searchParams.get('missingIn')
-    const existsIn = searchParams.get('existsIn')
-    const onlyDuplicates = searchParams.get('onlyDuplicates')
-    const shopFilter = searchParams.get('shopFilter')
-    const sortBy = searchParams.get('sortBy')
-    const sortOrder = searchParams.get('sortOrder')
-    
+    const tab = urlParams.get('tab') || defaultTab
+    const search = urlParams.get('search')
+    const page = urlParams.get('page')
+    const missingIn = urlParams.get('missingIn')
+    const existsIn = urlParams.get('existsIn')
+    const onlyDuplicates = urlParams.get('onlyDuplicates')
+    const shopFilter = urlParams.get('shopFilter')
+    const sortBy = urlParams.get('sortBy')
+    const sortOrder = urlParams.get('sortOrder')
+
     params.set('tab', tab)
     if (search) params.set('search', search)
     if (page) params.set('page', page)
@@ -29,10 +33,10 @@ export function useProductNavigation() {
     if (shopFilter) params.set('shopFilter', shopFilter)
     if (sortBy) params.set('sortBy', sortBy)
     if (sortOrder) params.set('sortOrder', sortOrder)
-    
+
     const queryString = params.toString()
     router.push(`/dashboard/sync-operations${queryString ? `?${queryString}` : ''}`, { scroll: false })
-  }
+  }, [searchParams, router])
 
   return {
     navigating,

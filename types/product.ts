@@ -198,7 +198,8 @@ export interface EditableTargetData {
   variants: EditableVariant[]
   images: ProductImage[]
   originalImageOrder: number[]
-  removedImageIds: Set<string>
+  /** Image src URLs that user removed from target (src is unique per image) */
+  removedImageSrcs: Set<string>
   dirty: boolean
   dirtyFields: Set<string>
   dirtyVariants: Set<string | number>
