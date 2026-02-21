@@ -150,7 +150,7 @@ function SourcePanelInner({
                 imagesLink={product.images_link}
                 shopTld={product.shop_tld}
                 images={sourceImages ?? undefined}
-                productImageSrc={product.product_image?.src}
+                productOrSrc={product.product_image ? { product_image: product.product_image } : null}
               />
             </div>
           )}

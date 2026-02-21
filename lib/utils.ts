@@ -116,46 +116,67 @@ export function getImageUrl(
   return url ?? null
 }
 
-/** Image with optional sortOrder for display logic */
-type ImageWithSortOrder = { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }
-
-/**
- * Get the product image to display.
- * When images array is provided, use the image with sortOrder=1 whose src matches product_image.
- * If multiple have sortOrder=1, only the one matching product_image.src is used.
- */
-export function getDisplayProductImage(
-  product: { product_image?: { src?: string; thumb?: string; title?: string } | null },
-  images?: ImageWithSortOrder[] | null
-): { src?: string; thumb?: string; title?: string } | null {
-  if (!images?.length) return null
-  const sortOrder1 = images.filter((img) => (img.sortOrder ?? img.sort_order ?? 999) === 1)
-  if (!sortOrder1.length) return null
-  const productSrc = product.product_image?.src ?? ''
-  const match = productSrc ? sortOrder1.find((img) => (img.src ?? '') === productSrc) : null
-  return match ? { src: match.src, thumb: match.thumb, title: match.title } : null
-}
-
 /** Sort by sort_order (or sortOrder) ascending. Use for variants, images, or any item with sort_order. */
 export function sortBySortOrder<T extends { sort_order?: number; sortOrder?: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => (a.sort_order ?? a.sortOrder ?? 999) - (b.sort_order ?? b.sortOrder ?? 999))
 }
 
+/** Image with optional sortOrder for display logic */
+type ImageWithSortOrder = { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }
+
+type ProductImageInput = { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null | undefined
+
+function findProductImageMatch<T extends ImageWithSortOrder>(
+  pi: { src?: string; title?: string } | null | undefined,
+  images: T[]
+): T | null {
+  if (!pi || !images.length) return null
+  const sortOrder1 = images.filter((img) => (img.sortOrder ?? img.sort_order ?? 999) === 1)
+  if (!sortOrder1.length) return null
+  let match = pi.src ? sortOrder1.find((img) => (img.src ?? '') === pi.src) : null
+  if (!match && pi.title) {
+    const t = (pi.title ?? '').trim().toLowerCase()
+    match = sortOrder1.find((img) => (img.title ?? '').trim().toLowerCase() === t) ?? null
+  }
+  return (match ?? null) as T | null
+}
+
 /**
- * Sort images for display: product image (matching productImageSrc) first, then by sortOrder.
- * When multiple have sortOrder=1, the one matching productImageSrc is shown first.
+ * Sort images for display: product image first, then by sortOrder.
+ * productOrSrc: product object (match by src, then title when multiple have sortOrder=1) or productImageSrc string.
+ * Returns sorted array. Product image is at index 0 when found.
  */
 export function sortImagesForDisplay<T extends ImageWithSortOrder>(
   images: T[],
-  productImageSrc?: string | null
+  productOrSrc?: ProductImageInput
 ): T[] {
   if (!images.length) return []
   const sorted = sortBySortOrder(images)
+  if (!productOrSrc) return sorted
+
+  let productImageSrc: string | null = null
+  if (typeof productOrSrc === 'string') {
+    productImageSrc = productOrSrc.trim() || null
+  } else if (productOrSrc?.product_image) {
+    const match = findProductImageMatch(productOrSrc.product_image, sorted)
+    productImageSrc = match?.src ?? productOrSrc.product_image.src ?? null
+  }
+
   if (!productImageSrc) return sorted
   const matchIdx = sorted.findIndex((img) => (img.src ?? '') === productImageSrc)
   if (matchIdx <= 0) return sorted
   const [match] = sorted.splice(matchIdx, 1)
   return [match, ...sorted]
+}
+
+/** Get product image to display. Matches by src, then title when multiple have sortOrder=1. */
+export function getDisplayProductImage(
+  product: { product_image?: { src?: string; thumb?: string; title?: string } | null },
+  images?: ImageWithSortOrder[] | null
+): { src?: string; thumb?: string; title?: string } | null {
+  if (!images?.length || !product.product_image) return null
+  const match = findProductImageMatch(product.product_image, images)
+  return match ? { src: match.src, thumb: match.thumb, title: match.title } : null
 }
 
 // ─── Variants ───────────────────────────────────────────────────────────────

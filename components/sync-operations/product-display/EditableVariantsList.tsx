@@ -25,7 +25,6 @@ interface EditableVariantsListProps {
   onRestoreDefaultVariant: () => void
   onAddVariantsFromSource?: () => void
   onResetVariantImage?: (idx: number) => void
-  onPickVariantImageFromSource?: (idx: number) => void
   removedImageSrcs?: Set<string>
 }
 
@@ -48,7 +47,6 @@ export function EditableVariantsList({
   onRestoreDefaultVariant,
   onAddVariantsFromSource,
   onResetVariantImage,
-  onPickVariantImageFromSource,
   removedImageSrcs,
 }: EditableVariantsListProps) {
   
@@ -99,10 +97,9 @@ export function EditableVariantsList({
     const titleDifferent = variant.content_by_language?.[activeLanguage]?.title !== variant.originalTitle?.[activeLanguage]
     const skuDifferent = variant.sku !== variant.originalSku
     const imageDifferent = !isSameImageInfo(variant.image ?? null, variant.originalImage ?? null)
-    // Compare against source (for Pick from source in edit mode)
+    // Compare against source (for Pick from source for price/title)
     const priceDiffersFromSource = !!sourceVariant && Number(variant.price_excl) !== Number(sourceVariant.price_excl)
     const titleDiffersFromSource = !!sourceVariant && (variant.content_by_language?.[activeLanguage]?.title ?? '') !== (sourceVariant.content_by_language?.[sourceDefaultLangProp || activeLanguage]?.title ?? '')
-    const imageDiffersFromSource = !!sourceVariant?.image && !isSameImageInfo(variant.image ?? null, sourceVariant.image ?? null)
     const originalImageDeleted = !!(
       variant.originalImage?.src &&
       removedImageSrcs?.has(variant.originalImage.src)
@@ -154,17 +151,6 @@ export function EditableVariantsList({
               <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
             )}
           </button>
-          {(imageDiffersFromSource || (mode === 'create' && imageDifferent)) && !isDeleted && onPickVariantImageFromSource && sourceVariant?.image && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPickVariantImageFromSource(idx)}
-              className="h-6 px-1.5 text-[10px] cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-              title="Pick from source"
-            >
-              <ArrowDownToLine className="h-3 w-3 mr-0.5" /> Pick
-            </Button>
-          )}
           {imageDifferent && variant.originalImage && !isDeleted && onResetVariantImage && (
             <Button
               variant="ghost"

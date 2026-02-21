@@ -66,8 +66,7 @@ export interface UpdateVariantPayload {
 export interface CreateProductImagePayload {
   productImage: {
     attachment: string // base64 encoded image
-    filename: string
-    title?: string
+    filename: string // use image title as filename (e.g. "blauw thermic.jpg")
   }
 }
 

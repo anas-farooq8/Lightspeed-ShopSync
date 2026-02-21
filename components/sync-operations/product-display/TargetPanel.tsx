@@ -55,7 +55,6 @@ interface TargetPanelProps {
   onRestoreImageFromSource?: (imageSrc: string) => void
   onAddVariantsFromSource?: () => void
   onResetVariantImage?: (idx: number) => void
-  onPickVariantImageFromSource?: (idx: number) => void
 }
 
 export function TargetPanel({
@@ -101,7 +100,6 @@ export function TargetPanel({
   onRestoreImageFromSource,
   onAddVariantsFromSource,
   onResetVariantImage,
-  onPickVariantImageFromSource,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -156,6 +154,9 @@ export function TargetPanel({
   }
 
   const shopUrl = toSafeExternalHref(baseUrl)
+  const productOrSrc = mode === 'create'
+    ? (sourceProduct?.product_image ? { product_image: sourceProduct.product_image } : (sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null) as string | null)
+    : (data.productImage ? { product_image: data.productImage } : (data.originalProductImage?.src ?? null) as string | null)
   const visibilityChanged = data.visibility !== data.originalVisibility
   
   // Get source visibility from source product
@@ -385,7 +386,6 @@ export function TargetPanel({
             onRestoreDefaultVariant={onRestoreDefaultVariant}
             onAddVariantsFromSource={onAddVariantsFromSource}
             onResetVariantImage={onResetVariantImage}
-            onPickVariantImageFromSource={onPickVariantImageFromSource}
             removedImageSrcs={data.removedImageSrcs}
           />
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
@@ -397,7 +397,7 @@ export function TargetPanel({
                   imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
                   shopTld={mode === 'edit' ? shopTld : sourceShopTld}
                   images={data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))}
-                  productImageSrc={mode === 'create' ? null : (sourceProduct?.product_image?.src ?? getDisplayProductImage({ product_image: data.productImage }, data.images)?.src ?? data.productImage?.src ?? null)}
+                  productOrSrc={productOrSrc}
                   onRemoveImage={onRemoveImageFromSource ?? undefined}
                   trailingElement={onAddImagesFromSource ? (
                     <button
@@ -414,7 +414,7 @@ export function TargetPanel({
                   <DeletedImagesSection
                     images={sortImagesForDisplay(
                       data.images.filter(img => data.removedImageSrcs.has(img.src ?? '')),
-                      sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null
+                      productOrSrc
                     )}
                     onRestore={onRestoreImageFromSource}
                   />

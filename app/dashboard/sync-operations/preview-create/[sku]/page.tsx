@@ -104,7 +104,6 @@ export default function PreviewCreatePage() {
     resetField,
     resetLanguage,
     resetVariant,
-    pickVariantImageFromSource,
     resetVariantImage,
     resetAllVariants,
     resetShop,
@@ -177,7 +176,8 @@ export default function PreviewCreatePage() {
         })),
         images: (() => {
           const filtered = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
-          return sortImagesForDisplay(filtered, sourceProduct?.product_image?.src ?? null)
+          const productOrSrc = sourceProduct?.product_image ? { product_image: sourceProduct.product_image } : sourceProduct?.product_image?.src ?? null
+          return sortImagesForDisplay(filtered, productOrSrc)
         })()
       }
 
@@ -380,7 +380,6 @@ export default function PreviewCreatePage() {
       onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetVariantImage={(idx) => resetVariantImage(tld, idx)}
-      onPickVariantImageFromSource={(idx) => pickVariantImageFromSource(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
       onSelectProductImage={handleSelectProductImage(tld)}

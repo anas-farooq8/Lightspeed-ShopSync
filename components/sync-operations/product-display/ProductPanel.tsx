@@ -89,7 +89,7 @@ export function ProductPanel({
                     productId={product.product_id}
                     imagesLink={product.images_link} 
                     shopTld={product.shop_tld}
-                    productImageSrc={product.product_image?.src}
+                    productOrSrc={product.product_image ? { product_image: product.product_image } : null}
                   />
                 </div>
               )}
@@ -179,7 +179,7 @@ export function ProductPanel({
                 productId={product.product_id}
                 imagesLink={product.images_link} 
                 shopTld={product.shop_tld}
-                productImageSrc={product.product_image?.src}
+                productOrSrc={product.product_image ? { product_image: product.product_image } : null}
               />
             </div>
           )}

@@ -177,7 +177,7 @@ export async function createProduct(
                 title: variantTitle,
                 image: {
                   attachment: imageData.base64,
-                  filename: imageData.filename,
+                  filename: (image.title?.trim() || 'image') + '.' + imageData.extension,
                 }
               }
             }, defaultLanguage)
@@ -200,7 +200,7 @@ export async function createProduct(
                 title: variantTitle,
                 image: {
                   attachment: imageData.base64,
-                  filename: imageData.filename,
+                  filename: (image.title?.trim() || 'image') + '.' + imageData.extension,
                 }
               }
             }, defaultLanguage)
@@ -221,8 +221,7 @@ export async function createProduct(
         await targetClient.createProductImage(productId, {
           productImage: {
             attachment: imageData.base64,
-            filename: imageData.filename,
-            title: image.title,
+            filename: (image.title?.trim() || 'image') + '.' + imageData.extension
           }
         }, defaultLanguage)
         console.log(`[STEP 4] ✓ Uploaded product image`)

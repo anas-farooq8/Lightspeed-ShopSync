@@ -84,8 +84,8 @@ interface ProductImagesGridProps {
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
   images?: ProductImageMeta[] | null
-  /** Product image src - when provided, image matching this src is shown first (fixes duplicate sortOrder=1). */
-  productImageSrc?: string | null
+  /** Product image or src for ordering. When object, sortImagesForDisplay matches by src then title (sortOrder=1). */
+  productOrSrc?: { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null
   className?: string
   /** Optional element to render after the last image (e.g. add button in edit mode). */
   trailingElement?: React.ReactNode
@@ -93,7 +93,7 @@ interface ProductImagesGridProps {
   onRemoveImage?: (imageSrc: string) => void
 }
 
-function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | null): (ProductImage & { addedFromSource?: boolean })[] {
+function normalizeImages(raw: ProductImageMeta[], productOrSrc?: ProductImagesGridProps['productOrSrc']): (ProductImage & { addedFromSource?: boolean })[] {
   const withOrder = raw.map((img, idx) => ({
     id: typeof img.id === 'number' ? img.id : idx,
     sortOrder: img.sortOrder ?? img.sort_order ?? 999,
@@ -102,10 +102,10 @@ function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | nul
     src: img.src,
     addedFromSource: img.addedFromSource,
   }))
-  return sortImagesForDisplay(withOrder, productImageSrc)
+  return sortImagesForDisplay(withOrder, productOrSrc)
 }
 
-function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productImageSrc, className, trailingElement, onRemoveImage }: ProductImagesGridProps) {
+function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productOrSrc, className, trailingElement, onRemoveImage }: ProductImagesGridProps) {
   const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,9 +113,10 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
 
   const usePreFetched = imagesProp !== undefined && imagesProp !== null
+  const rawImages = usePreFetched ? imagesProp : fetchedImages
   const images = usePreFetched
-    ? normalizeImages(imagesProp, productImageSrc)
-    : sortImagesForDisplay(fetchedImages, productImageSrc)
+    ? normalizeImages(imagesProp, productOrSrc)
+    : sortImagesForDisplay(fetchedImages, productOrSrc)
 
   // Clear tooltip only when the actual image set changes (add/remove), not on every render
   const imagesKey = useMemo(() => images.map(i => i.src ?? i.id ?? '').join('|'), [images])
@@ -208,7 +209,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
                   </div>
                 )}
                 {isPrimary && (
-                  <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
+                  <div className="absolute top-0 left-0 w-6 h-6 bg-blue-600 flex items-center justify-center rounded-br" title="Default product image">
                     <Star className="h-3 w-3 fill-white text-white shrink-0" />
                   </div>
                 )}

@@ -184,7 +184,8 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
 
       if (iv.image?.src) {
         const imageData = await downloadImage(iv.image.src)
-        payload.variant!.image = { attachment: imageData.base64, filename: imageData.filename }
+        const filename = (iv.image.title?.trim() || 'image') + '.' + imageData.extension
+        payload.variant!.image = { attachment: imageData.base64, filename }
       }
 
       await targetClient.updateVariant(iv.variant_id!, payload, defaultLanguage)
@@ -227,7 +228,8 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
 
       if (iv.image?.src) {
         const imageData = await downloadImage(iv.image.src)
-        createPayload.variant.image = { attachment: imageData.base64, filename: imageData.filename }
+        const filename = (iv.image.title?.trim() || 'image') + '.' + imageData.extension
+        createPayload.variant.image = { attachment: imageData.base64, filename }
       }
 
       const res = await targetClient.createVariant(createPayload, defaultLanguage)

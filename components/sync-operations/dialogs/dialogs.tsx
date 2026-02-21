@@ -194,7 +194,6 @@ export function CreateProductConfirmationDialog({
         <AlertDialogFooter className="flex-col sm:flex-row gap-2">
           <AlertDialogCancel className="w-full sm:w-auto">Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} className="w-full sm:w-auto bg-red-600 hover:bg-red-700">
-            // disable update product button for now in edit mode
             disabled={isEdit}
             {isEdit ? 'Yes, Update Product (disabled)' : 'Yes, Create Product'}
           </AlertDialogAction>

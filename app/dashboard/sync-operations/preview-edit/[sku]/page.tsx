@@ -106,7 +106,6 @@ export default function PreviewEditPage() {
     resetField,
     resetLanguage,
     resetVariant,
-    pickVariantImageFromSource,
     resetVariantImage,
     resetAllVariants,
     resetShop,
@@ -513,7 +512,6 @@ export default function PreviewEditPage() {
       onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetVariantImage={(idx) => resetVariantImage(tld, idx)}
-      onPickVariantImageFromSource={(idx) => pickVariantImageFromSource(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
       onSelectProductImage={handleSelectProductImage(tld)}
