@@ -82,6 +82,24 @@ export function getDefaultLanguageCode(languages: Language[]): string {
 
 // ─── Images ─────────────────────────────────────────────────────────────────
 
+/**
+ * Normalize HTML/content for comparison (avoids false "changed" when ReactQuill normalizes).
+ * - Trim whitespace
+ * - Normalize line endings
+ * - Remove trailing empty blocks like <p><br></p>, <p></p>
+ */
+export function normalizeContentForComparison(content: string): string {
+  if (!content || typeof content !== 'string') return ''
+  let s = content.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  // Remove trailing empty block elements (Quill often adds these)
+  let prev = ''
+  while (prev !== s) {
+    prev = s
+    s = s.replace(/(<p><br\s*\/?><\/p>)+$/gi, '').replace(/(<p><\/p>)+$/gi, '').trim()
+  }
+  return s
+}
+
 /** Compare two ImageInfo objects for equality by src (unique per image). */
 export function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
   if (a === b) return true

@@ -9,146 +9,8 @@ import { EditableLanguageContentTabs } from '@/components/sync-operations/produc
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, isSameImageInfo, getImageUrl, sortImagesForDisplay, sortBySortOrder } from '@/lib/utils'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
-
-function EditModeImagesSection({
-  images,
-  productImageSrc,
-  onAddImagesFromSource,
-  onRemoveImageFromSource,
-}: {
-  images: ProductImageMeta[]
-  productImageSrc?: string | null
-  onAddImagesFromSource?: () => void
-  onRemoveImageFromSource?: (imageSrc: string) => void
-}) {
-  const [tooltip, setTooltip] = useState<{ title: string; anchor: DOMRect } | null>(null)
-  const [previewImage, setPreviewImage] = useState<{ src?: string; thumb?: string; title?: string } | null>(null)
-
-  const imagesKey = useMemo(() => images.map(i => (i.src ?? i.id ?? '')).join('|'), [images])
-  useEffect(() => {
-    setTooltip(null)
-  }, [imagesKey])
-
-  const rawOriginal = images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => !img.addedFromSource)
-  const originalImages = sortImagesForDisplay(rawOriginal, productImageSrc)
-  const addedImages = sortBySortOrder(
-    images.filter((img: ProductImageMeta & { addedFromSource?: boolean }) => img.addedFromSource)
-  )
-
-  const gridClass = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3"
-
-  return (
-    <>
-      <ImageTooltipPortal tooltip={tooltip} />
-      <ImagePreviewDialog image={previewImage} onClose={() => setPreviewImage(null)} />
-      <div className="space-y-4">
-        {originalImages.length > 0 && (
-          <div className={gridClass}>
-            {originalImages.map((img, index) => {
-              const src = img.src ?? img.thumb
-              const isPrimary = index === 0
-              const title = img.title
-              return (
-                <div
-                  key={img.src ?? String(img.id)}
-                  className="group relative"
-                  onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
-                  onMouseLeave={title ? () => setTooltip(null) : undefined}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImage({ src, thumb: img.thumb, title })}
-                    className="w-full aspect-square rounded-lg overflow-hidden border border-border/40 bg-muted hover:border-border focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer transition-colors"
-                  >
-                    {src ? (
-                      <img src={src} alt={img.title || 'Product image'} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="h-8 w-8 text-muted-foreground/50" />
-                      </div>
-                    )}
-                    {isPrimary && (
-                      <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
-                        <Star className="h-3 w-3 fill-white text-white shrink-0" />
-                      </div>
-                    )}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {(addedImages.length > 0 || onAddImagesFromSource) && (
-          <>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-dashed border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Images from source</span>
-              </div>
-            </div>
-
-            <div className={gridClass}>
-              {addedImages.map((img, index) => {
-                const src = img.src ?? img.thumb
-                const title = img.title
-                return (
-                  <div
-                    key={img.src ?? String(img.id)}
-                    className="group relative"
-                    onMouseEnter={title ? (e) => setTooltip({ title, anchor: e.currentTarget.getBoundingClientRect() }) : undefined}
-                    onMouseLeave={title ? () => setTooltip(null) : undefined}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setPreviewImage({ src, thumb: img.thumb, title })}
-                      className="w-full aspect-square rounded-lg overflow-hidden border border-border/40 bg-muted hover:border-border focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer transition-colors"
-                    >
-                      {src ? (
-                        <img src={src} alt={img.title || 'Product image'} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="h-8 w-8 text-muted-foreground/50" />
-                        </div>
-                      )}
-                      <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-bold">
-                        {index + 1}
-                      </div>
-                    </button>
-                    {onRemoveImageFromSource && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onRemoveImageFromSource(img.src ?? '') }}
-                        className="absolute top-1 right-1 w-7 h-7 rounded-md bg-destructive/90 hover:bg-destructive text-destructive-foreground flex items-center justify-center cursor-pointer transition-colors"
-                        title="Remove image"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            {onAddImagesFromSource && (
-              <button
-                type="button"
-                onClick={onAddImagesFromSource}
-                className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                title="Add images from source"
-              >
-                <SquarePlus className="h-8 w-8 text-muted-foreground" />
-              </button>
-            )}
-          </div>
-        </>
-      )}
-      </div>
-    </>
-  )
-}
 
 interface TargetPanelProps {
   mode?: 'create' | 'edit'
@@ -193,6 +55,7 @@ interface TargetPanelProps {
   onRestoreImageFromSource?: (imageSrc: string) => void
   onAddVariantsFromSource?: () => void
   onResetVariantImage?: (idx: number) => void
+  onPickVariantImageFromSource?: (idx: number) => void
 }
 
 export function TargetPanel({
@@ -238,6 +101,7 @@ export function TargetPanel({
   onRestoreImageFromSource,
   onAddVariantsFromSource,
   onResetVariantImage,
+  onPickVariantImageFromSource,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -309,19 +173,17 @@ export function TargetPanel({
     : (sourceVisibility && data.visibility !== sourceVisibility)  // In edit mode, check against source
   const showVisibilityReset = mode === 'edit' && visibilityChanged
   
-  const targetProductImageUrl = getImageUrl(data.productImage)
+  const targetProductImageUrl = mode === 'edit'
+    ? getImageUrl(getDisplayProductImage({ product_image: data.productImage }, data.images) ?? data.productImage)
+    : getImageUrl(data.productImage)
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
   
   // PRODUCT IMAGE BUTTON LOGIC:
-  // CREATE mode: originalProductImage IS the source image
-  //              Show "Pick from Source" when changed or order changed
-  // EDIT mode: originalProductImage is the target's original image
-  //            Show "Reset" when changed or order changed
-  const showProductImagePickFromSource = mode === 'create' && (productImageChanged || data.imageOrderChanged)
-  const showProductImageReset = mode === 'edit' && (productImageChanged || data.imageOrderChanged)
-  // Disable Pick from Source when source product image is deleted (cannot restore)
-  const sourceProductImageSrc = sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? ''
-  const productImagePickFromSourceDisabled = mode === 'create' && !!sourceProductImageSrc && data.removedImageSrcs.has(sourceProductImageSrc)
+  // Only show Reset (no Pick from source). Reset restores to original.
+  // Disable Reset when original image was deleted (cannot restore)
+  const showProductImageReset = (productImageChanged || data.imageOrderChanged) && !(
+    data.originalProductImage?.src && data.removedImageSrcs.has(data.originalProductImage.src)
+  )
   
   // Get product admin URL for edit mode
   const productAdminUrl = mode === 'edit' && data.targetProductId && shopUrl 
@@ -386,19 +248,6 @@ export function TargetPanel({
                 )}
               </button>
             </div>
-            {showProductImagePickFromSource && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onResetProductImage}
-                disabled={productImagePickFromSourceDisabled}
-                className="w-full h-9 px-2 text-xs cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={productImagePickFromSourceDisabled ? 'Source product image was removed' : 'Pick from source and restore original image order'}
-              >
-                <ArrowDownToLine className="h-3 w-3 mr-1" />
-                Pick from source
-              </Button>
-            )}
             {showProductImageReset && (
               <Button
                 variant="ghost"
@@ -536,49 +385,41 @@ export function TargetPanel({
             onRestoreDefaultVariant={onRestoreDefaultVariant}
             onAddVariantsFromSource={onAddVariantsFromSource}
             onResetVariantImage={onResetVariantImage}
+            onPickVariantImageFromSource={onPickVariantImageFromSource}
             removedImageSrcs={data.removedImageSrcs}
           />
           {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
-              {mode === 'edit' && (onAddImagesFromSource != null || onRemoveImageFromSource != null) ? (
-                <EditModeImagesSection
-                  images={data.images}
-                  productImageSrc={data.productImage?.src}
-                  onAddImagesFromSource={onAddImagesFromSource}
-                  onRemoveImageFromSource={onRemoveImageFromSource}
+              <>
+                <ProductImagesGrid
+                  productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
+                  imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
+                  shopTld={mode === 'edit' ? shopTld : sourceShopTld}
+                  images={data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))}
+                  productImageSrc={mode === 'create' ? null : (sourceProduct?.product_image?.src ?? getDisplayProductImage({ product_image: data.productImage }, data.images)?.src ?? data.productImage?.src ?? null)}
+                  onRemoveImage={onRemoveImageFromSource ?? undefined}
+                  trailingElement={onAddImagesFromSource ? (
+                    <button
+                      type="button"
+                      onClick={onAddImagesFromSource}
+                      className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      title="Add images from source"
+                    >
+                      <SquarePlus className="h-8 w-8 text-muted-foreground" />
+                    </button>
+                  ) : undefined}
                 />
-              ) : (
-                <>
-                  <ProductImagesGrid
-                    productId={mode === 'edit' && data.targetProductId ? data.targetProductId : sourceProductId}
-                    imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
-                    shopTld={mode === 'edit' ? shopTld : sourceShopTld}
-                    images={mode === 'create' ? data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')) : data.images}
-                    productImageSrc={mode === 'create' ? null : data.productImage?.src}
-                    onRemoveImage={mode === 'create' && onRemoveImageFromSource ? onRemoveImageFromSource : undefined}
-                    trailingElement={mode === 'edit' && onAddImagesFromSource ? (
-                      <button
-                        type="button"
-                        onClick={onAddImagesFromSource}
-                        className="aspect-square w-full rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                        title="Add images from source"
-                      >
-                        <SquarePlus className="h-8 w-8 text-muted-foreground" />
-                      </button>
-                    ) : undefined}
+                {data.removedImageSrcs.size > 0 && onRestoreImageFromSource && (
+                  <DeletedImagesSection
+                    images={sortImagesForDisplay(
+                      data.images.filter(img => data.removedImageSrcs.has(img.src ?? '')),
+                      sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null
+                    )}
+                    onRestore={onRestoreImageFromSource}
                   />
-                  {mode === 'create' && data.removedImageSrcs.size > 0 && onRestoreImageFromSource && (
-                    <DeletedImagesSection
-                      images={sortImagesForDisplay(
-                        data.images.filter(img => data.removedImageSrcs.has(img.src ?? '')),
-                        sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null
-                      )}
-                      onRestore={onRestoreImageFromSource}
-                    />
-                  )}
-                </>
-              )}
+                )}
+              </>
             </div>
           )}
         </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
-import { Star, Package, X, Trash2 } from 'lucide-react'
+import { Star, Package, X, Trash2, ArrowDownToLine } from 'lucide-react'
 import { getCachedImages, fetchAndCacheImages, type ProductImage as CachedProductImage } from '@/lib/cache/product-images-cache'
 import { sortImagesForDisplay } from '@/lib/utils'
 import {
@@ -74,6 +74,7 @@ export type ProductImageMeta = {
   title?: string
   thumb?: string
   src?: string
+  addedFromSource?: boolean
 }
 
 interface ProductImagesGridProps {
@@ -92,13 +93,14 @@ interface ProductImagesGridProps {
   onRemoveImage?: (imageSrc: string) => void
 }
 
-function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | null): ProductImage[] {
+function normalizeImages(raw: ProductImageMeta[], productImageSrc?: string | null): (ProductImage & { addedFromSource?: boolean })[] {
   const withOrder = raw.map((img, idx) => ({
     id: typeof img.id === 'number' ? img.id : idx,
     sortOrder: img.sortOrder ?? img.sort_order ?? 999,
     title: img.title,
     thumb: img.thumb,
     src: img.src,
+    addedFromSource: img.addedFromSource,
   }))
   return sortImagesForDisplay(withOrder, productImageSrc)
 }
@@ -181,6 +183,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
         {images.map((img, index) => {
           const src = img.src ?? img.thumb
           const isPrimary = index === 0
+          const isAddedFromSource = !!(img as { addedFromSource?: boolean }).addedFromSource
           return (
             <div
               key={img.id}
@@ -207,6 +210,11 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
                 {isPrimary && (
                   <div className="absolute top-0 right-0 w-6 h-8 bg-blue-600 flex items-center justify-center [clip-path:polygon(0_0,100%_0,100%_100%,50%_85%,0_100%)]">
                     <Star className="h-3 w-3 fill-white text-white shrink-0" />
+                  </div>
+                )}
+                {isAddedFromSource && !isPrimary && (
+                  <div className="absolute top-0 right-0 w-6 h-6 bg-blue-600 flex items-center justify-center rounded-bl" title="Added from source">
+                    <ArrowDownToLine className="h-3 w-3 fill-white text-white shrink-0" />
                   </div>
                 )}
               </button>

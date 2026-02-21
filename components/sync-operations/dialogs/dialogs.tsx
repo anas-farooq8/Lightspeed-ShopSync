@@ -309,18 +309,21 @@ export function AddImagesFromSourceDialog({
   onOpenChange,
   sourceImages,
   targetImageSrcs = new Set<string>(),
+  targetImageTitles = new Set<string>(),
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceImages: ProductImageForSelection[]
   targetImageSrcs?: Set<string>
+  targetImageTitles?: Set<string>
   onConfirm: (images: ProductImageForSelection[]) => void
 }) {
   const [selected, setSelected] = useState<ProductImageForSelection[]>([])
 
   const handleToggle = useCallback((img: ProductImageForSelection) => {
     if (targetImageSrcs.has(img.src ?? '')) return
+    if (targetImageTitles.has((img.title ?? '').trim())) return
     setSelected(prev => {
       const idx = prev.findIndex(p => (p.src ?? '') === (img.src ?? ''))
       if (idx >= 0) {
@@ -328,7 +331,7 @@ export function AddImagesFromSourceDialog({
       }
       return [...prev, img]
     })
-  }, [targetImageSrcs])
+  }, [targetImageSrcs, targetImageTitles])
 
   const handleConfirm = useCallback(() => {
     onConfirm(selected)
@@ -351,27 +354,25 @@ export function AddImagesFromSourceDialog({
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">Add images from source</DialogTitle>
           <DialogDescription>
-            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target are shown but cannot be selected.
+            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target (matched by src or title) are hidden.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-4">
-          {sourceImages.length === 0 ? (
-            <p className="col-span-full text-muted-foreground text-sm">No images available from source.</p>
+          {sourceImages.filter(img => !targetImageSrcs.has(img.src ?? '') && !targetImageTitles.has((img.title ?? '').trim())).length === 0 ? (
+            <p className="col-span-full text-muted-foreground text-sm">No images available from source. Images matching target (by src or title) are hidden.</p>
           ) : (
-            sourceImages.map((img) => {
+            sourceImages
+              .filter(img => !targetImageSrcs.has(img.src ?? '') && !targetImageTitles.has((img.title ?? '').trim()))
+              .map((img) => {
               const order = selected.findIndex(p => (p.src ?? '') === (img.src ?? '')) + 1
               const isSelected = order > 0
-              const alreadyInTarget = targetImageSrcs.has(img.src ?? '')
               return (
                 <button
                   key={String(img.id)}
                   type="button"
                   onClick={() => handleToggle(img)}
-                  disabled={alreadyInTarget}
                   className={cn(
-                    "aspect-square rounded-lg overflow-hidden border-2 transition-colors relative",
-                    alreadyInTarget && "cursor-not-allowed opacity-60",
-                    !alreadyInTarget && "cursor-pointer",
+                    "aspect-square rounded-lg overflow-hidden border-2 transition-colors relative cursor-pointer",
                     isSelected ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/50"
                   )}
                 >
@@ -383,11 +384,6 @@ export function AddImagesFromSourceDialog({
                   {isSelected && (
                     <div className="absolute top-1 right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
                       {order}
-                    </div>
-                  )}
-                  {alreadyInTarget && !isSelected && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <span className="text-xs text-white font-medium px-2 py-0.5 bg-black/60 rounded">In target</span>
                     </div>
                   )}
                 </button>

@@ -3,8 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Package, Trash2, RotateCcw, ChevronUp, ChevronDown, Star, Undo2, SquarePlus, ArrowDownToLine } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { getVariantKey } from '@/lib/utils'
+import { cn, getVariantKey, isSameImageInfo } from '@/lib/utils'
 import type { EditableVariant, ProductData } from '@/types/product'
 
 interface EditableVariantsListProps {
@@ -26,6 +25,7 @@ interface EditableVariantsListProps {
   onRestoreDefaultVariant: () => void
   onAddVariantsFromSource?: () => void
   onResetVariantImage?: (idx: number) => void
+  onPickVariantImageFromSource?: (idx: number) => void
   removedImageSrcs?: Set<string>
 }
 
@@ -48,6 +48,7 @@ export function EditableVariantsList({
   onRestoreDefaultVariant,
   onAddVariantsFromSource,
   onResetVariantImage,
+  onPickVariantImageFromSource,
   removedImageSrcs,
 }: EditableVariantsListProps) {
   
@@ -91,12 +92,17 @@ export function EditableVariantsList({
   const renderVariant = (variant: EditableVariant, idx: number, isDeleted: boolean = false) => {
     const isChanged = dirtyVariants.has(getVariantKey(variant))
     const variantImageUrl = variant.image?.src || variant.image?.thumb
+    const sourceVariant = findSourceVariantBySku(variant.sku)
     
     // Compare against original values
     const priceDifferent = variant.price_excl !== variant.originalPrice
     const titleDifferent = variant.content_by_language?.[activeLanguage]?.title !== variant.originalTitle?.[activeLanguage]
     const skuDifferent = variant.sku !== variant.originalSku
-    const imageDifferent = (variant.image?.src ?? '') !== (variant.originalImage?.src ?? '')
+    const imageDifferent = !isSameImageInfo(variant.image ?? null, variant.originalImage ?? null)
+    // Compare against source (for Pick from source in edit mode)
+    const priceDiffersFromSource = !!sourceVariant && Number(variant.price_excl) !== Number(sourceVariant.price_excl)
+    const titleDiffersFromSource = !!sourceVariant && (variant.content_by_language?.[activeLanguage]?.title ?? '') !== (sourceVariant.content_by_language?.[sourceDefaultLangProp || activeLanguage]?.title ?? '')
+    const imageDiffersFromSource = !!sourceVariant?.image && !isSameImageInfo(variant.image ?? null, sourceVariant.image ?? null)
     const originalImageDeleted = !!(
       variant.originalImage?.src &&
       removedImageSrcs?.has(variant.originalImage.src)
@@ -148,20 +154,27 @@ export function EditableVariantsList({
               <Package className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground/50" />
             )}
           </button>
+          {(imageDiffersFromSource || (mode === 'create' && imageDifferent)) && !isDeleted && onPickVariantImageFromSource && sourceVariant?.image && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPickVariantImageFromSource(idx)}
+              className="h-6 px-1.5 text-[10px] cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+              title="Pick from source"
+            >
+              <ArrowDownToLine className="h-3 w-3 mr-0.5" /> Pick
+            </Button>
+          )}
           {imageDifferent && variant.originalImage && !isDeleted && onResetVariantImage && (
             <Button
-              variant={mode === 'create' ? 'outline' : 'ghost'}
+              variant="ghost"
               size="sm"
               onClick={() => onResetVariantImage(idx)}
               disabled={originalImageDeleted}
-              className={mode === 'create' ? 'h-6 px-1.5 text-[10px] cursor-pointer border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-6 px-1.5 text-[10px] cursor-pointer'}
-              title={originalImageDeleted ? 'Original image was removed' : mode === 'create' ? 'Pick from source' : 'Reset variant image'}
+              className="h-6 px-1.5 text-[10px] cursor-pointer"
+              title={originalImageDeleted ? 'Original image was removed' : 'Reset variant image'}
             >
-              {mode === 'create' ? (
-                <><ArrowDownToLine className="h-3 w-3 mr-0.5" /> Pick</>
-              ) : (
-                <><RotateCcw className="h-3 w-3 mr-0.5" /> Reset image</>
-              )}
+              <RotateCcw className="h-3 w-3 mr-0.5" /> Reset
             </Button>
           )}
         </div>
@@ -216,15 +229,26 @@ export function EditableVariantsList({
                   </div>
                 </div>
               </div>
-              {priceDifferent && !isDeleted && (
+              {(priceDiffersFromSource || (mode === 'create' && priceDifferent)) && !isDeleted && (
                 <Button
-                  variant={mode === 'create' ? 'outline' : 'ghost'}
+                  variant="outline"
                   size="sm"
-                  onClick={() => mode === 'create' ? pickFromSourceVariant(idx, 'price_excl') : onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
-                  className={mode === 'create' ? 'h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-8 px-2 text-xs cursor-pointer shrink-0'}
-                  title={mode === 'create' ? 'Pick from source' : 'Reset price to original value'}
+                  onClick={() => pickFromSourceVariant(idx, 'price_excl')}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                  title="Pick from source"
                 >
-                  {mode === 'create' ? <ArrowDownToLine className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
+                  <ArrowDownToLine className="h-3 w-3" />
+                </Button>
+              )}
+              {priceDifferent && !isDeleted && mode === 'edit' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onUpdateVariant(idx, 'price_excl', variant.originalPrice ?? 0)}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
+                  title="Reset price to original value"
+                >
+                  <RotateCcw className="h-3 w-3" />
                 </Button>
               )}
             </div>
@@ -243,15 +267,26 @@ export function EditableVariantsList({
                   )}
                 />
               </div>
-              {titleDifferent && !isDeleted && (
+              {(titleDiffersFromSource || (mode === 'create' && titleDifferent)) && !isDeleted && (
                 <Button
-                  variant={mode === 'create' ? 'outline' : 'ghost'}
+                  variant="outline"
                   size="sm"
-                  onClick={() => mode === 'create' ? pickFromSourceVariant(idx, 'title') : onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
-                  className={mode === 'create' ? 'h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950' : 'h-8 px-2 text-xs cursor-pointer shrink-0'}
-                  title={mode === 'create' ? 'Pick from source' : 'Reset title to original value'}
+                  onClick={() => pickFromSourceVariant(idx, 'title')}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                  title="Pick from source"
                 >
-                  {mode === 'create' ? <ArrowDownToLine className="h-3 w-3" /> : <RotateCcw className="h-3 w-3" />}
+                  <ArrowDownToLine className="h-3 w-3" />
+                </Button>
+              )}
+              {titleDifferent && !isDeleted && mode === 'edit' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onUpdateVariantTitle(idx, activeLanguage, variant.originalTitle?.[activeLanguage] || '')}
+                  className="h-8 px-2 text-xs cursor-pointer shrink-0"
+                  title="Reset title to original value"
+                >
+                  <RotateCcw className="h-3 w-3" />
                 </Button>
               )}
             </div>

@@ -101,10 +101,12 @@ export default function PreviewEditPage() {
     selectProductImage,
     addImagesToTarget,
     removeImageFromTarget,
+    restoreImageToTarget,
     resetProductImage,
     resetField,
     resetLanguage,
     resetVariant,
+    pickVariantImageFromSource,
     resetVariantImage,
     resetAllVariants,
     resetShop,
@@ -471,7 +473,9 @@ export default function PreviewEditPage() {
   }, [setSelectingImageForVariant, setSelectingProductImage, setShowImageDialog])
 
   const handleSelectProductImage = useCallback((tld: string) => () => {
-    const imgs = targetData[tld]?.images ?? []
+    const imgs = (targetData[tld]?.images ?? []).filter(
+      (img: { src?: string }) => !targetData[tld]?.removedImageSrcs?.has(img.src ?? '')
+    )
     if (imgs.length <= 1) return
     setSelectingProductImage(true)
     setSelectingImageForVariant(null)
@@ -509,6 +513,7 @@ export default function PreviewEditPage() {
       onRestoreVariant={(idx) => restoreVariant(tld, idx)}
       onResetVariant={(idx) => resetVariant(tld, idx)}
       onResetVariantImage={(idx) => resetVariantImage(tld, idx)}
+      onPickVariantImageFromSource={(idx) => pickVariantImageFromSource(tld, idx)}
       onResetAllVariants={() => resetAllVariants(tld)}
       onSelectVariantImage={handleSelectVariantImage(tld)}
       onSelectProductImage={handleSelectProductImage(tld)}
@@ -519,6 +524,7 @@ export default function PreviewEditPage() {
       onRestoreDefaultVariant={() => restoreDefaultVariant(tld)}
       onAddImagesFromSource={() => setShowAddImagesFromSource(true)}
       onRemoveImageFromSource={(imageId) => removeImageFromTarget(tld, imageId)}
+      onRestoreImageFromSource={(imageId) => restoreImageToTarget(tld, imageId)}
       onAddVariantsFromSource={() => setShowAddVariantsFromSource(true)}
     />
   ), [
@@ -552,6 +558,7 @@ export default function PreviewEditPage() {
     resetVisibility,
     addImagesToTarget,
     removeImageFromTarget,
+    restoreImageToTarget,
     resetProductImage,
     addVariantsFromSource,
   ])
@@ -678,7 +685,17 @@ export default function PreviewEditPage() {
           title: img.title,
           sort_order: img.sort_order
         }))}
-        targetImageSrcs={new Set(targetData[activeTargetTld]?.images?.map(img => img.src ?? '') ?? [])}
+        targetImageSrcs={new Set(
+          (targetData[activeTargetTld]?.images ?? [])
+            .filter(img => !targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
+            .map(img => img.src ?? '')
+        )}
+        targetImageTitles={new Set(
+          (targetData[activeTargetTld]?.images ?? [])
+            .filter(img => !targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
+            .map(img => (img.title ?? '').trim())
+            .filter(Boolean)
+        )}
         onConfirm={(imgs) => {
           const toAdd: ProductImage[] = imgs.map(img => ({
             id: String(img.id),
