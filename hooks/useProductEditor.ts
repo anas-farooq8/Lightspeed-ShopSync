@@ -50,6 +50,7 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
   for (const [tld, td] of Object.entries(data)) {
     result[tld] = {
       content_by_language: JSON.parse(JSON.stringify(td.content_by_language)),
+      originalContentByLanguage: td.originalContentByLanguage ? JSON.parse(JSON.stringify(td.originalContentByLanguage)) : undefined,
       variants: td.variants.map(v => ({ ...v, content_by_language: { ...v.content_by_language } })),
       images: td.images.map(img => ({ ...img })),
       originalImageOrder: [...td.originalImageOrder],
@@ -570,6 +571,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
       newTargetData[tld] = {
         content_by_language,
+        originalContentByLanguage: JSON.parse(JSON.stringify(content_by_language)),
         variants,
         images: targetImages,
         originalImageOrder: [],

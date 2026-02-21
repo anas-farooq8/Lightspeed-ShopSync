@@ -7,8 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { VariantInfo, ImageInfo, ProductImageForDb } from './create-product'
-
-const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
+import { LIGHTSPEED_API_BASE } from './lightspeed-api'
 
 interface SyncCreatedProductInput {
   supabase: SupabaseClient

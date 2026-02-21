@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
-import { updateProduct } from '@/lib/services/update-product'
+import { updateProduct, type UpdateVariantInfo } from '@/lib/services/update-product'
 import { syncUpdatedProductToDb } from '@/lib/services/sync-updated-product-to-db'
 import { HTTP_STATUS, handleRouteError, isRequireUserFailure, requireUser } from '@/lib/api'
+import { getDefaultLanguageCode } from '@/lib/utils'
 import type { Language } from '@/types/product'
 
 /**
@@ -13,6 +14,7 @@ import type { Language } from '@/types/product'
  *
  * Description:
  * - Updates an existing product in the target Lightspeed shop and syncs it to the local database.
+ * - Uses currentState from the request (product-details) instead of loading from DB.
  *
  * Auth:
  * - Required (Supabase user session).
@@ -20,22 +22,54 @@ import type { Language } from '@/types/product'
  * Request body:
  * - targetShopTld: string
  * - shopId: string
- * - sku: string (to identify the product)
+ * - productId: number (Lightspeed product ID from product-details target)
  * - updateProductData: { visibility, content_by_language, variants, images }
+ * - currentState: { visibility, content_by_language, variants } from product-details
  * - targetShopLanguages: Language[] (target shop's language configuration)
  *
  * Responses:
  * - 200: Product updated (with optional warning if DB sync failed).
  * - 400: Validation error (missing required fields or content).
  * - 401: Unauthorized (no valid Supabase user).
- * - 404: Product not found.
  * - 500: Internal server error.
  */
+
+interface CurrentStateVariant {
+  lightspeed_variant_id: number
+  sku: string
+  is_default: boolean
+  sort_order: number
+  price_excl: number
+  image: { src?: string; thumb?: string; title?: string } | null
+  content_by_language?: Record<string, { title?: string }>
+}
+
+type VariantForMap = {
+  variant_id?: number | null
+  sku: string
+  is_default: boolean
+  sort_order: number
+  price_excl: number
+  image: { src?: string; thumb?: string; title?: string } | null
+  content_by_language?: Record<string, { title?: string }>
+}
+
+function mapVariantToIntended(v: VariantForMap, sortOrder?: number): UpdateVariantInfo {
+  return {
+    variant_id: v.variant_id ?? null,
+    sku: v.sku,
+    is_default: v.is_default,
+    sort_order: sortOrder ?? v.sort_order,
+    price_excl: v.price_excl,
+    image: v.image as UpdateVariantInfo['image'],
+    content_by_language: v.content_by_language ?? {},
+  }
+}
 
 interface UpdateProductRequest {
   targetShopTld: string
   shopId: string
-  sku: string
+  productId: number
   updateProductData: {
     visibility: string
     content_by_language: Record<string, {
@@ -68,13 +102,23 @@ interface UpdateProductRequest {
       addedFromSource?: boolean
     }>
   }
+  /** Current state from product-details (avoids DB load) */
+  currentState: {
+    visibility: string
+    content_by_language: Record<string, {
+      title?: string
+      fulltitle?: string
+      description?: string
+      content?: string
+    }>
+    variants: CurrentStateVariant[]
+  }
   /** Target shop's language configuration from product-details API */
   targetShopLanguages: Language[]
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    // Check authentication
     const auth = await requireUser()
 
     if (isRequireUserFailure(auth)) {
@@ -83,14 +127,19 @@ export async function PUT(request: NextRequest) {
 
     const { supabase } = auth
 
-    // Parse request body
     const body: UpdateProductRequest = await request.json()
-    const { targetShopTld, shopId, sku, updateProductData, targetShopLanguages } = body
+    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages } = body
 
-    // Validate request
-    if (!targetShopTld || !shopId || !sku || !updateProductData) {
+    if (!targetShopTld || !shopId || !updateProductData || !currentState) {
       return NextResponse.json(
-        { error: 'Missing required fields: targetShopTld, shopId, sku, updateProductData' },
+        { error: 'Missing required fields: targetShopTld, shopId, productId, updateProductData, currentState' },
+        { status: HTTP_STATUS.BAD_REQUEST }
+      )
+    }
+
+    if (typeof productId !== 'number') {
+      return NextResponse.json(
+        { error: 'productId must be a number (Lightspeed product ID)' },
         { status: HTTP_STATUS.BAD_REQUEST }
       )
     }
@@ -102,12 +151,9 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('[API] Updating product for target shop:', targetShopTld, 'SKU:', sku)
+    console.log('[API] Updating product for target shop:', targetShopTld, 'productId:', productId)
 
-    // Get default language from target shop configuration
-    const defaultLanguageConfig = targetShopLanguages.find((lang: Language) => lang.is_default)
-    const defaultLanguage = defaultLanguageConfig?.code || targetShopLanguages[0]?.code
-    
+    const defaultLanguage = getDefaultLanguageCode(targetShopLanguages)
     if (!defaultLanguage) {
       return NextResponse.json(
         { error: 'Could not determine default language for target shop' },
@@ -115,135 +161,36 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Get all target languages
     const targetLanguageCodes = targetShopLanguages.map((lang: Language) => lang.code)
-    
-    // Validate that we have content for the required languages
     const availableLanguages = Object.keys(updateProductData.content_by_language)
     const missingLanguages = targetLanguageCodes.filter((lang: string) => !availableLanguages.includes(lang))
-    
+
     if (missingLanguages.length > 0) {
       console.warn('[API] Missing content for languages:', missingLanguages.join(', '))
     }
-    
-    console.log('[API] Default language:', defaultLanguage)
-    console.log('[API] Target languages:', targetLanguageCodes.join(', '))
-
-    // Find the existing product in database by SKU
-    const { data: existingVariant, error: variantError } = await supabase
-      .from('variants')
-      .select('lightspeed_product_id, shop_id')
-      .eq('shop_id', shopId)
-      .eq('sku', sku)
-      .eq('is_default', true)
-      .single()
-
-    if (variantError || !existingVariant) {
-      console.error('[API] Product not found:', variantError)
-      return NextResponse.json(
-        { error: 'Product not found in target shop' },
-        { status: HTTP_STATUS.NOT_FOUND }
-      )
-    }
-
-    const lightspeedProductId = existingVariant.lightspeed_product_id
-
-    console.log('[API] Found existing product ID:', lightspeedProductId)
-
-    // Load current state from DB
-    const { data: productRow } = await supabase
-      .from('products')
-      .select('visibility')
-      .eq('shop_id', shopId)
-      .eq('lightspeed_product_id', lightspeedProductId)
-      .single()
-
-    const { data: productContentRows } = await supabase
-      .from('product_content')
-      .select('language_code, title, fulltitle, description, content')
-      .eq('shop_id', shopId)
-      .eq('lightspeed_product_id', lightspeedProductId)
-
-    const { data: variantRows } = await supabase
-      .from('variants')
-      .select('lightspeed_variant_id, sku, is_default, sort_order, price_excl, image')
-      .eq('shop_id', shopId)
-      .eq('lightspeed_product_id', lightspeedProductId)
-
-    const variantIds = (variantRows ?? []).map((v: { lightspeed_variant_id: number }) => v.lightspeed_variant_id)
-    const { data: variantContentRows } = variantIds.length > 0
-      ? await supabase
-          .from('variant_content')
-          .select('lightspeed_variant_id, language_code, title')
-          .eq('shop_id', shopId)
-          .in('lightspeed_variant_id', variantIds)
-      : { data: [] as { lightspeed_variant_id: number; language_code: string; title: string | null }[] }
-
-    const currentContentByLanguage: Record<string, { title?: string; fulltitle?: string; description?: string; content?: string }> = {}
-    for (const row of productContentRows ?? []) {
-      currentContentByLanguage[row.language_code] = {
-        title: row.title ?? undefined,
-        fulltitle: row.fulltitle ?? undefined,
-        description: row.description ?? undefined,
-        content: row.content ?? undefined,
-      }
-    }
-
-    const variantContentByVariant = new Map<number, Record<string, { title?: string }>>()
-    for (const row of variantContentRows ?? []) {
-      if (!variantContentByVariant.has(row.lightspeed_variant_id)) {
-        variantContentByVariant.set(row.lightspeed_variant_id, {})
-      }
-      variantContentByVariant.get(row.lightspeed_variant_id)![row.language_code] = { title: row.title ?? undefined }
-    }
-
-    const currentVariants = (variantRows ?? []).map((v: {
-      lightspeed_variant_id: number
-      sku: string | null
-      is_default: boolean | null
-      sort_order: number | null
-      price_excl: number | null
-      image: unknown
-    }) => ({
-      lightspeed_variant_id: v.lightspeed_variant_id,
-      sku: v.sku ?? '',
-      is_default: v.is_default ?? false,
-      sort_order: v.sort_order ?? 0,
-      price_excl: Number(v.price_excl ?? 0),
-      image: v.image as { src?: string; thumb?: string; title?: string } | null,
-      content_by_language: variantContentByVariant.get(v.lightspeed_variant_id) ?? {},
-    }))
 
     const targetClient = getLightspeedClient(targetShopTld)
 
-    // Fetch current product images from Lightspeed (for diff: delete, detect new)
+    // Fetch current product images from Lightspeed (needed for diff: delete, detect new)
     let currentImages: Array<{ id: number; sortOrder: number; src: string; thumb?: string; title?: string }> = []
     try {
-      currentImages = await targetClient.getProductImages(lightspeedProductId, defaultLanguage)
+      currentImages = await targetClient.getProductImages(productId, defaultLanguage)
     } catch (imgErr) {
       console.warn('[API] Could not fetch current product images:', imgErr)
     }
 
     const result = await updateProduct({
       targetClient,
-      productId: lightspeedProductId,
+      productId,
       defaultLanguage,
       targetLanguages: targetLanguageCodes,
-      currentVisibility: productRow?.visibility ?? 'visible',
-      currentContentByLanguage,
-      currentVariants,
+      currentVisibility: currentState.visibility,
+      currentContentByLanguage: currentState.content_by_language,
+      currentVariants: currentState.variants,
       currentImages,
       intendedVisibility: updateProductData.visibility,
       intendedContentByLanguage: updateProductData.content_by_language,
-      intendedVariants: updateProductData.variants.map((v) => ({
-        variant_id: v.variant_id ?? null,
-        sku: v.sku,
-        is_default: v.is_default,
-        sort_order: v.sort_order,
-        price_excl: v.price_excl,
-        image: v.image,
-        content_by_language: v.content_by_language ?? {},
-      })),
+      intendedVariants: updateProductData.variants.map((v) => mapVariantToIntended(v)),
       intendedImages: updateProductData.images.map((img) => ({
         src: img.src,
         thumb: img.thumb,
@@ -264,13 +211,12 @@ export async function PUT(request: NextRequest) {
     if (result.skipped) {
       return NextResponse.json({
         success: true,
-        productId: lightspeedProductId,
+        productId,
         skipped: true,
         message: 'No changes detected, nothing to update',
       })
     }
 
-    // Sync to database
     try {
       const variants = updateProductData.variants
       const updatedVariantsList =
@@ -296,19 +242,11 @@ export async function PUT(request: NextRequest) {
       await syncUpdatedProductToDb({
         supabase,
         shopId,
-        productId: lightspeedProductId,
+        productId,
         defaultLanguage,
         visibility: updateProductData.visibility,
         contentByLanguage: updateProductData.content_by_language,
-        intendedVariants: variants.map((v, idx) => ({
-          variant_id: v.variant_id ?? null,
-          sku: v.sku,
-          is_default: v.is_default,
-          sort_order: idx + 1,
-          price_excl: v.price_excl,
-          image: v.image as { src: string; thumb?: string; title?: string } | null,
-          content_by_language: v.content_by_language ?? {},
-        })),
+        intendedVariants: variants.map((v, idx) => mapVariantToIntended(v, idx + 1)),
         intendedImages: updateProductData.images,
         createdVariantsForDb: result.createdVariantsForDb ?? [],
         deletedVariantIds: result.deletedVariants ?? [],
@@ -323,7 +261,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          productId: lightspeedProductId,
+          productId,
           warning: 'Product updated in Lightspeed but database sync failed. Run full sync to update.',
           message: 'Product updated successfully in target shop',
         },
@@ -333,10 +271,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      productId: lightspeedProductId,
+      productId,
       message: 'Product updated successfully in target shop',
     })
-
   } catch (error) {
     return handleRouteError(error, {
       logMessage: '[API] Unexpected error in update-product route:',

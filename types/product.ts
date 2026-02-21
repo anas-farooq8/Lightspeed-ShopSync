@@ -197,6 +197,8 @@ export interface SyncProduct {
  */
 export interface EditableTargetData {
   content_by_language: Record<string, ProductContent>
+  /** Original product content from product-details (for update API currentState) */
+  originalContentByLanguage?: Record<string, ProductContent>
   variants: EditableVariant[]
   images: ProductImage[]
   originalImageOrder: number[]

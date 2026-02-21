@@ -1,10 +1,12 @@
 /**
  * Lightspeed eCom API Client
- * 
+ *
  * Handles all API requests to Lightspeed eCom API
  * Base URL: https://api.webshopapp.com/{language}/
  * Authentication: HTTP Basic Auth (API key + secret)
  */
+
+export const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
 
 import type {
   LightspeedConfig,
@@ -21,7 +23,7 @@ import type {
 
 export class LightspeedAPIClient {
   private config: LightspeedConfig
-  private baseUrl = 'https://api.webshopapp.com'
+  private baseUrl = LIGHTSPEED_API_BASE
 
   constructor(config: LightspeedConfig) {
     this.config = config

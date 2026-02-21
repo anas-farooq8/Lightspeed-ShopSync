@@ -7,8 +7,21 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UpdateVariantInfo, UpdateImageInfo, VariantImageForDb, ProductImageForDb } from './update-product'
+import { LIGHTSPEED_API_BASE } from './lightspeed-api'
 
-const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
+function buildVariantContentRows(
+  shopId: string,
+  variantId: number,
+  variant: UpdateVariantInfo,
+  langCodes: string[]
+): Array<{ shop_id: string; lightspeed_variant_id: number; language_code: string; title: string }> {
+  return langCodes.map((langCode) => ({
+    shop_id: shopId,
+    lightspeed_variant_id: variantId,
+    language_code: langCode,
+    title: variant.content_by_language?.[langCode]?.title ?? variant.sku ?? '',
+  }))
+}
 
 interface SyncUpdatedProductInput {
   supabase: SupabaseClient
@@ -142,19 +155,11 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
       throw new Error(`Failed to sync variant: ${variantError.message}`)
     }
 
-    for (const langCode of Object.keys(contentByLanguage)) {
-      const title = variant.content_by_language?.[langCode]?.title ?? variant.sku
+    const vcRows = buildVariantContentRows(shopId, variantId, variant, Object.keys(contentByLanguage))
+    for (const row of vcRows) {
       const { error: vcError } = await supabase
         .from('variant_content')
-        .upsert(
-          {
-            shop_id: shopId,
-            lightspeed_variant_id: variantId,
-            language_code: langCode,
-            title: title || variant.sku,
-          },
-          { onConflict: 'shop_id,lightspeed_variant_id,language_code' }
-        )
+        .upsert({ ...row, title: row.title || variant.sku }, { onConflict: 'shop_id,lightspeed_variant_id,language_code' })
 
       if (vcError) {
         console.error('[DB] Failed to update variant content:', vcError)
@@ -185,12 +190,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
       throw new Error(`Failed to sync variant: ${variantError.message}`)
     }
 
-    const variantContentRows = Object.keys(contentByLanguage).map((langCode) => ({
-      shop_id: shopId,
-      lightspeed_variant_id: variantId,
-      language_code: langCode,
-      title: variant.content_by_language?.[langCode]?.title ?? variant.sku ?? '',
-    }))
+    const variantContentRows = buildVariantContentRows(shopId, variantId, variant, Object.keys(contentByLanguage))
 
     const { error: variantContentError } = await supabase
       .from('variant_content')

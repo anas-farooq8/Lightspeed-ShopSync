@@ -199,6 +199,31 @@ export default function PreviewEditPage() {
         throw new Error(`Language configuration not found for ${tld}`)
       }
 
+      const productId = data.targetProductId
+      if (!productId) {
+        throw new Error('Target product ID not found')
+      }
+
+      // Build currentState from product-details (avoids DB load on backend)
+      const existingVariants = data.variants.filter(v => !v.addedFromSource)
+      const currentState = {
+        visibility: data.originalVisibility,
+        content_by_language: data.originalContentByLanguage ?? data.content_by_language,
+        variants: existingVariants.map(v => ({
+          lightspeed_variant_id: v.variant_id,
+          sku: v.originalSku ?? v.sku ?? '',
+          is_default: v.originalIsDefault ?? v.is_default,
+          sort_order: v.sort_order ?? 0,
+          price_excl: v.originalPrice ?? v.price_excl,
+          image: v.originalImage ?? null,
+          content_by_language: v.originalTitle
+            ? Object.fromEntries(
+                Object.entries(v.originalTitle).map(([lang, t]) => [lang, { title: t }])
+              )
+            : v.content_by_language ?? {}
+        }))
+      }
+
       const response = await fetch('/api/update-product', {
         method: 'PUT',
         headers: {
@@ -207,8 +232,9 @@ export default function PreviewEditPage() {
         body: JSON.stringify({
           targetShopTld: tld,
           shopId,
-          sku,
+          productId,
           updateProductData,
+          currentState,
           targetShopLanguages
         })
       })
@@ -292,10 +318,6 @@ export default function PreviewEditPage() {
     ).length
     if (updatedCount > 0) {
       changes.push(`${updatedCount} variant${updatedCount !== 1 ? 's' : ''} updated`)
-    }
-
-    if (data.orderChanged) {
-      changes.push('Variant order changed')
     }
 
     const productImageChanged = data.productImage?.src !== data.originalProductImage?.src
