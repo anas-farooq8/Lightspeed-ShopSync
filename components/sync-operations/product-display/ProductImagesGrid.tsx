@@ -84,7 +84,7 @@ interface ProductImagesGridProps {
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
   images?: ProductImageMeta[] | null
-  /** Product image or src for ordering. When object, sortImagesForDisplay matches by src then title (sortOrder=1). */
+  /** Product image or src for ordering. When object, sortImagesForDisplay matches by URL; when multiple have sortOrder=1, URL distinguishes. */
   productOrSrc?: { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null
   className?: string
   /** Optional element to render after the last image (e.g. add button in edit mode). */
@@ -214,7 +214,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
                   </div>
                 )}
                 {isAddedFromSource && !isPrimary && (
-                  <div className="absolute top-0 right-0 w-6 h-6 bg-blue-600 flex items-center justify-center rounded-bl" title="Added from source">
+                  <div className="absolute top-0 left-0 w-6 h-6 bg-blue-600 flex items-center justify-center rounded-br" title="Added from source">
                     <ArrowDownToLine className="h-3 w-3 fill-white text-white shrink-0" />
                   </div>
                 )}

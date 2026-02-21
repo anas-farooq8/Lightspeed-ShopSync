@@ -683,16 +683,11 @@ export default function PreviewEditPage() {
           title: img.title,
           sort_order: img.sort_order
         }))}
-        targetImageSrcs={new Set(
-          (targetData[activeTargetTld]?.images ?? [])
-            .filter(img => !targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
-            .map(img => img.src ?? '')
-        )}
         targetImageTitles={new Set(
           (targetData[activeTargetTld]?.images ?? [])
             .filter(img => !targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
-            .map(img => (img.title ?? '').trim())
-            .filter(Boolean)
+            .map(img => img.title ?? '')
+            .filter(t => t !== '')
         )}
         onConfirm={(imgs) => {
           const toAdd: ProductImage[] = imgs.map(img => ({

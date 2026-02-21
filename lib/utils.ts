@@ -126,24 +126,20 @@ type ImageWithSortOrder = { id?: number | string; src?: string; thumb?: string; 
 
 type ProductImageInput = { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null | undefined
 
+/** Match product image in list by URL (src). When multiple have sortOrder=1, URL distinguishes. */
 function findProductImageMatch<T extends ImageWithSortOrder>(
-  pi: { src?: string; title?: string } | null | undefined,
+  pi: { src?: string } | null | undefined,
   images: T[]
 ): T | null {
-  if (!pi || !images.length) return null
-  const sortOrder1 = images.filter((img) => (img.sortOrder ?? img.sort_order ?? 999) === 1)
-  if (!sortOrder1.length) return null
-  let match = pi.src ? sortOrder1.find((img) => (img.src ?? '') === pi.src) : null
-  if (!match && pi.title) {
-    const t = (pi.title ?? '').trim().toLowerCase()
-    match = sortOrder1.find((img) => (img.title ?? '').trim().toLowerCase() === t) ?? null
-  }
+  if (!pi?.src || !images.length) return null
+  const match = images.find((img) => (img.src ?? '') === pi.src)
   return (match ?? null) as T | null
 }
 
 /**
  * Sort images for display: product image first, then by sortOrder.
- * productOrSrc: product object (match by src, then title when multiple have sortOrder=1) or productImageSrc string.
+ * Uses URL (src) to match product image; when multiple have sortOrder=1, URL distinguishes.
+ * productOrSrc: product object or productImageSrc string.
  * Returns sorted array. Product image is at index 0 when found.
  */
 export function sortImagesForDisplay<T extends ImageWithSortOrder>(
@@ -169,7 +165,7 @@ export function sortImagesForDisplay<T extends ImageWithSortOrder>(
   return [match, ...sorted]
 }
 
-/** Get product image to display. Matches by src, then title when multiple have sortOrder=1. */
+/** Get product image to display. Matches by URL (src); when multiple have sortOrder=1, URL distinguishes. */
 export function getDisplayProductImage(
   product: { product_image?: { src?: string; thumb?: string; title?: string } | null },
   images?: ImageWithSortOrder[] | null

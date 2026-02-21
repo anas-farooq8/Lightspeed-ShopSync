@@ -22,7 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Package, Store, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { Package, Store, CheckCircle2, XCircle, Loader2, ArrowDownToLine } from 'lucide-react'
 import { cn, sortBySortOrder } from '@/lib/utils'
 
 // ─── Generic ConfirmDialog ──────────────────────────────────────────────────
@@ -211,6 +211,7 @@ export interface ProductImageForSelection {
   thumb?: string
   title?: string
   sort_order?: number
+  addedFromSource?: boolean
 }
 
 /** Selected image when dialog opens: null = No Image, ImageInfo = that image. undefined = none. */
@@ -281,16 +282,22 @@ export function ImageSelectionDialog({
           )}
           {images.map((img) => {
             const selected = isSameSelection(selectedImage, img)
+            const isAddedFromSource = !!(img as { addedFromSource?: boolean }).addedFromSource
             return (
               <div
                 key={String(img.id)}
                 onClick={() => handleSelect(img)}
                 className={cn(
-                  "aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-colors",
+                  "aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-colors relative",
                   selected ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary"
                 )}
               >
                 <img src={img.src ?? img.thumb ?? ''} alt={img.title ?? ''} className="w-full h-full object-cover" />
+                {isAddedFromSource && (
+                  <div className="absolute top-0 left-0 w-6 h-6 bg-blue-600 flex items-center justify-center rounded-br" title="Added from source">
+                    <ArrowDownToLine className="h-3 w-3 fill-white text-white shrink-0" />
+                  </div>
+                )}
               </div>
             )
           })}
@@ -309,22 +316,20 @@ export function AddImagesFromSourceDialog({
   open,
   onOpenChange,
   sourceImages,
-  targetImageSrcs = new Set<string>(),
   targetImageTitles = new Set<string>(),
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceImages: ProductImageForSelection[]
-  targetImageSrcs?: Set<string>
+  /** Target image titles (exact match, as-is). Images with matching title are hidden. */
   targetImageTitles?: Set<string>
   onConfirm: (images: ProductImageForSelection[]) => void
 }) {
   const [selected, setSelected] = useState<ProductImageForSelection[]>([])
 
   const handleToggle = useCallback((img: ProductImageForSelection) => {
-    if (targetImageSrcs.has(img.src ?? '')) return
-    if (targetImageTitles.has((img.title ?? '').trim())) return
+    if (targetImageTitles.has(img.title ?? '')) return
     setSelected(prev => {
       const idx = prev.findIndex(p => (p.src ?? '') === (img.src ?? ''))
       if (idx >= 0) {
@@ -332,7 +337,7 @@ export function AddImagesFromSourceDialog({
       }
       return [...prev, img]
     })
-  }, [targetImageSrcs, targetImageTitles])
+  }, [targetImageTitles])
 
   const handleConfirm = useCallback(() => {
     onConfirm(selected)
@@ -355,15 +360,15 @@ export function AddImagesFromSourceDialog({
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">Add images from source</DialogTitle>
           <DialogDescription>
-            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target (matched by src or title) are hidden.
+            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target (matched by title, exact) are hidden.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-4">
-          {sourceImages.filter(img => !targetImageSrcs.has(img.src ?? '') && !targetImageTitles.has((img.title ?? '').trim())).length === 0 ? (
-            <p className="col-span-full text-muted-foreground text-sm">No images available from source. Images matching target (by src or title) are hidden.</p>
+          {sourceImages.filter(img => !targetImageTitles.has(img.title ?? '')).length === 0 ? (
+            <p className="col-span-full text-muted-foreground text-sm">No images available from source. Images matching target (by title, exact) are hidden.</p>
           ) : (
             sourceImages
-              .filter(img => !targetImageSrcs.has(img.src ?? '') && !targetImageTitles.has((img.title ?? '').trim()))
+              .filter(img => !targetImageTitles.has(img.title ?? ''))
               .map((img) => {
               const order = selected.findIndex(p => (p.src ?? '') === (img.src ?? '')) + 1
               const isSelected = order > 0

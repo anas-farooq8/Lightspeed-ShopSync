@@ -6,8 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sortBySortOrder } from '@/lib/utils'
-import type { VariantInfo, ImageInfo } from './create-product'
+import type { VariantInfo, ImageInfo, ProductImageForDb } from './create-product'
 
 const LIGHTSPEED_API_BASE = 'https://api.webshopapp.com'
 
@@ -26,6 +25,8 @@ interface SyncCreatedProductInput {
   variants: VariantInfo[]
   createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }>
   images: ImageInfo[]
+  /** First image created (product or variant) from Lightspeed API - use for product.image */
+  productImageForDb?: ProductImageForDb
 }
 
 /**
@@ -42,17 +43,15 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     variants,
     createdVariantsForDb,
     images,
+    productImageForDb: productImageFromApi,
   } = input
 
   const now = new Date().toISOString()
 
-  // Product image: first by sort_order (Lightspeed product image rule).
-  const sortedImages = sortBySortOrder(images)
-  const productImageForProduct = sortedImages[0] ? {
-    src: sortedImages[0].src,
-    thumb: sortedImages[0].thumb,
-    title: sortedImages[0].title,
-  } : null
+  // Product image: use first created image from Lightspeed API response (product or variant).
+  // If not provided, use null (no fallback).
+  const productImageForProduct = productImageFromApi ?? null
+  console.log('[DB] Product image for sync:', productImageForProduct ? JSON.stringify(productImageForProduct) : 'null')
 
   // images_link: Lightspeed product images API URL. Set when product has images, else null.
   const hasImages = images.length > 0 || variants.some(v => v.image)
