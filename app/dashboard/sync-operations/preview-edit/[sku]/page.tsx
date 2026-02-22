@@ -116,12 +116,14 @@ export default function PreviewEditPage() {
 
   // Event handlers
   const handleBack = useCallback(() => {
-    if (isDirty) {
+    if (updateSuccess[activeTargetTld]) {
+      navigateBack('edit')
+    } else if (isDirty) {
       setShowCloseConfirmation(true)
     } else {
       navigateBack('edit')
     }
-  }, [isDirty, navigateBack, setShowCloseConfirmation])
+  }, [isDirty, updateSuccess, activeTargetTld, navigateBack, setShowCloseConfirmation])
 
   const handleUpdateClick = useCallback(() => {
     if (!sourceProduct || !details) return
@@ -239,6 +241,8 @@ export default function PreviewEditPage() {
           currentState,
           targetShopLanguages,
           changes,
+          productImageChanged: (data.productImage?.src ?? '') !== (data.originalProductImage?.src ?? ''),
+          imageOrderChanged: data.imageOrderChanged ?? false,
         })
       })
 
@@ -252,15 +256,8 @@ export default function PreviewEditPage() {
 
       setUpdateSuccess(prev => ({ ...prev, [tld]: true }))
 
-      const allShopsUpdated = sortedTargetShops.every(
-        shop => updateSuccess[shop] || shop === tld
-      )
-      
-      if (allShopsUpdated) {
-        setTimeout(() => {
-          navigateBack('edit')
-        }, 1500)
-      }
+      // Edit updates one shop at a time; navigate back when this update succeeds (like create does)
+      setTimeout(() => navigateBack('edit'), 500)
 
     } catch (err) {
       console.error('[UI] Failed to update product:', err)
@@ -269,7 +266,7 @@ export default function PreviewEditPage() {
     } finally {
       setUpdating(false)
     }
-  }, [activeTargetTld, targetData, sourceProduct, details, sortedTargetShops, updateSuccess, navigateBack, sku, setShowCreateConfirmation, setUpdating, setUpdateErrors, setUpdateSuccess])
+  }, [activeTargetTld, targetData, sourceProduct, details, navigateBack, setShowCreateConfirmation, setUpdating, setUpdateErrors, setUpdateSuccess])
 
   // Update confirmation dialog content (changes that will be applied)
   const updateConfirmationContent = useMemo(() => {
@@ -731,7 +728,7 @@ export default function PreviewEditPage() {
         }}
         title={selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}
         images={dialogImages}
-        showNoImageOption={!selectingProductImage}
+        showNoImageOption={false}
         selectedImage={dialogSelectedImage}
         onSelectImage={(img) => {
           const productImg = img as ProductImage | null

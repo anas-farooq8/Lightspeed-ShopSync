@@ -223,7 +223,7 @@ export default function PreviewCreatePage() {
 
     const allShopsCreated = shopsToCreate.every(tld => newSuccess[tld])
     if (allShopsCreated) {
-      setTimeout(() => navigateBack(), 1500)
+      setTimeout(() => navigateBack(), 500)
     }
   }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
 
@@ -512,7 +512,7 @@ export default function PreviewCreatePage() {
         }}
         title={selectingProductImage ? 'Select Product Image' : 'Select Variant Image'}
         images={dialogImages}
-        showNoImageOption={!selectingProductImage}
+        showNoImageOption={true}
         selectedImage={dialogSelectedImage}
         onSelectImage={(img) => {
           const productImg = img as ProductImage | null

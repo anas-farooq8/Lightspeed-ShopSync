@@ -9,7 +9,7 @@ import { EditableLanguageContentTabs } from '@/components/sync-operations/produc
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay } from '@/lib/utils'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay, cn } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 interface TargetPanelProps {
@@ -239,8 +239,17 @@ export function TargetPanel({
             <div className="relative group">
               <button
                 type="button"
-                onClick={onSelectProductImage}
-                className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-lg overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50 hover:ring-primary/50 transition-colors cursor-pointer"
+                onClick={mode === 'edit' ? undefined : onSelectProductImage}
+                disabled={mode === 'edit'}
+                title={mode === 'edit' ? 'Product image cannot be changed in edit mode' : (showProductImageReset ? 'Click Reset to change image again' : 'Select product image')}
+                className={cn(
+                  'w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 rounded-lg overflow-hidden bg-muted flex items-center justify-center ring-1 ring-border/50 transition-colors',
+                  mode === 'edit'
+                    ? 'opacity-70 cursor-not-allowed'
+                    : showProductImageReset
+                    ? 'opacity-70 cursor-not-allowed'
+                    : 'hover:ring-primary/50 cursor-pointer'
+                )}
               >
                 {targetProductImageUrl ? (
                   <img src={targetProductImageUrl} alt="Product" className="w-full h-full object-cover" />
@@ -249,7 +258,7 @@ export function TargetPanel({
                 )}
               </button>
             </div>
-            {showProductImageReset && (
+            {mode !== 'edit' && showProductImageReset && (
               <Button
                 variant="ghost"
                 size="sm"

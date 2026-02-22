@@ -118,6 +118,10 @@ interface UpdateProductRequest {
   targetShopLanguages: Language[]
   /** Human-readable changes for product_operation_logs */
   changes?: string[]
+  /** True when product image src differs from original (matches dialog detection) */
+  productImageChanged?: boolean
+  /** True when user explicitly reordered product images */
+  imageOrderChanged?: boolean
 }
 
 export async function PUT(request: NextRequest) {
@@ -131,7 +135,7 @@ export async function PUT(request: NextRequest) {
     const { supabase } = auth
 
     const body: UpdateProductRequest = await request.json()
-    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages, changes } = body
+    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages, changes, productImageChanged, imageOrderChanged } = body
 
     if (!targetShopTld || !shopId || !updateProductData || !currentState) {
       return NextResponse.json(
@@ -154,7 +158,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('[API] Updating product for target shop:', targetShopTld, 'productId:', productId)
+    console.log('[API] Updating product for target shop:', targetShopTld, 'productId:', productId, 'productImageChanged:', productImageChanged, 'imageOrderChanged:', imageOrderChanged)
 
     const defaultLanguage = getDefaultLanguageCode(targetShopLanguages)
     if (!defaultLanguage) {
@@ -202,6 +206,8 @@ export async function PUT(request: NextRequest) {
         id: img.id,
         addedFromSource: img.addedFromSource,
       })),
+      productImageChanged: productImageChanged ?? false,
+      imageOrderChanged: imageOrderChanged ?? false,
     })
 
     if (!result.success) {

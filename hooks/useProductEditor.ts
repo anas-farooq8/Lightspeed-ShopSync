@@ -210,11 +210,21 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (mode === 'edit') {
       filtered = filtered.filter((img: { addedFromSource?: boolean }) => !img.addedFromSource)
     }
+    // Variant image selection: exclude images already used by other variants (one image per variant)
+    if (selectingImageForVariant !== null && data?.variants) {
+      const usedByOtherVariants = new Set<string>()
+      data.variants.forEach((v: { image?: { src?: string } | null; deleted?: boolean }, idx: number) => {
+        if (idx !== selectingImageForVariant && !v.deleted && v.image?.src) {
+          usedByOtherVariants.add(v.image.src)
+        }
+      })
+      filtered = filtered.filter((img: { src?: string }) => !usedByOtherVariants.has(img.src ?? ''))
+    }
     const productOrSrc = mode === 'create'
       ? (sourceProduct?.product_image ? { product_image: sourceProduct.product_image } : data?.productImage?.src ?? null)
       : (data?.productImage ? { product_image: data.productImage } : null)
     return sortImagesForDisplay(filtered, productOrSrc)
-  }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages, mode])
+  }, [showImageDialog, sourceProduct, activeTargetTld, targetData, productImages, mode, selectingImageForVariant])
 
   const dialogSelectedImage = useMemo(() => {
     const data = targetData[activeTargetTld]
@@ -725,11 +735,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         if (!ready) {
           contentEditorReadyRef.current[tld][langCode] = true
           if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
-          initialContentRef.current[tld][langCode] = value
-          sourceValue = value
-          isChanged = false
+          const originalContent = updated[tld].content_by_language[langCode]?.content ?? ''
+          initialContentRef.current[tld][langCode] = originalContent
+          sourceValue = originalContent
+          isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
         } else {
-          sourceValue = initialContentRef.current[tld]?.[langCode] || ''
+          sourceValue = initialContentRef.current[tld]?.[langCode] ?? ''
           isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
         }
       } else if (field === 'description') {

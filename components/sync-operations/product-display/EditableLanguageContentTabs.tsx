@@ -474,6 +474,7 @@ export function EditableLanguageContentTabs({
                   onChange={(value) => onUpdateField(lang.code, 'content', value)}
                   theme="snow"
                   modules={{
+                    history: { userOnly: true },
                     toolbar: {
                       container: [
                         [{ 'header': [1, 2, 3, false] }],

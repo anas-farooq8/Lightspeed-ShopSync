@@ -277,6 +277,13 @@ export function ImageSelectionDialog({
               <p className="text-xs mt-1">Restore deleted images to choose a product image.</p>
             </div>
           )}
+          {images.length === 0 && !showNoImageOption && title === 'Select Variant Image' && (
+            <div className="col-span-full text-center py-8 text-muted-foreground text-sm">
+              <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No images available for this variant.</p>
+              <p className="text-xs mt-1">Each image can only be used by one variant. All images are already assigned.</p>
+            </div>
+          )}
           {showNoImageOption && (
             <div
               onClick={() => handleSelect(null)}

@@ -84,7 +84,7 @@ interface ProductImagesGridProps {
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
   images?: ProductImageMeta[] | null
-  /** Product image or src for ordering. When object, sortImagesForDisplay matches by URL; when multiple have sortOrder=1, URL distinguishes. */
+  /** Product image or src for ordering (sortImagesForDisplay sorts by sortOrder + id only). */
   productOrSrc?: { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null
   className?: string
   /** Optional element to render after the last image (e.g. add button in edit mode). */

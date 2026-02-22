@@ -140,55 +140,28 @@ export function sortBySortOrder<T extends { sort_order?: number; sortOrder?: num
 /** Image with optional sortOrder for display logic */
 type ImageWithSortOrder = { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }
 
-type ProductImageInput = { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null | undefined
-
-/** Match product image in list by URL (src). When multiple have sortOrder=1, URL distinguishes. */
-function findProductImageMatch<T extends ImageWithSortOrder>(
-  pi: { src?: string } | null | undefined,
-  images: T[]
-): T | null {
-  if (!pi?.src || !images.length) return null
-  const match = images.find((img) => (img.src ?? '') === pi.src)
-  return (match ?? null) as T | null
-}
-
 /**
- * Sort images for display: product image first, then by sortOrder.
- * Uses URL (src) to match product image; when multiple have sortOrder=1, URL distinguishes, and for other where sorOrder may be same, id distinguishes.
- * productOrSrc: product object or productImageSrc string.
- * Returns sorted array. Product image is at index 0 when found.
+ * Sort images by sortOrder ascending. Tiebreaker: id (smaller first).
+ * No src matching – sortOrder + id only.
  */
 export function sortImagesForDisplay<T extends ImageWithSortOrder>(
   images: T[],
-  productOrSrc?: ProductImageInput
+  _productOrSrc?: unknown
 ): T[] {
   if (!images.length) return []
-  const sorted = sortBySortOrder(images)
-  if (!productOrSrc) return sorted
-
-  let productImageSrc: string | null = null
-  if (typeof productOrSrc === 'string') {
-    productImageSrc = productOrSrc.trim() || null
-  } else if (productOrSrc?.product_image) {
-    const match = findProductImageMatch(productOrSrc.product_image, sorted)
-    productImageSrc = match?.src ?? productOrSrc.product_image.src ?? null
-  }
-
-  if (!productImageSrc) return sorted
-  const matchIdx = sorted.findIndex((img) => (img.src ?? '') === productImageSrc)
-  if (matchIdx <= 0) return sorted
-  const [match] = sorted.splice(matchIdx, 1)
-  return [match, ...sorted]
+  return sortBySortOrder(images)
 }
 
-/** Get product image to display. Matches by URL (src); when multiple have sortOrder=1, URL distinguishes. */
+/** Get product image to display. Returns product_image if set, else first from sorted images. */
 export function getDisplayProductImage(
   product: { product_image?: { src?: string; thumb?: string; title?: string } | null },
   images?: ImageWithSortOrder[] | null
 ): { src?: string; thumb?: string; title?: string } | null {
-  if (!images?.length || !product.product_image) return null
-  const match = findProductImageMatch(product.product_image, images)
-  return match ? { src: match.src, thumb: match.thumb, title: match.title } : null
+  if (product.product_image?.src) return product.product_image
+  if (!images?.length) return null
+  const sorted = sortBySortOrder(images)
+  const first = sorted[0]
+  return first ? { src: first.src, thumb: first.thumb, title: first.title } : null
 }
 
 // ─── Variants ───────────────────────────────────────────────────────────────
