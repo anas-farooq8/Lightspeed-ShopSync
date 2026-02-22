@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { RotateCcw, RefreshCw, Loader2, ArrowDownToLine } from 'lucide-react'
 import {
   cn,
-  getOriginLabel,
   getOriginShortLabel,
   getLanguageOrigin,
   sortLanguages,
@@ -53,6 +52,7 @@ interface EditableLanguageContentTabsProps {
   onResetLanguage: (lang: string) => void
   onRetranslateField?: (lang: string, field: keyof ProductContent) => void
   onRetranslateLanguage?: (lang: string) => void
+  onContentFocus?: (lang: string) => void
 }
 
 export function EditableLanguageContentTabs({
@@ -70,7 +70,8 @@ export function EditableLanguageContentTabs({
   onResetField,
   onResetLanguage,
   onRetranslateField,
-  onRetranslateLanguage
+  onRetranslateLanguage,
+  onContentFocus
 }: EditableLanguageContentTabsProps) {
   const sortedLanguages = sortLanguages(languages)
   const defaultLanguage = getDefaultLanguageCode(languages)
@@ -138,12 +139,13 @@ export function EditableLanguageContentTabs({
     const isSameLanguage = lang === sourceDefaultLang
 
     if (mode === 'create') {
-      if (isDirty) {
-        return 'Manually edited'
-      }
-      if (isSameLanguage) {
-        return 'Copied from source'
-      }
+      // Use meta as source of truth when set (avoids comparison issues, fixes reset labels)
+      if (meta === 'manual') return 'Manually edited'
+      if (meta === 'copied') return 'Copied from source'
+      if (meta === 'translated') return 'Translated from source'
+      // Fallback when meta not set
+      if (isDirty) return 'Manually edited'
+      if (isSameLanguage) return 'Copied from source'
       return 'Translated from source'
     } else {
       // EDIT mode - use meta to determine status
@@ -196,14 +198,14 @@ export function EditableLanguageContentTabs({
     let showRetranslateButton = false
     
     if (mode === 'create') {
+      // Use meta as source of truth when set (icons disappear after reset)
+      const showAsEdited = meta === 'manual' || (meta == null && isDirty)
       if (isSameLanguage) {
-        // CREATE + SAME LANG: Show "Pick from source" ONLY when edited
-        showPickFromSourceButton = isDirty
+        showPickFromSourceButton = showAsEdited
         showResetButton = false
       } else {
-        // CREATE + DIFFERENT LANG: Show "Reset" when edited, always show "Retranslate"
         showPickFromSourceButton = false
-        showResetButton = isDirty
+        showResetButton = showAsEdited
         showRetranslateButton = true
       }
     } else {
@@ -472,6 +474,7 @@ export function EditableLanguageContentTabs({
                 <ReactQuill
                   value={langContent.content || ''}
                   onChange={(value) => onUpdateField(lang.code, 'content', value)}
+                  onFocus={() => onContentFocus?.(lang.code)}
                   theme="snow"
                   modules={{
                     history: { userOnly: true },

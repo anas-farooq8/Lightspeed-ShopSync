@@ -43,7 +43,15 @@ import type {
   TranslationMetaByLang,
 } from '@/types/product'
 
-// ─── Module-level pure helpers ──────────────────────────────────────────────
+// ─── Module-level constants & helpers ───────────────────────────────────────
+
+const TRANSLATABLE_FIELDS: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+
+function checkAnyDirty(data: Record<string, EditableTargetData>): boolean {
+  return Object.values(data).some(
+    td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
+  )
+}
 
 function cloneTargetData(data: Record<string, EditableTargetData>): Record<string, EditableTargetData> {
   const result: Record<string, EditableTargetData> = {}
@@ -155,6 +163,14 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
   const initialContentRef = useRef<Record<string, Record<string, string>>>({})
   const contentEditorReadyRef = useRef<Record<string, Record<string, boolean>>>({})
+  /** After reset of content field, suppress updateField from overwriting meta/dirty (ReactQuill may fire onChange) */
+  const contentJustResetRef = useRef<string | null>(null)
+  /** Meta to apply when consuming contentJustResetRef */
+  const contentJustResetMetaRef = useRef<TranslationOrigin | null>(null)
+  /** EDIT only: clear contentJustResetRef after reset if ReactQuill never fires (so first keystroke is detected) */
+  const contentJustResetClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** CREATE content: only set meta to 'manual' after user has focused – avoids false "Manually edited" on mount */
+  const contentFocusedRef = useRef<Record<string, boolean>>({})
   const originalTranslatedContentRef = useRef<Record<string, Record<string, Record<string, string>>>>({})
   const originalTranslationMetaRef = useRef<Record<string, Record<string, Record<string, TranslationOrigin>>>>({})
 
@@ -305,6 +321,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       : {}
     if (!options?.preserveExisting) {
       contentEditorReadyRef.current = {}
+      contentJustResetRef.current = null
+      contentJustResetMetaRef.current = null
+      contentFocusedRef.current = {}
     }
 
     const allTranslationItems: any[] = []
@@ -354,7 +373,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       
       const shopItemCount = targetLanguages.reduce((count, lang) => {
         if (sourceDefaultLang && lang.code !== sourceDefaultLang) {
-          const fields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+          const fields = TRANSLATABLE_FIELDS
           return count + fields.filter(f => sourceContent?.[f] && sourceContent[f]!.trim() !== '').length
         }
         return count
@@ -457,10 +476,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     setTargetErrors(newTargetErrors)
 
     if (options?.preserveExisting) {
-      const anyDirty = Object.values(newTargetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(newTargetData))
     } else {
       setIsDirty(false)
     }
@@ -490,6 +506,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       : {}
     if (!options?.preserveExisting) {
       contentEditorReadyRef.current = {}
+      if (contentJustResetClearTimeoutRef.current) clearTimeout(contentJustResetClearTimeoutRef.current)
+      contentJustResetClearTimeoutRef.current = null
+      contentJustResetRef.current = null
+      contentJustResetMetaRef.current = null
+      contentFocusedRef.current = {}
     }
 
     const newTargetErrors: Record<string, string> = {}
@@ -619,10 +640,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     setTargetErrors(newTargetErrors)
 
     if (options?.preserveExisting) {
-      const anyDirty = Object.values(newTargetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(newTargetData))
     } else {
       setIsDirty(false)
     }
@@ -645,6 +663,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     const snapshot = perSourceCacheRef.current.get(newProductId)
     if (snapshot) {
+      contentJustResetRef.current = null
+      contentJustResetMetaRef.current = null
       setSelectedSourceProductId(newProductId)
       setTargetData(snapshot.targetData)
       setActiveLanguages(snapshot.activeLanguages)
@@ -652,10 +672,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       originalTranslationMetaRef.current = snapshot.originalTranslationMeta
       initialContentRef.current = snapshot.initialContent
       contentEditorReadyRef.current = snapshot.contentEditorReady
-      const anyDirty = Object.values(snapshot.targetData).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(snapshot.targetData))
       return
     }
 
@@ -721,6 +738,52 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const updated = { ...prev }
       if (!updated[tld]) return prev
       
+      // Content: right after reset or retranslate, ReactQuill may fire onChange – preserve meta, accept Quill's value to avoid loop
+      const justResetKey = `${tld}:${langCode}`
+      if (field === 'content' && contentJustResetRef.current === justResetKey) {
+        contentJustResetRef.current = null
+        const resetMeta = contentJustResetMetaRef.current
+        contentJustResetMetaRef.current = null
+        if (contentJustResetClearTimeoutRef.current) {
+          clearTimeout(contentJustResetClearTimeoutRef.current)
+          contentJustResetClearTimeoutRef.current = null
+        }
+        const fieldKey = `${langCode}.${field}`
+        const newDirtyFields = new Set(updated[tld].dirtyFields)
+        newDirtyFields.delete(fieldKey)
+        // Use incoming value (what ReactQuill sent) – do NOT overwrite with state, or we trigger another onChange → infinite loop
+        if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+        initialContentRef.current[tld][langCode] = value
+        contentEditorReadyRef.current[tld] = contentEditorReadyRef.current[tld] || {}
+        contentEditorReadyRef.current[tld][langCode] = true
+        const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
+        const productImageChanged = !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
+        const newTranslationMeta = resetMeta
+          ? {
+              ...updated[tld].translationMeta,
+              [langCode]: {
+                ...updated[tld].translationMeta?.[langCode],
+                [field]: resetMeta
+              }
+            }
+          : updated[tld].translationMeta
+        updated[tld] = {
+          ...updated[tld],
+          content_by_language: {
+            ...updated[tld].content_by_language,
+            [langCode]: {
+              ...updated[tld].content_by_language[langCode],
+              [field]: value
+            }
+          },
+          dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || visibilityChanged || productImageChanged,
+          dirtyFields: newDirtyFields,
+          translationMeta: newTranslationMeta
+        }
+        setIsDirty(checkAnyDirty(updated))
+        return updated
+      }
+
       let sourceValue: string
       if (field === 'content') {
         sourceValue = initialContentRef.current[tld]?.[langCode] || ''
@@ -738,10 +801,22 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           const originalContent = updated[tld].content_by_language[langCode]?.content ?? ''
           initialContentRef.current[tld][langCode] = originalContent
           sourceValue = originalContent
-          isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
+          // CREATE: No comparison on first sync – ReactQuill may fire with empty/normalized HTML.
+          // EDIT: Compare to detect first keystroke.
+          isChanged = mode === 'create' ? false : (normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue))
         } else {
           sourceValue = initialContentRef.current[tld]?.[langCode] ?? ''
-          isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
+          // CREATE: Manual only when user focused AND value differs from source. When value matches source
+          // (e.g. after Pick), show "Copied" – avoids ReactQuill's post-reset onChange overwriting meta to manual.
+          // EDIT: Compare for change detection.
+          if (mode === 'create') {
+            const focusKey = `${tld}:${langCode}`
+            const userHasFocused = !!contentFocusedRef.current[focusKey]
+            const valueMatchesSource = normalizeContentForComparison(value) === normalizeContentForComparison(sourceValue)
+            isChanged = userHasFocused && !valueMatchesSource
+          } else {
+            isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
+          }
         }
       } else if (field === 'description') {
         const normalizedValue = value.replace(/\r\n/g, '\n')
@@ -760,10 +835,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
       
       const translatableField = field as TranslatableField
-      const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
       let newTranslationMeta = updated[tld].translationMeta
       
-      if (translatableFields.includes(translatableField)) {
+      if (TRANSLATABLE_FIELDS.includes(translatableField)) {
         if (isChanged) {
           newTranslationMeta = {
             ...newTranslationMeta,
@@ -801,13 +875,22 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
       const productImageChanged = !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       
+      // CREATE + content + !ready: don't overwrite with empty when ReactQuill fires before value prop
+      const contentValue =
+        field === 'content' &&
+        mode === 'create' &&
+        !value?.trim() &&
+        (updated[tld].content_by_language[langCode]?.content ?? '').trim()
+          ? updated[tld].content_by_language[langCode]!.content ?? ''
+          : value
+
       updated[tld] = {
         ...updated[tld],
         content_by_language: {
           ...updated[tld].content_by_language,
           [langCode]: {
             ...updated[tld].content_by_language[langCode],
-            [field]: value
+            [field]: contentValue
           }
         },
         dirty: newDirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || visibilityChanged || productImageChanged,
@@ -815,13 +898,14 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         translationMeta: newTranslationMeta
       }
 
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       
       return updated
     })
+  }, [mode])
+
+  const setContentFocused = useCallback((tld: string, langCode: string) => {
+    contentFocusedRef.current[`${tld}:${langCode}`] = true
   }, [])
 
   const updateVariant = useCallback((tld: string, variantIndex: number, field: 'sku' | 'price_excl', value: string | number) => {
@@ -878,10 +962,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [mode, activeLanguages])
@@ -924,10 +1005,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [mode])
@@ -975,10 +1053,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [details, selectedSourceProductId])
@@ -1044,10 +1119,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
 
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [details, selectedSourceProductId, mode])
@@ -1095,10 +1167,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         }
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [details, selectedSourceProductId])
@@ -1151,10 +1220,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1202,10 +1268,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: true
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1253,10 +1316,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1300,10 +1360,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1326,10 +1383,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || isChanged || orderChanged || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage)
       }
       
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [details, selectedSourceProductId])
@@ -1378,10 +1432,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirtyVariants: newDirtyVariants
       }
 
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
     setShowImageDialog(false)
@@ -1407,10 +1458,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           productImage: nextProductImage,
           dirty: true
         }
-        const anyDirty = Object.values(updated).some(
-          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-        )
-        setIsDirty(anyDirty)
+        setIsDirty(checkAnyDirty(updated))
         return updated
       }
 
@@ -1442,10 +1490,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         productImage: nextProductImage,
         dirty: true
       }
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
     setShowImageDialog(false)
@@ -1480,10 +1525,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         productImage: newProductImage,
         dirty: true,
       }
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1526,10 +1568,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         productImage: newProductImage,
         dirty: true,
       }
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [productImages, selectedSourceProductId, details])
@@ -1561,10 +1600,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         imageOrderChanged: true,
         dirty: true
       }
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -1738,10 +1774,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           dirty: true
         }
         
-        const anyDirty = Object.values(updated).some(
-          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-        )
-        setIsDirty(anyDirty)
+        setIsDirty(checkAnyDirty(updated))
         return updated
       })
     } else {
@@ -1764,10 +1797,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           dirty: updated[tld].dirtyFields.size > 0 || updated[tld].dirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || updated[tld].orderChanged
         }
         
-        const anyDirty = Object.values(updated).some(
-          td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-        )
-        setIsDirty(anyDirty)
+        setIsDirty(checkAnyDirty(updated))
         return updated
       })
     }
@@ -1780,18 +1810,48 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
     if (!sourceProduct) return
 
+    const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
+    const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
+    const isSameLang = langCode === sourceDefaultLang
+
     const resetKey = `${tld}:${langCode}:${field}`
     setResettingField(resetKey)
 
     await new Promise(resolve => setTimeout(resolve, 100))
 
+    // CREATE mode: Pick from source (same lang) = copy from source; Reset (different lang) = restore translated
+    // EDIT mode: always use originalTranslatedContentRef (target's original values)
+    let originalValue: string
+    let originalOrigin: TranslationOrigin
+    if (mode === 'create') {
+      if (isSameLang) {
+        const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
+        originalValue = (sourceContent[field as keyof ProductContent] as string) ?? ''
+        originalOrigin = 'copied'
+      } else {
+        originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[field] || ''
+        originalOrigin = (originalTranslationMetaRef.current[tld]?.[langCode]?.[field] as TranslationOrigin) || 'translated'
+      }
+    } else {
+      originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[field] || ''
+      originalOrigin = originalTranslationMetaRef.current[tld]?.[langCode]?.[field] as TranslationOrigin
+    }
+
     if (field === 'content') {
       if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
       contentEditorReadyRef.current[tld][langCode] = false
+      contentJustResetRef.current = `${tld}:${langCode}`
+      contentJustResetMetaRef.current = originalOrigin
+      // EDIT only: ReactQuill may not fire onChange on programmatic reset – clear ref after ~150ms so first keystroke is detected
+      if (mode === 'edit') {
+        if (contentJustResetClearTimeoutRef.current) clearTimeout(contentJustResetClearTimeoutRef.current)
+        contentJustResetClearTimeoutRef.current = setTimeout(() => {
+          contentJustResetRef.current = null
+          contentJustResetMetaRef.current = null
+          contentJustResetClearTimeoutRef.current = null
+        }, 150)
+      }
     }
-
-    const originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[field] || ''
-    const originalOrigin = originalTranslationMetaRef.current[tld]?.[langCode]?.[field] as TranslationOrigin
 
     setTargetData(prev => {
       const updated = { ...prev }
@@ -1828,11 +1888,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         translationMeta: newTranslationMeta
       }
 
+      setIsDirty(checkAnyDirty(updated))
+
       return updated
     })
 
     setResettingField(null)
-  }, [details, selectedSourceProductId])
+  }, [mode, details, selectedSourceProductId])
 
   const resetLanguage = useCallback(async (tld: string, langCode: string) => {
     if (!details || !selectedSourceProductId) return
@@ -1848,7 +1910,6 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
     contentEditorReadyRef.current[tld][langCode] = false
 
-    const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
     const originalContent = originalTranslatedContentRef.current[tld]?.[langCode] || {}
     const originalMeta = originalTranslationMetaRef.current[tld]?.[langCode] || {}
 
@@ -1868,7 +1929,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       }
 
       const newLangMeta: any = {}
-      translatableFields.forEach(field => {
+      TRANSLATABLE_FIELDS.forEach(field => {
         newLangMeta[field] = originalMeta[field] || 'translated'
       })
 
@@ -2051,10 +2112,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         dirty: updated[tld].dirtyFields.size > 0 || newDirtyVariants.size > 0 || updated[tld].removedImageSrcs.size > 0 || updated[tld].visibility !== updated[tld].originalVisibility || !isSameImageInfo(updated[tld].productImage, updated[tld].originalProductImage) || updated[tld].orderChanged,
         dirtyVariants: newDirtyVariants,
       }
-      const anyDirty = Object.values(updated).some(
-        td => td.dirty || td.dirtyFields.size > 0 || td.dirtyVariants.size > 0 || td.removedImageSrcs.size > 0
-      )
-      setIsDirty(anyDirty)
+      setIsDirty(checkAnyDirty(updated))
       return updated
     })
   }, [])
@@ -2295,6 +2353,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (field === 'content') {
       if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
       contentEditorReadyRef.current[tld][langCode] = false
+      contentJustResetRef.current = `${tld}:${langCode}`
+      // contentJustResetMetaRef set below after we get origin
     }
 
     try {
@@ -2318,6 +2378,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           tld
         )
       }
+
+      if (field === 'content') contentJustResetMetaRef.current = origin
 
       setTargetData(prev => {
         const updated = { ...prev }
@@ -2403,16 +2465,17 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
     contentEditorReadyRef.current[tld][langCode] = false
+    contentJustResetRef.current = `${tld}:${langCode}`
+    contentJustResetMetaRef.current = 'translated'
 
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
-    const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
 
     try {
       const results = await getBaseValuesForLanguage(
         sourceContent,
         sourceDefaultLang,
         langCode,
-        translatableFields,
+        TRANSLATABLE_FIELDS,
         undefined,
         tld
       )
@@ -2437,7 +2500,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         const newContent: ProductContent = {}
         const newLangMeta: any = {}
         
-        translatableFields.forEach((field) => {
+        TRANSLATABLE_FIELDS.forEach((field) => {
           const { value } = results[field]
           newContent[field] = value
           newLangMeta[field] = 'translated'
@@ -2584,6 +2647,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     resetShop,
     retranslateField,
     retranslateLanguage,
+    setContentFocused,
     
     // Cleanup
     cleanup,
