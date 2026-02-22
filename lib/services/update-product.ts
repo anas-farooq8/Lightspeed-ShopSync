@@ -10,16 +10,14 @@
  * 1. Product: visibility & content (default)
  * 2. Delete removed images
  * 3. Delete removed variants
- * 4. Create new images & variants
- * 5. Fetch
- * 6. Update sortOrders (existing only for product image; all for order)
- * 7. Multi-language
- * 8. Derive, return for DB sync
+ * 4. Create new images & variants (4a update, 4b create variants, 4c create images)
+ * 5. Multi-language
+ * 6. Product image swap (using diff data)
+ * 7. Fetch + derive for DB sync
  */
 
 import { LightspeedAPIClient } from './lightspeed-api'
 import { downloadImage, clearImageCache } from './image-handler'
-import { sortBySortOrder } from '@/lib/utils'
 
 export interface UpdateVariantInfo {
   /** Lightspeed variant ID for existing variants; null for new (added from source) */
@@ -199,9 +197,9 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     const hasImageChanges = toDeleteImages.length > 0 || hasNewImages
 
     // Product image swap: first existing image in intended order differs from current first
-    const currentFirstImage = sortBySortOrder(currentImages)[0]
-    const intendedOrderForSkip = sortBySortOrder(intendedImages)
-    const firstExistingInIntended = intendedOrderForSkip.find((ii) => {
+    // Images are already ordered by UI (sortImagesForDisplay / sortBySortOrder before API call)
+    const currentFirstImage = currentImages.find((p) => p.sortOrder === 1) ?? currentImages[0]
+    const firstExistingInIntended = intendedImages.find((ii) => {
       const id = parseImageId(ii)
       return id != null && currentImageIds.has(id)
     })
@@ -277,80 +275,11 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       console.log('[UPDATE] Step 3: Delete variants – none to delete, skipped')
     }
 
-    // ─── Step 4: Create new product images & variants (sorted like create) ──
-    const newImageCount = intendedImages.filter((ii) => isNewImage(ii, currentImages)).length
-    console.log(`[UPDATE] Step 4: Create new images & variants (${newImageCount} new image(s) to create)`)
-    const sortedImages = sortBySortOrder(intendedImages)
+    // ─── Step 4a: Update existing variants (fields + image from existing target) ─
     const createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }> = []
-    const processedVariantIndices = new Set<number>()
-    /** New product image ids from createProductImage (for sortOrder update) */
-    const newProductImageIdsBySrc = new Map<string, number>()
-
-    for (const image of sortedImages) {
-      if (!isNewImage(image, currentImages)) continue
-
-      const variantsForImage = intendedVariants
-        .filter((v) => v.image?.src === image.src)
-        .sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1))
-
-      if (variantsForImage.length > 0) {
-        const imageData = await downloadImage(image.src)
-        const filename = imageFilename(image.title, imageData.extension)
-
-        for (const iv of variantsForImage) {
-          const idx = intendedVariants.indexOf(iv)
-          if (iv.variant_id != null && currentVariantIds.has(iv.variant_id)) {
-            await targetClient.updateVariant(iv.variant_id, {
-              variant: {
-                sku: iv.sku,
-                articleCode: iv.sku,
-                isDefault: iv.is_default,
-                sortOrder: iv.sort_order,
-                priceExcl: iv.price_excl,
-                title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
-                image: { attachment: imageData.base64, filename },
-              },
-            }, defaultLanguage)
-            variantIdMap.set(idx, iv.variant_id)
-            processedVariantIndices.add(idx)
-            console.log(`[UPDATE] ✓ Updated variant ${iv.variant_id} with image`)
-          } else {
-            const res = await targetClient.createVariant({
-              variant: {
-                product: productId,
-                isDefault: iv.is_default,
-                sortOrder: iv.sort_order,
-                sku: iv.sku,
-                articleCode: iv.sku,
-                priceExcl: iv.price_excl,
-                title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
-                image: { attachment: imageData.base64, filename },
-              },
-            }, defaultLanguage)
-            const newId = res.variant.id
-            variantIdMap.set(idx, newId)
-            createdVariantsForDb.push({ variantId: newId, sku: iv.sku, index: idx })
-            processedVariantIndices.add(idx)
-            console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku}) with image, sortOrder: ${iv.sort_order}`)
-          }
-        }
-      } else {
-        const imageData = await downloadImage(image.src)
-        const createRes = await targetClient.createProductImage(productId, {
-          productImage: {
-            attachment: imageData.base64,
-            filename: imageFilename(image.title, imageData.extension),
-          },
-        }, defaultLanguage)
-        newProductImageIdsBySrc.set(image.src, createRes.productImage.id)
-        console.log(`[UPDATE] ✓ Created product image (id: ${createRes.productImage.id})`)
-      }
-    }
-
-    // Update existing variants (field changes, no new image from loop)
+    console.log('[UPDATE] Step 4a: Update existing variants')
     for (const iv of intendedExisting) {
       const idx = intendedVariants.indexOf(iv)
-      if (processedVariantIndices.has(idx)) continue
 
       const cv = currentVariants.find((c) => c.lightspeed_variant_id === iv.variant_id!)
       if (!cv || !variantHasChanges(cv, iv, targetLanguages)) continue
@@ -371,19 +300,22 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           attachment: imageData.base64,
           filename: imageFilename(iv.image.title, imageData.extension),
         }
+      } else {
+        payload.variant!.image = null
       }
       await targetClient.updateVariant(iv.variant_id!, payload, defaultLanguage)
       variantIdMap.set(idx, iv.variant_id!)
       console.log(`[UPDATE] ✓ Updated variant ${iv.variant_id}`)
     }
 
-    // Create new variants (no image)
+    // ─── Step 4b: Create new variants (image from existing target only) ─
+    // Frontend validates: only existing target images can be picked for variants.
+    console.log(`[UPDATE] Step 4b: Create new variants (${intendedNew.length})`)
     for (const iv of intendedNew) {
       const idx = intendedVariants.indexOf(iv)
-      if (processedVariantIndices.has(idx)) continue
 
       const title = sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku)
-      const res = await targetClient.createVariant({
+      const variantPayload: Parameters<typeof targetClient.createVariant>[0] = {
         variant: {
           product: productId,
           isDefault: iv.is_default,
@@ -393,96 +325,43 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           priceExcl: iv.price_excl,
           title,
         },
-      }, defaultLanguage)
+      }
+      if (iv.image?.src) {
+        const imageData = await downloadImage(iv.image.src)
+        variantPayload.variant.image = {
+          attachment: imageData.base64,
+          filename: imageFilename(iv.image.title, imageData.extension),
+        }
+      }
+      const res = await targetClient.createVariant(variantPayload, defaultLanguage)
       const newId = res.variant.id
       variantIdMap.set(idx, newId)
       createdVariantsForDb.push({ variantId: newId, sku: iv.sku, index: idx })
       console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku}), sortOrder: ${iv.sort_order}`)
     }
 
-    clearImageCache()
-
-    // ─── Step 5: Fetch (for sortOrder update and DB sync) ───────────────────
-    console.log('[UPDATE] Step 5: Fetching product images and variants...')
-    const [productImagesRes, variantsRes] = await Promise.all([
-      targetClient.getProductImages(productId, defaultLanguage),
-      targetClient.getVariants(productId, defaultLanguage),
-    ])
-    console.log(`[UPDATE] ✓ Fetched ${productImagesRes.length} images, ${(variantsRes.variants ?? []).length} variants`)
-
-    // ─── Step 5b: Product image swap (at most 2 calls) ──
-    // Only way to change order = select product image. Swap: new first ↔ old first. S = 0 or 2.
-    const intendedOrder = sortBySortOrder(intendedImages)
-    const remainingCurrentIds = new Set(
-      currentImages.filter((ci) => !toDeleteImages.some((d) => d.id === ci.id)).map((ci) => ci.id)
-    )
-
-    function resolveProductImageId(ii: UpdateImageInfo): number | null {
-      const numericId = parseImageId(ii)
-      if (numericId != null && remainingCurrentIds.has(numericId)) return numericId
-      if (newProductImageIdsBySrc.has(ii.src)) return newProductImageIdsBySrc.get(ii.src)!
-      const variantsUsingImage = intendedVariants.filter((v) => v.image?.src === ii.src)
-      if (variantsUsingImage.length > 0) {
-        const firstVariantIdx = intendedVariants.indexOf(variantsUsingImage[0])
-        const variantId = variantIdMap.get(firstVariantIdx)
-        if (variantId) {
-          const fv = (variantsRes.variants ?? []).find((v) => v.id === variantId)
-          const variantImageSrc =
-            fv?.image && typeof fv.image === 'object' && 'src' in fv.image
-              ? (fv.image as { src: string }).src
-              : null
-          if (variantImageSrc) {
-            const match = productImagesRes.find((pi) => pi.src === variantImageSrc)
-            if (match) return match.id
-          }
-        }
-      }
-      return null
+    // ─── Step 4c: Create new product images (from source) ────────────────────
+    // New images are NOT attachable to product or variants. Just append via createProductImage.
+    const newImageCount = intendedImages.filter((ii) => isNewImage(ii, currentImages)).length
+    console.log(`[UPDATE] Step 4c: Create new images (${newImageCount}) – append only`)
+    const newImages = intendedImages.filter((ii) => isNewImage(ii, currentImages))
+    for (const image of newImages) {
+      const imageData = await downloadImage(image.src)
+      await targetClient.createProductImage(productId, {
+        productImage: {
+          attachment: imageData.base64,
+          filename: imageFilename(image.title, imageData.extension),
+        },
+      }, defaultLanguage)
+      console.log(`[UPDATE] ✓ Created product image: "${image.title}"`)
     }
 
-    const isExisting = (ii: UpdateImageInfo) => {
-      const id = parseImageId(ii)
-      return id != null && remainingCurrentIds.has(id)
-    }
-    const firstExistingIndex = intendedOrder.findIndex(isExisting)
-    const firstIntended = intendedOrder[0]
-    const newFirstId = firstIntended ? resolveProductImageId(firstIntended) : null
-    const currentFirst = productImagesRes.find((p) => p.sortOrder === 1)
-
-    let firstProductImageId: number | null = newFirstId ?? currentFirst?.id ?? null
-
-    if (newFirstId != null && currentFirst != null && newFirstId !== currentFirst.id) {
-      await targetClient.updateProductImage(
-        productId,
-        newFirstId,
-        { productImage: { sortOrder: 1 } },
-        defaultLanguage
-      )
-      await targetClient.updateProductImage(
-        productId,
-        currentFirst.id,
-        { productImage: { sortOrder: 2 } },
-        defaultLanguage
-      )
-      console.log(`[UPDATE] ✓ Product image swap: id=${newFirstId} -> 1, id=${currentFirst.id} -> 2`)
-    } else if (newFirstId != null && !currentFirst && firstExistingIndex < 0) {
-      await targetClient.updateProductImage(
-        productId,
-        newFirstId,
-        { productImage: { sortOrder: 1 } },
-        defaultLanguage
-      )
-      console.log(`[UPDATE] ✓ Set product image: id=${newFirstId} -> 1`)
-    } else {
-      console.log('[UPDATE] Step 5b: SortOrders – no swap needed, skipped')
-    }
-
-    // ─── Step 6b: Multi-language (product content + variant titles for additional languages) ──
+    // ─── Step 5: Multi-language (product content + variant titles for additional languages) ─
     const additionalLanguages = targetLanguages.filter((l) => l !== defaultLanguage)
     if (additionalLanguages.length === 0) {
-      console.log('[UPDATE] Step 6: Multi-language – no additional languages, skipped')
+      console.log('[UPDATE] Step 5: Multi-language – no additional languages, skipped')
     } else {
-      console.log('[UPDATE] Multi-language: updating additional languages:', additionalLanguages)
+      console.log('[UPDATE] Step 5: Multi-language – updating additional languages:', additionalLanguages)
       for (const lang of additionalLanguages) {
         const langContent = intendedContentByLanguage[lang]
         if (!langContent) {
@@ -512,49 +391,57 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       }
     }
 
-    // ─── Step 7: Derive productImageForDb, variantImagesForDb (same as create)
-    const fetchedVariants = variantsRes.variants ?? []
-    const variantImagesForDb: Record<number, VariantImageForDb> = {}
+    // Clear image cache (like create-product)
+    clearImageCache()
 
+    // ─── Step 6: Product image swap (using diff data – no fetch needed) ───────
+    // We already know current first (currentFirstImage) and intended first (intendedFirstId) from the diff.
+    // Product image can only be from existing target images. Swap sortOrder: new first ↔ old first.
+    const remainingCurrentIds = new Set(
+      currentImages.filter((ci) => !toDeleteImages.some((d) => d.id === ci.id)).map((ci) => ci.id)
+    )
+    const firstExistingForSwap = intendedImages.find((ii) => {
+      const id = parseImageId(ii)
+      return id != null && remainingCurrentIds.has(id)
+    })
+    const newFirstId = firstExistingForSwap ? parseImageId(firstExistingForSwap) : null
+
+    if (hasProductImageChange && newFirstId != null && firstExistingForSwap) {
+      // Use actual Lightspeed sortOrder from currentImages (not UI sort_order from intendedImages)
+      const promotedImage = currentImages.find((ci) => ci.id === newFirstId)
+      const oldFirstSortOrder = promotedImage?.sortOrder ?? firstExistingForSwap.sort_order
+      // Promote intended first to sortOrder 1
+      await targetClient.updateProductImage(productId, newFirstId, { productImage: { sortOrder: 1 } }, defaultLanguage)
+      // If current first still exists (wasn't deleted), give it the slot we took (swap)
+      if (currentFirstImage != null && remainingCurrentIds.has(currentFirstImage.id)) {
+        await targetClient.updateProductImage(productId, currentFirstImage.id, { productImage: { sortOrder: oldFirstSortOrder } }, defaultLanguage)
+        console.log(`[UPDATE] ✓ Product image swap: id=${newFirstId} -> 1, id=${currentFirstImage.id} -> ${oldFirstSortOrder}`)
+      } else {
+        console.log(`[UPDATE] ✓ Product image swap: id=${newFirstId} -> 1 (previous first was deleted)`)
+      }
+    } else {
+      console.log('[UPDATE] Step 6: Product image – no swap needed, skipped')
+    }
+
+    // ─── Step 7: Fetch + derive for DB sync ──────────────────────────────────
+    console.log('[UPDATE] Step 7: Fetching product and variants...')
+    const [productRes, variantsRes] = await Promise.all([
+      targetClient.getProduct(productId, defaultLanguage),
+      targetClient.getVariants(productId, defaultLanguage),
+    ])
+    const fetchedVariants = variantsRes.variants ?? []
+    console.log(`[UPDATE] ✓ Fetched product, ${fetchedVariants.length} variants`)
+
+    // Derive productImageForDb, variantImagesForDb (same as create) ─
+    const variantImagesByVariantId: Record<number, VariantImageForDb> = {}
     for (const [index, variantId] of variantIdMap) {
       const fv = fetchedVariants.find((v) => v.id === variantId)
       const img = toImageForDb(fv?.image)
-      if (img) {
-        variantImagesForDb[variantId] = img
-      }
+      if (img) variantImagesByVariantId[variantId] = img
     }
 
-    let productImageForDb: ProductImageForDb = null
-    // We set firstProductImageId to sortOrder=1 in step 5b - use it directly
-    if (firstProductImageId != null) {
-      const img = productImagesRes.find((p) => p.id === firstProductImageId)
-      productImageForDb = toImageForDb(img)
-    }
-    if (!productImageForDb) {
-      const firstImage = intendedOrder[0]
-      const variantsUsingFirst = firstImage
-        ? intendedVariants
-            .filter((v) => v.image?.src === firstImage.src)
-            .sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1))
-        : []
-      if (variantsUsingFirst.length > 0) {
-        const firstVariantIndex = intendedVariants.indexOf(variantsUsingFirst[0])
-        const variantId = variantIdMap.get(firstVariantIndex)
-        if (variantId) {
-          productImageForDb = variantImagesForDb[variantId] ?? null
-        }
-      }
-    }
-    if (!productImageForDb) {
-      const firstImage = intendedOrder[0]
-      const firstImageTitle = (firstImage?.title ?? '').trim().toLowerCase()
-      const sortOrder1Images = productImagesRes.filter((img) => img.sortOrder === 1)
-      const productImg =
-        sortOrder1Images.find((img) => (img.title ?? '').trim().toLowerCase() === firstImageTitle) ??
-        sortOrder1Images[0] ??
-        productImagesRes[0]
-      productImageForDb = toImageForDb(productImg)
-    }
+    // Product image: from product.image (like create-product)
+    const productImageForDb = toImageForDb(productRes.product.image)
 
     console.log('[UPDATE] ✓✓✓ Update complete')
 
@@ -563,15 +450,14 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       return cv != null && variantHasChanges(cv, iv, targetLanguages)
     })
 
-    // Build updatedVariantImages (variantId -> image) and createdVariantImages (index -> image) for sync
     const updatedVariantImages: Record<number, VariantImageForDb> = {}
     const createdVariantImages: Record<number, VariantImageForDb> = {}
     for (const vid of toUpdate.map((v) => v.variant_id!)) {
-      const img = variantImagesForDb[vid]
+      const img = variantImagesByVariantId[vid]
       if (img) updatedVariantImages[vid] = img
     }
     for (const { variantId, index } of createdVariantsForDb) {
-      const img = variantImagesForDb[variantId]
+      const img = variantImagesByVariantId[variantId]
       if (img) createdVariantImages[index] = img
     }
 

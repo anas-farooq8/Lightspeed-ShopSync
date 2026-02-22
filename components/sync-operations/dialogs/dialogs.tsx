@@ -103,6 +103,10 @@ export interface CreateProductConfirmationContent {
   sku: string
   /** Edit mode only: list of changes that will be applied */
   changes?: string[]
+  /** Create mode: product title (from content_by_language) */
+  productTitle?: string
+  /** Create mode: default/product SKU shown prominently */
+  defaultSku?: string
 }
 
 export function CreateProductConfirmationDialog({
@@ -144,6 +148,15 @@ export function CreateProductConfirmationDialog({
                         ? 'Are you sure you want to create this product in the following shops?'
                         : 'Are you sure you want to create this product in the following shop?'}
                   </p>
+                  {(items[0].productTitle || items[0].defaultSku) && (
+                    <p className="text-xs sm:text-sm text-muted-foreground break-words">
+                      {items[0].productTitle && <span className="text-foreground line-clamp-2">{items[0].productTitle}</span>}
+                      {items[0].productTitle && items[0].defaultSku && ' · '}
+                      {items[0].defaultSku && (
+                        <span>SKU: <code className="bg-muted px-1 py-0.5 rounded font-mono text-xs break-all">{items[0].defaultSku}</code></span>
+                      )}
+                    </p>
+                  )}
                   <div className="space-y-3 max-h-[200px] overflow-y-auto">
                     {items.map((c) => (
                       <div key={c.shopTld} className="rounded-lg border bg-muted/50 p-3 sm:p-4 space-y-2">
@@ -161,15 +174,14 @@ export function CreateProductConfirmationDialog({
                                 <li key={i}>• {change}</li>
                               ))}
                             </ul>
-                            <p className="text-xs text-muted-foreground">
-                              SKU: <code className="bg-muted px-1 py-0.5 rounded font-mono break-all">{c.sku}</code>
-                            </p>
                           </>
                         ) : (
                           <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 break-words">
                             <li>• {c.variantCount} variant{c.variantCount !== 1 ? 's' : ''}</li>
                             <li>• {c.imageCount} image{c.imageCount !== 1 ? 's' : ''}</li>
-                            <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{c.sku}</code></li>
+                            {(!c.defaultSku || isEdit) && (
+                              <li>• SKU: <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono break-all">{c.sku}</code></li>
+                            )}
                           </ul>
                         )}
                       </div>

@@ -279,6 +279,16 @@ export default function PreviewEditPage() {
     const activeVariants = data.variants.filter(v => !v.deleted)
     const skuVal = activeVariants[0]?.sku || sourceProduct.sku || sku
 
+    const productTitle = (() => {
+      const content = data.content_by_language
+      if (!content) return undefined
+      for (const lang of Object.keys(content)) {
+        const title = content[lang]?.title?.trim()
+        if (title) return title
+      }
+      return undefined
+    })()
+
     const changes: string[] = []
 
     if (data.visibility !== data.originalVisibility) {
@@ -299,7 +309,7 @@ export default function PreviewEditPage() {
       }
       const names = Array.from(fields).map(f => fieldLabels[f] || f).filter(Boolean)
       if (names.length > 0) {
-        changes.push(`Product content: ${names.join(', ')} changed`)
+        changes.push(`Product content: ${names.join(', ')}`)
       }
     }
 
@@ -322,7 +332,7 @@ export default function PreviewEditPage() {
 
     const productImageChanged = data.productImage?.src !== data.originalProductImage?.src
     if (productImageChanged) {
-      changes.push('Product image changed')
+      changes.push('Product image')
     }
 
     const imagesAddedFromSource = data.images.filter((img: { addedFromSource?: boolean }) => img.addedFromSource).length
@@ -336,7 +346,7 @@ export default function PreviewEditPage() {
     }
 
     if (data.imageOrderChanged) {
-      changes.push('Image order changed')
+      changes.push('Image order')
     }
 
     return {
@@ -345,6 +355,8 @@ export default function PreviewEditPage() {
       variantCount: activeVariants.length,
       imageCount: data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length,
       sku: skuVal,
+      defaultSku: skuVal,
+      productTitle: productTitle || undefined,
       changes: changes.length > 0 ? changes : ['No specific changes tracked'],
     }
   }, [details, sourceProduct, activeTargetTld, targetData, sku])

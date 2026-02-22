@@ -225,7 +225,7 @@ export default function PreviewCreatePage() {
   // Create confirmation dialog content (counts match what will be created) - all target shops
   const createConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
-    const items: Array<{ shopName: string; shopTld: string; variantCount: number; imageCount: number; sku: string }> = []
+    const items: Array<{ shopName: string; shopTld: string; variantCount: number; imageCount: number; sku: string; productTitle?: string; defaultSku?: string }> = []
 
     for (const tld of sortedTargetShops) {
       const data = targetData[tld]
@@ -235,13 +235,28 @@ export default function PreviewCreatePage() {
       const activeVariants = data.variants.filter(v => !v.deleted)
       const variantCount = activeVariants.length
       const imageCount = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length
+      const defaultSku = activeVariants[0]?.sku || sourceProduct.sku || sku
+
+      // Product title from first available language
+      const productTitle = (() => {
+        const content = data.content_by_language
+        if (!content) return undefined
+        const langs = Object.keys(content)
+        for (const lang of langs) {
+          const title = content[lang]?.title?.trim()
+          if (title) return title
+        }
+        return undefined
+      })()
 
       items.push({
         shopName,
         shopTld: tld,
         variantCount,
         imageCount,
-        sku: activeVariants[0]?.sku || sourceProduct.sku || sku
+        sku: defaultSku,
+        productTitle: productTitle || undefined,
+        defaultSku
       })
     }
 

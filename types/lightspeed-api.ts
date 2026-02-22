@@ -56,10 +56,11 @@ export interface UpdateVariantPayload {
     articleCode?: string // same as sku
     priceExcl?: number
     title?: string
+    /** Pass { attachment, filename } to set; pass null to clear */
     image?: {
       attachment: string
       filename: string
-    }
+    } | null
   }
 }
 
