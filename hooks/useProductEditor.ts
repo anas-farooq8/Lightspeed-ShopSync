@@ -988,8 +988,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (!updated[tld]) return prev
 
       const existing = updated[tld].variants
-      const existingSkus = new Set(existing.map(v => (v.sku || '').toLowerCase().trim()).filter(Boolean))
-      const maxSortOrder = existing.reduce((max, v) => Math.max(max, v.sort_order ?? 0), 0)
+      const activeExisting = existing.filter(v => !v.deleted)
+      const existingSkus = new Set(activeExisting.map(v => (v.sku || '').toLowerCase().trim()).filter(Boolean))
+      const maxSortOrder = activeExisting.reduce((max, v) => Math.max(max, v.sort_order ?? 0), 0)
 
       const toAdd = sourceVariants
         .filter(sv => !existingSkus.has((sv.sku || '').toLowerCase().trim()))

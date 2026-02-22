@@ -154,7 +154,7 @@ function findProductImageMatch<T extends ImageWithSortOrder>(
 
 /**
  * Sort images for display: product image first, then by sortOrder.
- * Uses URL (src) to match product image; when multiple have sortOrder=1, URL distinguishes.
+ * Uses URL (src) to match product image; when multiple have sortOrder=1, URL distinguishes, and for other where sorOrder may be same, id distinguishes.
  * productOrSrc: product object or productImageSrc string.
  * Returns sorted array. Product image is at index 0 when found.
  */

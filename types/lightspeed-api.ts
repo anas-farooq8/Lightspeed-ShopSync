@@ -85,6 +85,8 @@ export interface LightspeedProduct {
   content?: string
   createdAt: string
   updatedAt: string
+  /** Main product image. API returns false when no image (→ null for DB). */
+  image?: { src?: string; thumb?: string; title?: string } | false
 }
 
 export interface LightspeedVariant {

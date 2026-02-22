@@ -13,7 +13,6 @@
 
 import { LightspeedAPIClient } from './lightspeed-api'
 import { downloadImage, clearImageCache } from './image-handler'
-import { sortBySortOrder } from '@/lib/utils'
 
 export interface ImageInfo {
   src: string
@@ -168,11 +167,12 @@ export async function createProduct(
     let productImageForDb: ProductImageForDb = null
     const variantImagesForDb: Record<number, { src: string; thumb?: string; title?: string }> = {}
 
-    const sortedImages = sortBySortOrder(images)
-    console.log(`[CREATE] Sorted images (first created = product image):`, sortedImages.map((img, i) => `#${i + 1} sort_order=${img.sort_order} "${img.title}"`).join(', '))
+    // Images are already ordered by UI (sortImagesForDisplay: product image first, then by sort_order with id tiebreaker)
+    const imagesInOrder = images
+    console.log(`[CREATE] Images (first = product image):`, imagesInOrder.map((img, i) => `#${i + 1} sort_order=${img.sort_order} "${img.title}"`).join(', '))
 
-    for (let imgIdx = 0; imgIdx < sortedImages.length; imgIdx++) {
-      const image = sortedImages[imgIdx]
+    for (let imgIdx = 0; imgIdx < imagesInOrder.length; imgIdx++) {
+      const image = imagesInOrder[imgIdx]
       const variantsForImage = variants
         .filter(v => v.image?.src === image.src)
         .sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1)) // default first
@@ -376,14 +376,14 @@ export async function createProduct(
     clearImageCache()
 
     // ============================================================
-    // FETCH: Get product image and variant images from target
+    // FETCH: Get product and variants from target
     // ============================================================
-    const [productImagesRes, variantsRes] = await Promise.all([
-      targetClient.getProductImages(productId, defaultLanguage),
+    const [productRes, variantsRes] = await Promise.all([
+      targetClient.getProduct(productId, defaultLanguage),
       targetClient.getVariants(productId, defaultLanguage),
     ])
 
-    // Variant images: from fetched variants by variantId (compute first - needed for product image)
+    // Variant images: from fetched variants by variantId
     const fetchedVariants = variantsRes.variants ?? []
     for (const [index, variantId] of variantIdMap) {
       const fv = fetchedVariants.find((v) => v.id === variantId)
@@ -393,31 +393,10 @@ export async function createProduct(
       }
     }
 
-    // Product image: our first image = sortedImages[0]. When both product-only and variant
-    // image get sortOrder=1, title matching can fail. Prefer variant image when first
-    // image is variant-attached (we have it from getVariants). Otherwise use product images.
-    const firstImage = sortedImages[0]
-    const variantsUsingFirst = firstImage
-      ? variants.filter((v) => v.image?.src === firstImage.src).sort((a, b) => (a.is_default ? 0 : 1) - (b.is_default ? 0 : 1))
-      : []
-    if (variantsUsingFirst.length > 0) {
-      const firstVariantIndex = variants.indexOf(variantsUsingFirst[0])
-      productImageForDb = variantImagesForDb[firstVariantIndex] ?? null
-      if (productImageForDb) {
-        console.log(`[DEBUG] productImageForDb from variant (${variantsUsingFirst[0].sku}) - avoids sortOrder=1 ambiguity`)
-      }
-    }
-    if (!productImageForDb) {
-      const firstImageTitle = (firstImage?.title ?? '').trim().toLowerCase()
-      const sortOrder1Images = productImagesRes.filter((img) => img.sortOrder === 1)
-      const productImg =
-        sortOrder1Images.find((img) => (img.title ?? '').trim().toLowerCase() === firstImageTitle) ??
-        sortOrder1Images[0] ??
-        productImagesRes[0]
-      productImageForDb = toImageForDb(productImg)
-      if (productImagesRes.length > 0) {
-        console.log(`[DEBUG] productImageForDb from product images: sortOrder=1 count=${sortOrder1Images.length}, title="${firstImageTitle}", matched:`, productImg ? 'yes' : 'no')
-      }
+    // Product image: from product.image (main product image in Lightspeed response)
+    productImageForDb = toImageForDb(productRes.product.image)
+    if (productImageForDb) {
+      console.log(`[DEBUG] productImageForDb from product.image`)
     }
 
     console.log('[CREATE] ✓✓✓ Product creation complete!')

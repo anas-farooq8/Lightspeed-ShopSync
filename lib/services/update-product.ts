@@ -305,7 +305,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
                 sku: iv.sku,
                 articleCode: iv.sku,
                 isDefault: iv.is_default,
-                sortOrder: idx + 1,
+                sortOrder: iv.sort_order,
                 priceExcl: iv.price_excl,
                 title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
                 image: { attachment: imageData.base64, filename },
@@ -319,7 +319,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
               variant: {
                 product: productId,
                 isDefault: iv.is_default,
-                sortOrder: idx + 1,
+                sortOrder: iv.sort_order,
                 sku: iv.sku,
                 articleCode: iv.sku,
                 priceExcl: iv.price_excl,
@@ -331,7 +331,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
             variantIdMap.set(idx, newId)
             createdVariantsForDb.push({ variantId: newId, sku: iv.sku, index: idx })
             processedVariantIndices.add(idx)
-            console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku}) with image`)
+            console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku}) with image, sortOrder: ${iv.sort_order}`)
           }
         }
       } else {
@@ -360,7 +360,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           sku: iv.sku,
           articleCode: iv.sku,
           isDefault: iv.is_default,
-          sortOrder: idx + 1,
+          sortOrder: iv.sort_order,
           priceExcl: iv.price_excl,
           title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
         },
@@ -387,7 +387,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
         variant: {
           product: productId,
           isDefault: iv.is_default,
-          sortOrder: idx + 1,
+          sortOrder: iv.sort_order,
           sku: iv.sku,
           articleCode: iv.sku,
           priceExcl: iv.price_excl,
@@ -397,7 +397,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       const newId = res.variant.id
       variantIdMap.set(idx, newId)
       createdVariantsForDb.push({ variantId: newId, sku: iv.sku, index: idx })
-      console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku})`)
+      console.log(`[UPDATE] ✓ Created variant ${newId} (${iv.sku}), sortOrder: ${iv.sort_order}`)
     }
 
     clearImageCache()

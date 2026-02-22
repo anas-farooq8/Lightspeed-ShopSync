@@ -144,6 +144,34 @@ export class LightspeedAPIClient {
   }
 
   /**
+   * Get a single product by ID (includes product.image for main product image)
+   */
+  async getProduct(productId: number, language: string): Promise<{ product: LightspeedProduct }> {
+    const response = await fetch(
+      `${this.baseUrl}/${language}/products/${productId}.json`,
+      {
+        headers: {
+          'Authorization': this.getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Lightspeed API error (${response.status}): ${errorText}`)
+    }
+
+    const json = await response.json()
+    // API may return { product: {...} } or [{ product: {...} }]
+    const product = Array.isArray(json) ? json[0]?.product : json?.product
+    if (!product) {
+      throw new Error(`Invalid product response for id ${productId}`)
+    }
+    return { product }
+  }
+
+  /**
    * Get variants for a product
    */
   async getVariants(productId: number, language: string): Promise<{ variants: LightspeedVariant[] }> {
