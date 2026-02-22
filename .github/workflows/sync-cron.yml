@@ -1,0 +1,40 @@
+# Sync Lightspeed products/variants to Supabase
+# Runs daily at midnight UTC
+name: Lightspeed Sync
+
+on:
+  schedule:
+    # Midnight UTC every day
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run sync
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Add one pair per shop TLD (e.g. NL, DE, BE). Create matching secrets in repo Settings > Secrets.
+          LIGHTSPEED_API_KEY_NL: ${{ secrets.LIGHTSPEED_API_KEY_NL }}
+          LIGHTSPEED_API_SECRET_NL: ${{ secrets.LIGHTSPEED_API_SECRET_NL }}
+          LIGHTSPEED_API_KEY_DE: ${{ secrets.LIGHTSPEED_API_KEY_DE }}
+          LIGHTSPEED_API_SECRET_DE: ${{ secrets.LIGHTSPEED_API_SECRET_DE }}
+          LIGHTSPEED_API_KEY_BE: ${{ secrets.LIGHTSPEED_API_KEY_BE }}
+          LIGHTSPEED_API_SECRET_BE: ${{ secrets.LIGHTSPEED_API_SECRET_BE }}
+        run: python scripts/sync.py
