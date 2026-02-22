@@ -1,7 +1,7 @@
 import { SyncLog } from '@/types/database'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { formatDateTime, getShopRoleLabel } from '@/lib/utils'
+import { formatDateTime, getShopRoleLabel, toSafeExternalHref } from '@/lib/utils'
 import {
   CheckCircle2,
   XCircle,
@@ -11,6 +11,7 @@ import {
   Filter,
   Clock,
   AlertCircle,
+  ExternalLink,
 } from 'lucide-react'
 
 export function SyncLogCardSkeleton() {
@@ -87,8 +88,15 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
 
   const getTldBadge = (tld: string, role?: string) => {
     const roleLabel = getShopRoleLabel(role)
+    const isSource = role === 'source'
+    const isTarget = role === 'target'
+    const roleClasses = isSource
+      ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+      : isTarget
+        ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+        : ''
     return (
-      <Badge variant="secondary" className="font-medium text-xs">
+      <Badge variant="outline" className={`font-medium text-xs ${roleClasses}`}>
         .{tld.toLowerCase()} {roleLabel && `· ${roleLabel}`}
       </Badge>
     )
@@ -102,7 +110,24 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
           {getStatusIcon()}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <h3 className="font-semibold text-xs sm:text-sm truncate">{log.shop_name}</h3>
+              {(() => {
+                const shopUrl = toSafeExternalHref(log.shop_base_url)
+                const shopName = log.shop_name || 'Unknown'
+                if (shopUrl) {
+                  return (
+                    <a
+                      href={shopUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-xs sm:text-sm truncate hover:text-primary transition-colors inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      {shopName}
+                      <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    </a>
+                  )
+                }
+                return <h3 className="font-semibold text-xs sm:text-sm truncate">{shopName}</h3>
+              })()}
               {getTldBadge(log.shop_tld || 'unknown', log.shop_role)}
               {getStatusBadge()}
             </div>

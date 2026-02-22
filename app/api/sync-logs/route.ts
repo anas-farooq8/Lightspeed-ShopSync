@@ -131,7 +131,8 @@ export async function GET(request: Request) {
         shops (
           name,
           tld,
-          role
+          role,
+          base_url
         )
       `)
       .gte('started_at', `${pageDates[pageDates.length - 1]}T00:00:00Z`)
@@ -163,6 +164,7 @@ export async function GET(request: Request) {
       shop_name: log.shops?.name || 'Unknown',
       shop_tld: log.shops?.tld || 'unknown',
       shop_role: log.shops?.role || 'unknown',
+      shop_base_url: log.shops?.base_url || null,
       started_at: log.started_at,
       completed_at: log.completed_at,
       duration_seconds: log.duration_seconds,

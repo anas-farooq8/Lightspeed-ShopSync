@@ -335,8 +335,8 @@ create table product_operation_logs (
   status product_operation_status not null,
   error_message text,
   details jsonb,
-  source_shop_id uuid references shops(id) on delete set null,
-  source_lightspeed_product_id bigint,
+  source_shop_id uuid references shops(id) on delete set null,  -- create only
+  source_lightspeed_product_id bigint,  -- create only
   created_at timestamp with time zone not null default now()
 );
 
@@ -351,6 +351,10 @@ create index idx_product_operation_logs_type_created
 
 create index idx_product_operation_logs_status_created
   on product_operation_logs(status, created_at desc);
+
+-- For unfiltered queries: ORDER BY created_at DESC LIMIT 20
+create index idx_product_operation_logs_created_desc
+  on product_operation_logs(created_at desc);
 
 -- RLS: Product Operation Logs
 alter table product_operation_logs enable row level security;

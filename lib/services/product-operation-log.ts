@@ -14,7 +14,12 @@ export interface InsertProductOperationLogInput {
   operationType: 'create' | 'edit'
   status: 'success' | 'error'
   errorMessage?: string
-  details: { changes: string[] }
+  details: {
+    changes: string[]
+    productTitle?: string
+    defaultSku?: string
+    productImage?: { src?: string; thumb?: string; title?: string }
+  }
   sourceShopId?: string | null
   sourceLightspeedProductId?: number | null
 }

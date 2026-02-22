@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Clock, CheckCircle2, XCircle, Store } from 'lucide-react'
+import { Clock, CheckCircle2, XCircle, Store, ExternalLink } from 'lucide-react'
 import { sortShopsSourceFirstThenByTld, formatDateTime, toSafeExternalHref } from '@/lib/utils'
 
 interface LastSyncInfo {
@@ -25,12 +25,26 @@ interface LastSyncInfo {
   variants_filtered: number
 }
 
-export function LastSync() {
+interface LastSyncProps {
+  /** When provided, skip fetch and use this data (enables parallel fetch from parent) */
+  data?: LastSyncInfo[] | null
+  loading?: boolean
+  error?: string | null
+}
+
+export function LastSync({ data: dataProp, loading: loadingProp, error: errorProp }: LastSyncProps = {}) {
   const [syncInfo, setSyncInfo] = useState<LastSyncInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const isControlled = dataProp !== undefined
+  const syncInfoDisplay = isControlled ? (dataProp ?? []) : syncInfo
+  const loadingDisplay = isControlled ? (loadingProp ?? false) : loading
+  const errorDisplay = isControlled ? errorProp : error
+
   useEffect(() => {
+    if (isControlled) return
+
     async function fetchLastSync() {
       try {
         const response = await fetch('/api/last-sync')
@@ -45,7 +59,7 @@ export function LastSync() {
     }
 
     fetchLastSync()
-  }, [])
+  }, [isControlled])
 
   return (
     <div className="min-w-0">
@@ -60,7 +74,7 @@ export function LastSync() {
         </p>
       </div>
 
-      {loading ? (
+      {loadingDisplay ? (
         <Card className="border-border/50 overflow-hidden">
           <CardContent className="p-0">
             <div className="divide-y divide-border">
@@ -114,13 +128,13 @@ export function LastSync() {
             </div>
           </CardContent>
         </Card>
-      ) : error ? (
+      ) : errorDisplay ? (
         <Card className="border-destructive/50">
           <CardContent className="flex items-center justify-center py-6 sm:py-8 text-destructive text-sm sm:text-base px-4">
-            {error}
+            {errorDisplay}
           </CardContent>
         </Card>
-      ) : syncInfo.length === 0 ? (
+      ) : syncInfoDisplay.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="flex items-center justify-center py-6 sm:py-8 text-muted-foreground text-sm sm:text-base px-4">
             No sync history available
@@ -130,7 +144,7 @@ export function LastSync() {
       <Card className="border-border/50">
         <CardContent className="p-0">
           <div className="divide-y divide-border">
-            {syncInfo.map((sync) => (
+            {syncInfoDisplay.map((sync) => (
               <div key={sync.shop_id} className="p-3 sm:p-4 hover:bg-muted/30 transition-colors">
                 {/* Shop Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
@@ -145,11 +159,12 @@ export function LastSync() {
                             <a
                               href={href}
                               target="_blank"
-                              rel="noreferrer"
-                              className="hover:underline underline-offset-2"
+                              rel="noopener noreferrer"
+                              className="truncate hover:text-primary transition-colors inline-flex items-center gap-1 cursor-pointer"
                               title={sync.base_url}
                             >
                               {sync.shop_name}
+                              <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                             </a>
                           )
                         })()}

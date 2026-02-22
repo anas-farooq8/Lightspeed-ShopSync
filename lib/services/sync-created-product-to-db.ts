@@ -59,8 +59,6 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
   // Product image: use first created image from Lightspeed API response (product or variant).
   // If not provided, use null (no fallback).
   const productImageForProduct = productImageFromApi ?? null
-  console.log('[DEBUG] sync-created-product: productImageFromApi:', productImageFromApi ? JSON.stringify(productImageFromApi) : 'null')
-  console.log('[DEBUG] sync-created-product: variantImagesForDb keys:', variantImagesForDb ? Object.keys(variantImagesForDb) : 'none')
 
   // images_link: Lightspeed product images API URL. Set when product has images, else null.
   const hasImages = images.length > 0 || variants.some(v => v.image)
@@ -109,7 +107,6 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
 
     // Use variant image from Lightspeed API response only. No fallback to source - use null when no response.
     const variantImage = variantImagesForDb?.[index] ?? null
-    console.log(`[DEBUG] sync variant index=${index} sku=${variant.sku}: using ${variantImagesForDb?.[index] ? 'API response' : 'null (no fallback)'}`)
 
     const { error: variantError } = await supabase.from('variants').insert({
       shop_id: shopId,
@@ -148,7 +145,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
 
   console.log('[DB] ✓ Product and variants synced to database')
 
-  // Insert product operation log
+  // Insert product operation log (no title/image/sku snapshot - we fetch current product when displaying)
   const changes: string[] = []
   if (variants.length > 0) {
     changes.push(`${variants.length} variant${variants.length !== 1 ? 's' : ''}`)

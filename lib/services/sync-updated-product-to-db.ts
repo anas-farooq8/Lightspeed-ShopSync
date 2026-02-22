@@ -208,7 +208,6 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
 
   console.log('[DB] ✓ Product update synced to database')
 
-  // Insert product operation log
   await insertProductOperationLog({
     supabase,
     shopId,

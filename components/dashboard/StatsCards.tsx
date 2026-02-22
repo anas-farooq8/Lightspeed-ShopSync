@@ -2,17 +2,31 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Store, Activity } from 'lucide-react'
+import { Store, Activity, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { sortShopsSourceFirstThenByTld, toSafeExternalHref } from '@/lib/utils'
 import type { DashboardKpi } from '@/types/database'
 
-export function StatsCards() {
+interface StatsCardsProps {
+  /** When provided, skip fetch and use this data (enables parallel fetch from parent) */
+  data?: DashboardKpi[] | null
+  loading?: boolean
+  error?: string | null
+}
+
+export function StatsCards({ data: dataProp, loading: loadingProp, error: errorProp }: StatsCardsProps = {}) {
   const [kpis, setKpis] = useState<DashboardKpi[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const isControlled = dataProp !== undefined
+  const kpisDisplay = isControlled ? (dataProp ?? []) : kpis
+  const loadingDisplay = isControlled ? (loadingProp ?? false) : loading
+  const errorDisplay = isControlled ? errorProp : error
+
   useEffect(() => {
+    if (isControlled) return
+
     async function fetchStats() {
       try {
         const response = await fetch('/api/stats')
@@ -27,7 +41,7 @@ export function StatsCards() {
     }
 
     fetchStats()
-  }, [])
+  }, [isControlled])
 
   return (
     <div className="mb-4 sm:mb-6">
@@ -42,7 +56,7 @@ export function StatsCards() {
         </p>
       </div>
 
-      {loading ? (
+      {loadingDisplay ? (
         <div
           className={cn(
             'grid gap-2 sm:gap-3 w-full',
@@ -77,13 +91,13 @@ export function StatsCards() {
             </Card>
           ))}
         </div>
-      ) : error ? (
+      ) : errorDisplay ? (
         <Card className="border-destructive/50">
           <CardContent className="flex items-center justify-center py-8 sm:py-12 text-destructive text-sm sm:text-base px-4">
-            {error}
+            {errorDisplay}
           </CardContent>
         </Card>
-      ) : kpis.length === 0 ? (
+      ) : kpisDisplay.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="flex items-center justify-center py-8 sm:py-12 text-muted-foreground text-sm sm:text-base px-4">
             No shop data available
@@ -93,12 +107,12 @@ export function StatsCards() {
       <div
         className={cn(
           'grid gap-2 sm:gap-3 w-full',
-          kpis.length <= 1 && 'grid-cols-1',
-          kpis.length === 2 && 'grid-cols-1 sm:grid-cols-2',
-          kpis.length >= 3 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          kpisDisplay.length <= 1 && 'grid-cols-1',
+          kpisDisplay.length === 2 && 'grid-cols-1 sm:grid-cols-2',
+          kpisDisplay.length >= 3 && 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
         )}
       >
-        {kpis.map((kpi) => (
+        {kpisDisplay.map((kpi) => (
           <Card
             key={kpi.shop_id}
             className="border-border/50 hover:border-primary/50 transition-colors hover:shadow-md min-w-0"
@@ -115,11 +129,12 @@ export function StatsCards() {
                         <a
                           href={href}
                           target="_blank"
-                          rel="noreferrer"
-                          className="hover:underline underline-offset-2"
+                          rel="noopener noreferrer"
+                          className="truncate hover:text-primary transition-colors inline-flex items-center gap-1 cursor-pointer"
                           title={kpi.base_url}
                         >
                           {kpi.shop_name}
+                          <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                         </a>
                       )
                     })()}

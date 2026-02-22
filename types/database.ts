@@ -123,6 +123,7 @@ export interface SyncLog {
   shop_name?: string  // Joined from shops table
   shop_tld?: string   // Joined from shops table (dynamically loaded, e.g., nl, de, be, fr, etc.)
   shop_role?: string  // Joined from shops table (source | target)
+  shop_base_url?: string | null  // Joined from shops table (for external link)
   
   // Timing
   started_at: string

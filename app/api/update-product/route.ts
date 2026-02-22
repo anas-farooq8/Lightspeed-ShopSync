@@ -205,6 +205,10 @@ export async function PUT(request: NextRequest) {
     })
 
     if (!result.success) {
+      const productTitle = Object.values(currentState.content_by_language || {}).find((c) => c.title?.trim())?.title?.trim()
+      const defaultSku = currentState.variants?.find((v) => v.is_default)?.sku ?? currentState.variants?.[0]?.sku
+      const firstImg = updateProductData.images?.[0]
+      const productImage = firstImg ? { src: firstImg.src, thumb: firstImg.thumb, title: firstImg.title } : undefined
       await insertProductOperationLog({
         supabase,
         shopId,
@@ -212,7 +216,7 @@ export async function PUT(request: NextRequest) {
         operationType: 'edit',
         status: 'error',
         errorMessage: result.error || 'Failed to update product',
-        details: { changes: changes ?? [] },
+        details: { changes: changes ?? [], productTitle, defaultSku, productImage },
       }).catch(() => {})
       return NextResponse.json(
         { error: result.error || 'Failed to update product' },
