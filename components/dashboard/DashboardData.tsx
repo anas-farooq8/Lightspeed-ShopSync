@@ -43,7 +43,7 @@ interface ProductOperationLog {
   created_at: string
   target_shop: { id: string; name: string; base_url: string }
   source_shop: { id: string; name: string; base_url: string } | null
-  target_product: { title: string; default_sku: string | null; image?: unknown } | null
+  target_product: { title: string; default_sku: string | null; image?: { src?: string; thumb?: string; title?: string } | null } | null
   source_product: { title: string; default_sku: string | null } | null
 }
 
