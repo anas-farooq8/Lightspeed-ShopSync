@@ -165,7 +165,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   }, [productId, imagesLink, shopTld, usePreFetched])
 
   if (usePreFetched) {
-    if (!images.length) return null
+    if (!images.length && !trailingElement) return null
   } else if (!imagesLink) return null
 
   if (!usePreFetched && loading) {
@@ -178,7 +178,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
     )
   }
 
-  if (error || images.length === 0) {
+  if (error || (images.length === 0 && !trailingElement)) {
     return null
   }
 

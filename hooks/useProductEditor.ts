@@ -1579,19 +1579,23 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const updated = { ...prev }
       if (!updated[tld]) return prev
       const currentImages = updated[tld].images
-      const newImages: ProductImage[] = imagesToAdd.map((img) => {
-        const srcOrder = img.sort_order ?? (img as { sortOrder?: number }).sortOrder ?? 999
+      const maxSortOrder = currentImages.length > 0
+        ? Math.max(...currentImages.map(img => img.sort_order ?? img.originalSortOrder ?? 0))
+        : 0
+      const newImages: ProductImage[] = imagesToAdd.map((img, i) => {
+        const order = maxSortOrder + 1 + i
         return {
           id: String(img.id),
           src: img.src ?? '',
           thumb: img.thumb,
           title: img.title,
-          sort_order: srcOrder,
-          originalSortOrder: srcOrder,
+          sort_order: order,
+          originalSortOrder: order,
           addedFromSource: true,
         }
       })
-      const combined = [...currentImages, ...newImages].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+      // Append new images at end in pick order (like addVariantsFromSource); then normalize to 1,2,3...
+      const combined = [...currentImages, ...newImages]
       const withCleanOrder = combined.map((img, idx) => ({ ...img, sort_order: idx + 1 }))
       updated[tld] = {
         ...updated[tld],

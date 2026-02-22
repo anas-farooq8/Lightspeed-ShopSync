@@ -156,9 +156,10 @@ export function TargetPanel({
   }
 
   const shopUrl = toSafeExternalHref(baseUrl)
+  // EDIT: when all images deleted, productImage is null – use null, not originalProductImage (would show deleted image)
   const productOrSrc = mode === 'create'
     ? (sourceProduct?.product_image ? { product_image: sourceProduct.product_image } : (sourceProduct?.product_image?.src ?? data.originalProductImage?.src ?? null) as string | null)
-    : (data.productImage ? { product_image: data.productImage } : (data.originalProductImage?.src ?? null) as string | null)
+    : (data.productImage ? { product_image: data.productImage } : null)
   const visibilityChanged = data.visibility !== data.originalVisibility
   
   // Get source visibility from source product
@@ -176,8 +177,10 @@ export function TargetPanel({
     : (sourceVisibility && data.visibility !== sourceVisibility)  // In edit mode, check against source
   const showVisibilityReset = mode === 'edit' && visibilityChanged
   
+  const remainingImages = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
+  const effectiveProductImage = data.productImage?.src && data.removedImageSrcs.has(data.productImage.src) ? null : data.productImage
   const targetProductImageUrl = mode === 'edit'
-    ? getImageUrl(getDisplayProductImage({ product_image: data.productImage }, data.images) ?? data.productImage)
+    ? getImageUrl(getDisplayProductImage({ product_image: effectiveProductImage }, remainingImages) ?? effectiveProductImage)
     : getImageUrl(data.productImage)
   const productImageChanged = !isSameImageInfo(data.productImage, data.originalProductImage)
   
@@ -256,7 +259,10 @@ export function TargetPanel({
                 {targetProductImageUrl ? (
                   <img src={targetProductImageUrl} alt="Product" className="w-full h-full object-cover" />
                 ) : (
-                  <Package className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground/30" />
+                  <div className="flex flex-col items-center justify-center gap-1 text-muted-foreground/50">
+                    <Package className="h-8 w-8 sm:h-10 sm:w-10" />
+                    <span className="text-[10px] sm:text-xs">No image</span>
+                  </div>
                 )}
               </button>
             </div>
@@ -400,7 +406,7 @@ export function TargetPanel({
             onResetVariantImage={onResetVariantImage}
             removedImageSrcs={data.removedImageSrcs}
           />
-          {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0)) && (
+          {(data.targetImagesLink || imagesLink || data.images.length > 0 || (sourceImages != null && sourceImages.length > 0) || onAddImagesFromSource) && (
             <div className="border-t border-border/50 pt-3 sm:pt-4 mt-3 sm:mt-4">
               <h4 className="text-xs sm:text-sm font-bold uppercase mb-2 sm:mb-3">Images</h4>
               <>

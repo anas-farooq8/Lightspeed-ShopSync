@@ -202,14 +202,10 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     const hasNewImages = intendedImages.some((ii) => isNewImage(ii, currentImages))
     const hasImageChanges = toDeleteImages.length > 0 || hasNewImages
 
-    // Product image swap: trust frontend only. Dialog detection (productImageChanged | imageOrderChanged)
-    // is the source of truth. No backend detection – that caused mismatches.
-    const firstExistingInIntended = intendedImages.find((ii) => {
-      const id = parseImageId(ii)
-      return id != null && currentImageIds.has(id)
-    })
-    const intendedFirstId = firstExistingInIntended ? parseImageId(firstExistingInIntended) : null
-    const hasProductImageChange = (productImageChanged || imageOrderChanged) && intendedFirstId != null
+    // Product image: trust frontend only. Dialog detection (productImageChanged | imageOrderChanged)
+    // is the source of truth. Do NOT require intendedFirstId – when user deletes the product image,
+    // intendedImages may be empty so intendedFirstId would be null, but we still have a change.
+    const hasProductImageChange = productImageChanged || imageOrderChanged
 
     const variantsWithChanges = intendedExisting.filter((iv) => {
       const cv = currentVariants.find((c) => c.lightspeed_variant_id === iv.variant_id!)
@@ -297,8 +293,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
         },
       }
-      // Only include image when it changed – otherwise Lightspeed creates a duplicate.
-      // API limitation: setting image to null does not remove it; we omit image when clearing.
+      // Include image only when it changed – otherwise Lightspeed creates a duplicate.
       const imageChanged = !isSameImage(cv.image, iv.image)
       if (imageChanged && iv.image?.src) {
         const imageData = await downloadImage(iv.image.src)
@@ -306,6 +301,9 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           attachment: imageData.base64,
           filename: imageFilename(iv.image.title, imageData.extension),
         }
+      } else if (imageChanged && !iv.image?.src) {
+        // Clearing variant image: pass null so API removes the image (type allows null to clear)
+        payload.variant!.image = null
       }
       await targetClient.updateVariant(iv.variant_id!, payload, defaultLanguage)
       variantIdMap.set(idx, iv.variant_id!)
@@ -458,7 +456,9 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       targetClient.getVariants(productId, defaultLanguage),
     ])
     const fetchedVariants = variantsRes.variants ?? []
+    const rawProductImage = productRes?.product?.image
     console.log(`[UPDATE] ✓ Fetched product, ${fetchedVariants.length} variants`)
+    console.log(`[UPDATE] DEBUG product.image:`, rawProductImage === null ? 'null' : rawProductImage === false ? 'false (API no-image)' : rawProductImage)
 
     // Derive productImageForDb, variantImagesForDb (same as create) ─
     const variantImagesByVariantId: Record<number, VariantImageForDb> = {}
