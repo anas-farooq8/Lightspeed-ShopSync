@@ -81,7 +81,7 @@ export function EditableVariantsList({
     } else if (field === 'price_excl') {
       onUpdateVariant(idx, 'price_excl', sourceVariant.price_excl)
     } else     if (field === 'title') {
-      const sourceDefaultLang = sourceDefaultLangProp || 'nl'
+      const sourceDefaultLang = sourceDefaultLangProp ?? ''
       const sourceTitle = sourceVariant.content_by_language?.[sourceDefaultLang]?.title || ''
       onUpdateVariantTitle(idx, activeLanguage, sourceTitle)
     }

@@ -63,7 +63,7 @@ export function EditableLanguageContentTabs({
   content,
   dirtyFields,
   translationMeta,
-  sourceDefaultLang = 'nl',
+  sourceDefaultLang,
   resettingField,
   retranslatingField,
   onUpdateField,
