@@ -494,9 +494,9 @@ BEGIN
         pol.source_shop_id,
         pol.source_lightspeed_product_id,
         pol.created_at,
-        json_build_object('id', ts.id, 'name', ts.name, 'base_url', ts.base_url) AS target_shop,
+        json_build_object('id', ts.id, 'name', ts.name, 'base_url', ts.base_url, 'tld', ts.tld) AS target_shop,
         CASE WHEN pol.source_shop_id IS NOT NULL THEN
-          json_build_object('id', ss.id, 'name', ss.name, 'base_url', ss.base_url)
+          json_build_object('id', ss.id, 'name', ss.name, 'base_url', ss.base_url, 'tld', ss.tld)
         ELSE NULL END AS source_shop,
         CASE WHEN tp.shop_id IS NOT NULL THEN
           json_build_object(

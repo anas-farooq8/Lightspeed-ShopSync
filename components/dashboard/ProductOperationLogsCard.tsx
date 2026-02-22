@@ -10,6 +10,7 @@ interface ShopInfo {
   id: string
   name: string
   base_url: string
+  tld?: string
 }
 
 interface ProductInfo {
@@ -210,8 +211,8 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
                       {/* Source: shop, title (no product link after title) */}
                       {log.source_shop && (
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 shrink-0">
-                            Source
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800 shrink-0">
+                            .{log.source_shop.tld?.toLowerCase() ?? '?'} Source
                           </Badge>
                           <ShopLink shop={log.source_shop} />
                           {log.source_product ? (
@@ -248,8 +249,8 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
 
                       {/* Target: shop, title (no product link after title) */}
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 shrink-0">
-                          Target
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 shrink-0">
+                          .{log.target_shop.tld?.toLowerCase() ?? '?'} Target
                         </Badge>
                         <ShopLink shop={log.target_shop} />
                         {log.target_product ? (
@@ -290,8 +291,8 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
 
                       {/* Target: shop, title (no product link after title) */}
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 shrink-0">
-                          Target
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 shrink-0">
+                          .{log.target_shop.tld?.toLowerCase() ?? '?'} Target
                         </Badge>
                         <ShopLink shop={log.target_shop} />
                         {log.target_product ? (
