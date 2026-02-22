@@ -65,6 +65,9 @@ interface CreateProductRequest {
   }
   /** Target shop's language configuration from product-details API */
   targetShopLanguages: Language[]
+  /** Source product (create only) for product_operation_logs */
+  sourceShopId?: string | null
+  sourceLightspeedProductId?: number | null
 }
 
 export async function POST(request: NextRequest) {
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body: CreateProductRequest = await request.json()
-    const { targetShopTld, shopId, sourceProductData, targetShopLanguages } = body
+    const { targetShopTld, shopId, sourceProductData, targetShopLanguages, sourceShopId, sourceLightspeedProductId } = body
 
     // Validate request
     if (!targetShopTld || !shopId || !sourceProductData) {
@@ -166,6 +169,8 @@ export async function POST(request: NextRequest) {
           images: sourceProductData.images,
           productImageForDb: result.productImageForDb,
           variantImagesForDb: result.variantImagesForDb,
+          sourceShopId: sourceShopId ?? null,
+          sourceLightspeedProductId: sourceLightspeedProductId ?? null,
         })
         console.log('[API] ✓ Product synced to database')
       } catch (dbError) {

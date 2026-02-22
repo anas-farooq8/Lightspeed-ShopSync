@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UpdateVariantInfo, UpdateImageInfo, VariantImageForDb, ProductImageForDb } from './update-product'
 import { LIGHTSPEED_API_BASE } from './lightspeed-api'
+import { insertProductOperationLog } from './product-operation-log'
 
 function buildVariantContentRows(
   shopId: string,
@@ -46,6 +47,8 @@ interface SyncUpdatedProductInput {
   updatedVariantImages?: Record<number, VariantImageForDb>
   /** Variant images from API - index -> image (for created variants) */
   createdVariantImages?: Record<number, VariantImageForDb>
+  /** Human-readable changes for product_operation_logs */
+  changes?: string[]
 }
 
 /**
@@ -72,6 +75,7 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
     productImageForDb,
     updatedVariantImages,
     createdVariantImages,
+    changes = [],
   } = input
 
   const now = new Date().toISOString()
@@ -203,4 +207,14 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
   }
 
   console.log('[DB] ✓ Product update synced to database')
+
+  // Insert product operation log
+  await insertProductOperationLog({
+    supabase,
+    shopId,
+    lightspeedProductId: productId,
+    operationType: 'edit',
+    status: 'success',
+    details: { changes },
+  })
 }

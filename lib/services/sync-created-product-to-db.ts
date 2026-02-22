@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { VariantInfo, ImageInfo, ProductImageForDb } from './create-product'
 import { LIGHTSPEED_API_BASE } from './lightspeed-api'
+import { insertProductOperationLog } from './product-operation-log'
 
 interface SyncCreatedProductInput {
   supabase: SupabaseClient
@@ -28,6 +29,9 @@ interface SyncCreatedProductInput {
   productImageForDb?: ProductImageForDb
   /** Variant images from Lightspeed API - index -> { src, thumb, title } */
   variantImagesForDb?: Record<number, { src: string; thumb?: string; title?: string }>
+  /** Source product (create only) for product_operation_logs */
+  sourceShopId?: string | null
+  sourceLightspeedProductId?: number | null
 }
 
 /**
@@ -46,6 +50,8 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     images,
     productImageForDb: productImageFromApi,
     variantImagesForDb,
+    sourceShopId = null,
+    sourceLightspeedProductId = null,
   } = input
 
   const now = new Date().toISOString()
@@ -141,4 +147,23 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
   }
 
   console.log('[DB] ✓ Product and variants synced to database')
+
+  // Insert product operation log
+  const changes: string[] = []
+  if (variants.length > 0) {
+    changes.push(`${variants.length} variant${variants.length !== 1 ? 's' : ''}`)
+  }
+  if (images.length > 0) {
+    changes.push(`${images.length} image${images.length !== 1 ? 's' : ''}`)
+  }
+  await insertProductOperationLog({
+    supabase,
+    shopId,
+    lightspeedProductId: productId,
+    operationType: 'create',
+    status: 'success',
+    details: { changes },
+    sourceShopId,
+    sourceLightspeedProductId,
+  })
 }

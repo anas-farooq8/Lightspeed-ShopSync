@@ -318,6 +318,55 @@ create policy "Authenticated users can read sync logs"
 
 
 -- =========================
+-- PRODUCT OPERATION LOGS (Create & Edit)
+-- =========================
+-- Tracks create-product and update-product operations.
+-- Stores what was done for display in history/audit (same as confirmation dialog).
+-- Links: shop_id → shops, source_shop_id → shops (create only)
+create type product_operation_type as enum ('create', 'edit');
+
+create type product_operation_status as enum ('success', 'error');
+
+create table product_operation_logs (
+  id bigserial primary key,
+  shop_id uuid not null references shops(id) on delete cascade,
+  lightspeed_product_id bigint not null,
+  operation_type product_operation_type not null,
+  status product_operation_status not null,
+  error_message text,
+  details jsonb,
+  source_shop_id uuid references shops(id) on delete set null,
+  source_lightspeed_product_id bigint,
+  created_at timestamp with time zone not null default now()
+);
+
+create index idx_product_operation_logs_shop_created
+  on product_operation_logs(shop_id, created_at desc);
+
+create index idx_product_operation_logs_product
+  on product_operation_logs(shop_id, lightspeed_product_id, created_at desc);
+
+create index idx_product_operation_logs_type_created
+  on product_operation_logs(operation_type, created_at desc);
+
+create index idx_product_operation_logs_status_created
+  on product_operation_logs(status, created_at desc);
+
+-- RLS: Product Operation Logs
+alter table product_operation_logs enable row level security;
+
+create policy "Authenticated users can read product operation logs"
+  on product_operation_logs for select
+  to authenticated
+  using ((select auth.uid()) is not null);
+
+create policy "Authenticated users can insert product operation logs"
+  on product_operation_logs for insert
+  to authenticated
+  with check ((select auth.uid()) is not null);
+
+
+-- =========================
 -- UPDATED_AT TRIGGER FUNCTION
 -- =========================
 create or replace function set_updated_at()

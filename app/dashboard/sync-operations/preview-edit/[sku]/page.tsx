@@ -224,6 +224,8 @@ export default function PreviewEditPage() {
         }))
       }
 
+      const changes = updateConfirmationContent?.changes ?? []
+
       const response = await fetch('/api/update-product', {
         method: 'PUT',
         headers: {
@@ -235,7 +237,8 @@ export default function PreviewEditPage() {
           productId,
           updateProductData,
           currentState,
-          targetShopLanguages
+          targetShopLanguages,
+          changes,
         })
       })
 

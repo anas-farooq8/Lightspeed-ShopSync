@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getLightspeedClient } from '@/lib/services/lightspeed-api'
 import { updateProduct, type UpdateVariantInfo } from '@/lib/services/update-product'
 import { syncUpdatedProductToDb } from '@/lib/services/sync-updated-product-to-db'
+import { insertProductOperationLog } from '@/lib/services/product-operation-log'
 import { HTTP_STATUS, handleRouteError, isRequireUserFailure, requireUser } from '@/lib/api'
 import { getDefaultLanguageCode } from '@/lib/utils'
 import type { Language } from '@/types/product'
@@ -115,6 +116,8 @@ interface UpdateProductRequest {
   }
   /** Target shop's language configuration from product-details API */
   targetShopLanguages: Language[]
+  /** Human-readable changes for product_operation_logs */
+  changes?: string[]
 }
 
 export async function PUT(request: NextRequest) {
@@ -128,7 +131,7 @@ export async function PUT(request: NextRequest) {
     const { supabase } = auth
 
     const body: UpdateProductRequest = await request.json()
-    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages } = body
+    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages, changes } = body
 
     if (!targetShopTld || !shopId || !updateProductData || !currentState) {
       return NextResponse.json(
@@ -202,6 +205,15 @@ export async function PUT(request: NextRequest) {
     })
 
     if (!result.success) {
+      await insertProductOperationLog({
+        supabase,
+        shopId,
+        lightspeedProductId: productId,
+        operationType: 'edit',
+        status: 'error',
+        errorMessage: result.error || 'Failed to update product',
+        details: { changes: changes ?? [] },
+      }).catch(() => {})
       return NextResponse.json(
         { error: result.error || 'Failed to update product' },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
@@ -216,6 +228,8 @@ export async function PUT(request: NextRequest) {
         message: 'No changes detected, nothing to update',
       })
     }
+
+    const changesForLog = changes ?? []
 
     try {
       const variants = updateProductData.variants
@@ -254,10 +268,19 @@ export async function PUT(request: NextRequest) {
         productImageForDb: result.productImageForDb,
         updatedVariantImages: result.updatedVariantImages,
         createdVariantImages: result.createdVariantImages,
+        changes: changesForLog,
       })
       console.log('[API] ✓ Product update synced to database')
     } catch (dbError) {
       console.error('[API] Database sync failed (product was updated in Lightspeed):', dbError)
+      await insertProductOperationLog({
+        supabase,
+        shopId,
+        lightspeedProductId: productId,
+        operationType: 'edit',
+        status: 'success',
+        details: { changes: changesForLog },
+      })
       return NextResponse.json(
         {
           success: true,

@@ -181,6 +181,9 @@ export default function PreviewCreatePage() {
         })()
       }
 
+      const sourceShopId = sourceProduct?.shop_tld ? details?.shops?.[sourceProduct.shop_tld]?.id : undefined
+      const sourceLightspeedProductId = sourceProduct?.product_id ?? undefined
+
       const response = await fetch('/api/create-product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,7 +191,9 @@ export default function PreviewCreatePage() {
           targetShopTld: tld,
           shopId,
           sourceProductData,
-          targetShopLanguages
+          targetShopLanguages,
+          sourceShopId: sourceShopId ?? undefined,
+          sourceLightspeedProductId: sourceLightspeedProductId ?? undefined,
         })
       })
 
