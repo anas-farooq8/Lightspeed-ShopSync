@@ -186,6 +186,7 @@ export interface SyncProduct {
   price_excl: number
   source_variant_count: number
   ls_created_at: string
+  updated_at?: string
   source_duplicate_count: number
   source_has_duplicates: boolean
   source_duplicate_product_ids: number[]

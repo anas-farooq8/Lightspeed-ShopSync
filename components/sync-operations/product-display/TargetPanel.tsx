@@ -36,6 +36,7 @@ interface TargetPanelProps {
   onResetLanguage: (lang: string) => void
   onRetranslateField?: (lang: string, field: keyof ProductContent) => void
   onRetranslateLanguage?: (lang: string) => void
+  onContentFocus?: (lang: string) => void
   onResetShop: () => void
   onUpdateVariant: (idx: number, field: 'sku' | 'price_excl', value: string | number) => void
   onUpdateVariantTitle: (idx: number, lang: string, title: string) => void
@@ -81,6 +82,7 @@ export function TargetPanel({
   onResetLanguage,
   onRetranslateField,
   onRetranslateLanguage,
+  onContentFocus,
   onResetShop,
   onUpdateVariant,
   onUpdateVariantTitle,
@@ -371,6 +373,7 @@ export function TargetPanel({
               onResetLanguage={onResetLanguage}
               onRetranslateField={onRetranslateField}
               onRetranslateLanguage={onRetranslateLanguage}
+              onContentFocus={onContentFocus}
             />
           </div>
         )}

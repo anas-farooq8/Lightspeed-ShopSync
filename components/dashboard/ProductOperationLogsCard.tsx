@@ -159,7 +159,7 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
       ) : (
         <Card className="border-border/50 overflow-hidden">
           <CardContent className="p-0">
-            <div className="max-h-[400px] overflow-y-auto divide-y divide-border">
+            <div className="max-h-[660px] overflow-y-auto overflow-x-hidden divide-y divide-border">
               {logsDisplay.map((log) => (
                 <div
                   key={log.id}
@@ -209,15 +209,15 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
 
                       {/* Source: shop, title (no product link after title) */}
                       {log.source_shop && (
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 shrink-0">
                             Source
                           </Badge>
                           <ShopLink shop={log.source_shop} />
                           {log.source_product ? (
                             <>
-                              <span className="text-muted-foreground">·</span>
-                              <span className="truncate" title={log.source_product.title}>
+                              <span className="text-muted-foreground shrink-0">·</span>
+                              <span className="break-words min-w-0" title={log.source_product.title}>
                                 {log.source_product.title}
                               </span>
                             </>
@@ -247,15 +247,15 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
                       </div>
 
                       {/* Target: shop, title (no product link after title) */}
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 shrink-0">
                           Target
                         </Badge>
                         <ShopLink shop={log.target_shop} />
                         {log.target_product ? (
                           <>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="truncate" title={log.target_product.title}>
+                            <span className="text-muted-foreground shrink-0">·</span>
+                            <span className="break-words min-w-0" title={log.target_product.title}>
                               {log.target_product.title}
                             </span>
                           </>
@@ -289,15 +289,15 @@ export function ProductOperationLogsCard({ data: dataProp, loading: loadingProp,
                       </div>
 
                       {/* Target: shop, title (no product link after title) */}
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 shrink-0">
                           Target
                         </Badge>
                         <ShopLink shop={log.target_shop} />
                         {log.target_product ? (
                           <>
-                            <span className="text-muted-foreground">·</span>
-                            <span className="truncate" title={log.target_product.title}>
+                            <span className="text-muted-foreground shrink-0">·</span>
+                            <span className="break-words min-w-0" title={log.target_product.title}>
                               {log.target_product.title}
                             </span>
                           </>

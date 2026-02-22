@@ -109,6 +109,7 @@ export default function PreviewCreatePage() {
     resetShop,
     retranslateField,
     retranslateLanguage,
+    setContentFocused,
     cleanup,
   } = editor
 
@@ -393,6 +394,7 @@ export default function PreviewCreatePage() {
       onResetLanguage={(lang) => resetLanguage(tld, lang)}
       onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
       onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
+      onContentFocus={(lang) => setContentFocused(tld, lang)}
       onResetShop={() => resetShop(tld)}
       onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
       onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
@@ -411,7 +413,7 @@ export default function PreviewCreatePage() {
       onRemoveImageFromSource={(imgSrc) => removeImageFromTarget(tld, imgSrc)}
       onRestoreImageFromSource={(imgSrc) => restoreImageToTarget(tld, imgSrc)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, setContentFocused, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
 
   if (loading) {
     return (

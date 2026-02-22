@@ -225,6 +225,13 @@ export function ProductListTable({
           </span>
         </TableCell>
 
+        {/* Updated At */}
+        <TableCell>
+          <span className="text-sm text-muted-foreground">
+            {product.updated_at ? formatDateShort(product.updated_at) : '—'}
+          </span>
+        </TableCell>
+
         {/* Dynamic Target Shop Columns - Hidden for NULL SKU mode */}
         {!hideShopIndicators && targetShops.map(shop => {
           const targetInfo = product.targets?.[shop.tld]
@@ -234,18 +241,20 @@ export function ProductListTable({
           
           return (
             <TableCell key={shop.tld} className="text-center">
-              {exists ? (
-                <div className="relative inline-block">
-                  <CheckCircle2 className="h-6 w-6 mx-auto text-green-600" />
-                  {totalMatches > 1 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[11px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none">
-                      {totalMatches}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <XCircle className="h-6 w-6 mx-auto text-red-600" />
-              )}
+              <div className="flex items-center justify-center min-h-[28px]">
+                {exists ? (
+                  <div className="relative inline-flex">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                    {totalMatches > 1 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-[11px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none">
+                        {totalMatches}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <XCircle className="h-6 w-6 text-red-600" />
+                )}
+              </div>
             </TableCell>
           )
         })}
@@ -317,6 +326,9 @@ export function ProductListTable({
                 <SortableHeader column="created" className="w-[130px]">
                   Created
                 </SortableHeader>
+                <TableHead className="w-[130px]">
+                  Updated
+                </TableHead>
                 {!hideShopIndicators && targetShops.map(shop => (
                   <TableHead key={shop.tld} className="text-center w-[80px]">
                     .{shop.tld}
@@ -394,7 +406,7 @@ export function ProductListTable({
                       {showProductId && (
                         <TableCell className="text-muted-foreground text-sm">—</TableCell>
                       )}
-                      <TableCell colSpan={(hideSkuColumn ? 4 : 4) + (hideShopIndicators ? 0 : targetShops.length)} className="text-sm text-muted-foreground">
+                      <TableCell colSpan={(hideSkuColumn ? 5 : 5) + (hideShopIndicators ? 0 : targetShops.length)} className="text-sm text-muted-foreground">
                         {isExpanded 
                           ? `Click to collapse (showing ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'})`
                           : `Click to expand and view ${group.products.length} ${group.products.length === 1 ? 'product' : 'products'} with this SKU`

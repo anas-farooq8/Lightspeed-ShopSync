@@ -77,6 +77,7 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
   source_duplicate_count INTEGER,
   source_has_duplicates BOOLEAN,
   source_duplicate_product_ids BIGINT[],
@@ -127,6 +128,7 @@ BEGIN
       pss.price_excl,
       pss.source_variant_count,
       pss.ls_created_at,
+      pss.updated_at,
       pss.source_duplicate_count,
       pss.source_has_duplicates,
       pss.source_duplicate_product_ids,
@@ -238,6 +240,7 @@ BEGIN
     pp.price_excl,
     pp.source_variant_count::INTEGER,
     pp.ls_created_at,
+    pp.updated_at,
     pp.source_duplicate_count::INTEGER,
     pp.source_has_duplicates,
     pp.source_duplicate_product_ids,
@@ -307,6 +310,7 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE,
   source_duplicate_count INTEGER,
   source_has_duplicates BOOLEAN,
   source_duplicate_product_ids BIGINT[],
@@ -350,7 +354,8 @@ BEGIN
       vc.title AS variant_title,
       p.image AS product_image,
       v.price_excl,
-      p.ls_created_at
+      p.ls_created_at,
+      p.updated_at
     FROM shops s
     INNER JOIN variants v ON v.shop_id = s.id
       AND v.is_default = true
@@ -424,6 +429,7 @@ BEGIN
     p.price_excl,
     p.variant_count AS source_variant_count,
     p.ls_created_at,
+    p.updated_at,
     1 AS source_duplicate_count,
     false AS source_has_duplicates,
     ARRAY[p.product_id] AS source_duplicate_product_ids,

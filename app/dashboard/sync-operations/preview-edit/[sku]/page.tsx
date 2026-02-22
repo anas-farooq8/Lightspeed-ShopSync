@@ -111,6 +111,7 @@ export default function PreviewEditPage() {
     resetShop,
     retranslateField,
     retranslateLanguage,
+    setContentFocused,
     cleanup,
   } = editor
 
@@ -572,6 +573,7 @@ export default function PreviewEditPage() {
       onResetLanguage={(lang) => resetLanguage(tld, lang)}
       onRetranslateField={(lang, field) => retranslateField(tld, lang, field)}
       onRetranslateLanguage={(lang) => retranslateLanguage(tld, lang)}
+      onContentFocus={(lang) => setContentFocused(tld, lang)}
       onResetShop={() => resetShop(tld)}
       onUpdateVariant={(idx, field, val) => updateVariant(tld, idx, field, val)}
       onUpdateVariantTitle={(idx, lang, title) => updateVariantTitle(tld, idx, lang, title)}
@@ -609,6 +611,7 @@ export default function PreviewEditPage() {
     resetLanguage,
     retranslateField,
     retranslateLanguage,
+    setContentFocused,
     resetShop,
     updateVariant,
     updateVariantTitle,
