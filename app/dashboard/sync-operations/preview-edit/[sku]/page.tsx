@@ -338,12 +338,18 @@ export default function PreviewEditPage() {
       changes.push('Product image')
     }
 
-    const imagesAddedFromSource = data.images.filter((img: { addedFromSource?: boolean }) => img.addedFromSource).length
+    const imagesAddedFromSource = data.images.filter(
+      (img: { addedFromSource?: boolean; src?: string }) =>
+        img.addedFromSource && !data.removedImageSrcs.has(img.src ?? '')
+    ).length
     if (imagesAddedFromSource > 0) {
       changes.push(`${imagesAddedFromSource} image${imagesAddedFromSource !== 1 ? 's' : ''} added from source`)
     }
 
-    const imagesRemovedCount = data.removedImageSrcs.size
+    const imagesRemovedCount = data.images.filter(
+      (img: { addedFromSource?: boolean; src?: string }) =>
+        data.removedImageSrcs.has(img.src ?? '') && !img.addedFromSource
+    ).length
     if (imagesRemovedCount > 0) {
       changes.push(`${imagesRemovedCount} image${imagesRemovedCount !== 1 ? 's' : ''} removed`)
     }
@@ -477,6 +483,7 @@ export default function PreviewEditPage() {
     
     const cached = getCachedImages(targetProductId, activeTargetTld)
     if (cached) {
+      setTargetImagesLoading(false)
       setTargetData(prev => {
         const updated = { ...prev }
         if (updated[activeTargetTld]) {
@@ -502,6 +509,7 @@ export default function PreviewEditPage() {
       return
     }
     
+    setTargetImagesLoading(true)
     fetchProductImages(
       targetProductId,
       targetData_current.targetImagesLink,
@@ -529,6 +537,7 @@ export default function PreviewEditPage() {
         return updated
       })
     }).catch(err => console.error(`Failed to fetch ${activeTargetTld} images:`, err))
+      .finally(() => setTargetImagesLoading(false))
   }, [activeTargetTld, details, targetData, fetchProductImages, setTargetData])
 
   // Render methods - memoize callbacks for better performance
@@ -570,7 +579,7 @@ export default function PreviewEditPage() {
       retranslatingField={retranslatingField}
       error={targetErrors[tld]}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
-      targetImagesLoading={tld === sortedTargetShops[0] ? targetImagesLoading : false}
+      targetImagesLoading={tld === activeTargetTld ? targetImagesLoading : false}
       onLanguageChange={handleLanguageChange(tld)}
       onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
       onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -602,10 +611,10 @@ export default function PreviewEditPage() {
     details,
     targetData,
     activeLanguages,
+    activeTargetTld,
     sourceProduct,
     targetErrors,
     productImages,
-    sortedTargetShops,
     targetImagesLoading,
     resettingField,
     retranslatingField,
@@ -764,6 +773,12 @@ export default function PreviewEditPage() {
         targetImageTitles={new Set(
           (targetData[activeTargetTld]?.images ?? [])
             .filter(img => !targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
+            .map(img => img.title ?? '')
+            .filter(t => t !== '')
+        )}
+        deletedImageTitles={new Set(
+          (targetData[activeTargetTld]?.images ?? [])
+            .filter(img => targetData[activeTargetTld]?.removedImageSrcs?.has(img.src ?? ''))
             .map(img => img.title ?? '')
             .filter(t => t !== '')
         )}

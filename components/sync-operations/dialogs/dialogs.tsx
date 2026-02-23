@@ -330,24 +330,36 @@ export function ImageSelectionDialog({
 
 // ─── AddImagesFromSourceDialog ──────────────────────────────────────────────
 
+function isImageExcluded(
+  img: ProductImageForSelection,
+  targetImageTitles: Set<string>,
+  deletedImageTitles: Set<string>
+): boolean {
+  const title = img.title ?? ''
+  return targetImageTitles.has(title) || deletedImageTitles.has(title)
+}
+
 export function AddImagesFromSourceDialog({
   open,
   onOpenChange,
   sourceImages,
   targetImageTitles = new Set<string>(),
+  deletedImageTitles = new Set<string>(),
   onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceImages: ProductImageForSelection[]
-  /** Target image titles (exact match, as-is). Images with matching title are hidden. */
+  /** Target image titles (exact match). Images with matching title are hidden. */
   targetImageTitles?: Set<string>
+  /** Titles of images we had but deleted. Hidden so we don't re-add what we just removed. */
+  deletedImageTitles?: Set<string>
   onConfirm: (images: ProductImageForSelection[]) => void
 }) {
   const [selected, setSelected] = useState<ProductImageForSelection[]>([])
 
   const handleToggle = useCallback((img: ProductImageForSelection) => {
-    if (targetImageTitles.has(img.title ?? '')) return
+    if (isImageExcluded(img, targetImageTitles, deletedImageTitles)) return
     setSelected(prev => {
       const idx = prev.findIndex(p => (p.src ?? '') === (img.src ?? ''))
       if (idx >= 0) {
@@ -355,7 +367,7 @@ export function AddImagesFromSourceDialog({
       }
       return [...prev, img]
     })
-  }, [targetImageTitles])
+  }, [targetImageTitles, deletedImageTitles])
 
   const handleConfirm = useCallback(() => {
     onConfirm(selected)
@@ -378,15 +390,15 @@ export function AddImagesFromSourceDialog({
         <DialogHeader>
           <DialogTitle className="text-base sm:text-lg">Add images from source</DialogTitle>
           <DialogDescription>
-            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target (matched by title, exact) are hidden.
+            Select images to add to the target product. Order of selection is preserved (1, 2, 3…). Images already in target or recently deleted are hidden.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-4">
-          {sourceImages.filter(img => !targetImageTitles.has(img.title ?? '')).length === 0 ? (
-            <p className="col-span-full text-muted-foreground text-sm">No images available from source. Images matching target (by title, exact) are hidden.</p>
+          {sourceImages.filter(img => !isImageExcluded(img, targetImageTitles, deletedImageTitles)).length === 0 ? (
+            <p className="col-span-full text-muted-foreground text-sm">No images available from source. Images already in target or recently deleted are hidden.</p>
           ) : (
             sourceImages
-              .filter(img => !targetImageTitles.has(img.title ?? ''))
+              .filter(img => !isImageExcluded(img, targetImageTitles, deletedImageTitles))
               .map((img) => {
               const order = selected.findIndex(p => (p.src ?? '') === (img.src ?? '')) + 1
               const isSelected = order > 0

@@ -167,7 +167,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   }, [productId, imagesLink, shopTld, usePreFetched])
 
   if (usePreFetched) {
-    if (!images.length && !trailingElement) {
+    if (!images.length) {
       if (imagesLoading) {
         return (
           <div className={cn("grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3", className)}>
@@ -177,7 +177,7 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
           </div>
         )
       }
-      return null
+      if (!trailingElement) return null
     }
   } else if (!imagesLink) return null
 

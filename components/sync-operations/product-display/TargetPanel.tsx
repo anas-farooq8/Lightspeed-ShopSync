@@ -181,6 +181,9 @@ export function TargetPanel({
   const showVisibilityReset = mode === 'edit' && visibilityChanged
   
   const remainingImages = data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
+  const deletedImagesToShow = data.images.filter(
+    img => data.removedImageSrcs.has(img.src ?? '') && !(img as { addedFromSource?: boolean }).addedFromSource
+  )
   const effectiveProductImage = data.productImage?.src && data.removedImageSrcs.has(data.productImage.src) ? null : data.productImage
   const targetProductImageUrl = mode === 'edit'
     ? getImageUrl(getDisplayProductImage({ product_image: effectiveProductImage }, remainingImages) ?? effectiveProductImage)
@@ -432,12 +435,9 @@ export function TargetPanel({
                     </button>
                   ) : undefined}
                 />
-                {data.removedImageSrcs.size > 0 && onRestoreImageFromSource && (
+                {deletedImagesToShow.length > 0 && onRestoreImageFromSource && (
                   <DeletedImagesSection
-                    images={sortImagesForDisplay(
-                      data.images.filter(img => data.removedImageSrcs.has(img.src ?? '')),
-                      productOrSrc
-                    )}
+                    images={sortImagesForDisplay(deletedImagesToShow, productOrSrc)}
                     onRestore={onRestoreImageFromSource}
                   />
                 )}
