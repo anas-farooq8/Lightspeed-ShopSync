@@ -286,7 +286,8 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
         payload.variant!.sku = iv.sku
         payload.variant!.articleCode = iv.sku
       }
-      if (cv.is_default !== iv.is_default) payload.variant!.isDefault = iv.is_default
+      // Only update isDefault when setting to true – Lightspeed auto-unsets the previous default
+      if (cv.is_default !== iv.is_default && iv.is_default) payload.variant!.isDefault = true
       if (cv.sort_order !== iv.sort_order) payload.variant!.sortOrder = iv.sort_order
       if (cv.price_excl !== iv.price_excl) payload.variant!.priceExcl = iv.price_excl
       const defaultTitle = sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku)
