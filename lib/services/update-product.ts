@@ -449,27 +449,36 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     // }
     console.log('[UPDATE] Step 6: Product image reorder – disabled (sortOrder changes commented out)')
 
-    // ─── Step 7: Fetch + derive for DB sync ──────────────────────────────────
-    console.log('[UPDATE] Step 7: Fetching product and variants...')
-    const [productRes, variantsRes] = await Promise.all([
-      targetClient.getProduct(productId, defaultLanguage),
-      targetClient.getVariants(productId, defaultLanguage),
-    ])
-    const fetchedVariants = variantsRes.variants ?? []
-    const rawProductImage = productRes?.product?.image
-    console.log(`[UPDATE] ✓ Fetched product, ${fetchedVariants.length} variants`)
-    console.log(`[UPDATE] DEBUG product.image:`, rawProductImage === null ? 'null' : rawProductImage === false ? 'false (API no-image)' : rawProductImage)
+    // ─── Step 7: Fetch + derive for DB sync (only when needed) ─────────────────
+    const needsProductImage = hasProductImageChange || hasImageChanges
+    const needsVariantImages = variantsWithChanges.length > 0 || intendedNew.length > 0
 
-    // Derive productImageForDb, variantImagesForDb (same as create) ─
+    let productImageForDb: ProductImageForDb | undefined
     const variantImagesByVariantId: Record<number, VariantImageForDb> = {}
-    for (const [index, variantId] of variantIdMap) {
-      const fv = fetchedVariants.find((v) => v.id === variantId)
-      const img = toImageForDb(fv?.image)
-      if (img) variantImagesByVariantId[variantId] = img
+
+    if (needsProductImage) {
+      console.log('[UPDATE] Step 7a: Fetching product (image changed)...')
+      const productRes = await targetClient.getProduct(productId, defaultLanguage)
+      productImageForDb = toImageForDb(productRes?.product?.image)
+      console.log(`[UPDATE] ✓ Fetched product`)
+    } else {
+      productImageForDb = undefined
+      console.log('[UPDATE] Step 7a: Product image – no change, skip (DB keeps existing)')
     }
 
-    // Product image: from product.image (like create-product)
-    const productImageForDb = toImageForDb(productRes.product.image)
+    if (needsVariantImages) {
+      console.log('[UPDATE] Step 7b: Fetching variants (variants changed)...')
+      const variantsRes = await targetClient.getVariants(productId, defaultLanguage)
+      const fetchedVariants = variantsRes.variants ?? []
+      for (const [index, variantId] of variantIdMap) {
+        const fv = fetchedVariants.find((v) => v.id === variantId)
+        const img = toImageForDb(fv?.image)
+        if (img) variantImagesByVariantId[variantId] = img
+      }
+      console.log(`[UPDATE] ✓ Fetched ${fetchedVariants.length} variants`)
+    } else {
+      console.log('[UPDATE] Step 7b: Variants – no change, skipped fetch')
+    }
 
     console.log('[UPDATE] ✓✓✓ Update complete')
 

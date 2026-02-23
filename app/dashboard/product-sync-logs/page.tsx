@@ -1,6 +1,8 @@
 'use client'
 
+import { Suspense } from 'react'
 import { ProductSyncLogsTab } from '@/components/product-sync-logs/ProductSyncLogsTab'
+import { ProductOperationLogsList } from '@/components/shared/product-operation-logs/ProductOperationLogsList'
 
 export default function ProductSyncLogsPage() {
   return (
@@ -13,7 +15,9 @@ export default function ProductSyncLogsPage() {
           </p>
         </div>
 
-        <ProductSyncLogsTab />
+        <Suspense fallback={<ProductOperationLogsList logs={[]} loading skeletonCount={5} />}>
+          <ProductSyncLogsTab />
+        </Suspense>
       </div>
     </div>
   )

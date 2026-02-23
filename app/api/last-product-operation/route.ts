@@ -4,7 +4,7 @@ import { HTTP_STATUS, handleRouteError } from '@/lib/api'
 
 export const dynamic = 'force-dynamic'
 
-const LIMIT = 20
+const LIMIT = 10
 
 /**
  * Last Product Operations API (Dashboard)
@@ -13,9 +13,9 @@ const LIMIT = 20
  * Path: /api/last-product-operation
  *
  * Description:
- * - Returns the last 20 product operation logs for dashboard display.
+ * - Returns the last 10 product operation logs for dashboard display.
  * - Simple query - no pagination or filters.
- * - Uses get_product_operation_logs RPC with limit=20.
+ * - Uses get_product_operation_logs RPC with limit=10.
  *
  * Responses:
  * - 200: Array of product operation log records (same format as product-operation-logs).

@@ -80,23 +80,24 @@ export async function syncUpdatedProductToDb(input: SyncUpdatedProductInput): Pr
 
   const now = new Date().toISOString()
 
-  // Product image: from API only (productImageForDb). No fallback to intended/source URLs.
-  const productImage = productImageForDb ?? null
-
   const hasImages = intendedImages.length > 0 || intendedVariants.some((v) => v.image)
   const imagesLink = hasImages
     ? `${LIGHTSPEED_API_BASE}/${defaultLanguage}/products/${productId}/images.json`
     : null
 
-  // 1. Update product
+  // 1. Update product (only include image when we have fresh data from API – otherwise leave DB as-is)
+  const productUpdate: Record<string, unknown> = {
+    visibility,
+    images_link: imagesLink,
+    ls_updated_at: now,
+  }
+  if (productImageForDb !== undefined) {
+    productUpdate.image = productImageForDb ?? null
+  }
+
   const { error: productError } = await supabase
     .from('products')
-    .update({
-      visibility,
-      image: productImage,
-      images_link: imagesLink,
-      ls_updated_at: now,
-    })
+    .update(productUpdate)
     .eq('shop_id', shopId)
     .eq('lightspeed_product_id', productId)
 

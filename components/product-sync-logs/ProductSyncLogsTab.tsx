@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ProductOperationLogsList } from '@/components/shared/product-operation-logs/ProductOperationLogsList'
 import type { ProductOperationLog } from '@/components/shared/product-operation-logs/ProductOperationLogItem'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
@@ -29,18 +30,72 @@ interface ProductOperationLogsResponse {
   shops: Shop[]
 }
 
+const VALID_OPERATIONS = ['all', 'create', 'edit']
+const VALID_STATUSES = ['all', 'success', 'error']
+
+function parseSearchParams(searchParams: URLSearchParams) {
+  const shop = searchParams.get('shop') || 'all'
+  const operation = searchParams.get('operation') || 'all'
+  const status = searchParams.get('status') || 'all'
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+  return {
+    shop,
+    operation: VALID_OPERATIONS.includes(operation) ? operation : 'all',
+    status: VALID_STATUSES.includes(status) ? status : 'all',
+    page,
+  }
+}
+
 export function ProductSyncLogsTab() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const urlState = useMemo(() => parseSearchParams(searchParams), [searchParams])
+
   const [logs, setLogs] = useState<ProductOperationLog[]>([])
   const [shops, setShops] = useState<Shop[]>([])
   const [loading, setLoading] = useState(true)
   const [isFilterLoading, setIsFilterLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [shopFilter, setShopFilter] = useState('all')
-  const [operationFilter, setOperationFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [shopFilter, setShopFilter] = useState(urlState.shop)
+  const [operationFilter, setOperationFilter] = useState(urlState.operation)
+  const [statusFilter, setStatusFilter] = useState(urlState.status)
+  const [currentPage, setCurrentPage] = useState(urlState.page)
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+
+  // Sync URL -> state when URL changes (e.g. back/forward)
+  useEffect(() => {
+    setShopFilter(urlState.shop)
+    setOperationFilter(urlState.operation)
+    setStatusFilter(urlState.status)
+    setCurrentPage(urlState.page)
+  }, [urlState.shop, urlState.operation, urlState.status, urlState.page])
+
+  const updateUrl = useCallback(
+    (updates: { shop?: string; operation?: string; status?: string; page?: number }) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (updates.shop !== undefined) {
+        if (updates.shop === 'all') params.delete('shop')
+        else params.set('shop', updates.shop)
+      }
+      if (updates.operation !== undefined) {
+        if (updates.operation === 'all') params.delete('operation')
+        else params.set('operation', updates.operation)
+      }
+      if (updates.status !== undefined) {
+        if (updates.status === 'all') params.delete('status')
+        else params.set('status', updates.status)
+      }
+      if (updates.page !== undefined) {
+        if (updates.page === 1) params.delete('page')
+        else params.set('page', updates.page.toString())
+      }
+      const query = params.toString()
+      router.push(`/dashboard/product-sync-logs${query ? `?${query}` : ''}`, { scroll: false })
+    },
+    [router, searchParams]
+  )
 
   const fetchLogs = useCallback(
     async (page: number = 1, overrides?: { shop?: string; operation?: string; status?: string }) => {
@@ -70,49 +125,54 @@ export function ProductSyncLogsTab() {
         setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       } finally {
         setLoading(false)
+        setIsFilterLoading(false)
       }
     },
     [shopFilter, operationFilter, statusFilter]
   )
 
   useEffect(() => {
-    fetchLogs(1)
+    fetchLogs(urlState.page, {
+      shop: urlState.shop,
+      operation: urlState.operation,
+      status: urlState.status,
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [urlState.shop, urlState.operation, urlState.status, urlState.page])
 
   const handleShopFilterChange = useCallback(
     (value: string) => {
       setShopFilter(value)
       setIsFilterLoading(true)
-      fetchLogs(1, { shop: value }).finally(() => setIsFilterLoading(false))
+      updateUrl({ shop: value, page: 1 })
     },
-    [fetchLogs]
+    [updateUrl]
   )
 
   const handleOperationFilterChange = useCallback(
     (value: string) => {
       setOperationFilter(value)
       setIsFilterLoading(true)
-      fetchLogs(1, { operation: value }).finally(() => setIsFilterLoading(false))
+      updateUrl({ operation: value, page: 1 })
     },
-    [fetchLogs]
+    [updateUrl]
   )
 
   const handleStatusFilterChange = useCallback(
     (value: string) => {
       setStatusFilter(value)
       setIsFilterLoading(true)
-      fetchLogs(1, { status: value }).finally(() => setIsFilterLoading(false))
+      updateUrl({ status: value, page: 1 })
     },
-    [fetchLogs]
+    [updateUrl]
   )
 
   const handlePageChange = useCallback(
     (page: number) => {
-      fetchLogs(page)
+      updateUrl({ page })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },
-    [fetchLogs]
+    [updateUrl]
   )
 
   const hasNoData = totalCount === 0 && logs.length === 0
