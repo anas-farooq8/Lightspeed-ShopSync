@@ -170,37 +170,35 @@ export function Sidebar() {
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1 px-2 sm:px-3 py-3 sm:py-4 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive =
-              item.href === '/dashboard'
-                ? pathname === '/dashboard'
-                : pathname === item.href || pathname.startsWith(item.href + '/')
-            const Icon = item.icon
-
-            return (
+          {navItems.map((item, index) => (
+            <div key={item.href}>
+              {index === 3 && (
+                <div className="my-3 mx-3 h-[2px] rounded-full bg-muted-foreground/40" aria-hidden="true" />
+              )}
               <Link
-                key={item.href}
                 href={item.href}
                 prefetch={false}
                 onClick={() => setIsMobileOpen(false)}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-3 text-sm sm:text-[15px] font-medium transition-colors cursor-pointer min-h-[44px] touch-manipulation',
-                  isActive
+                  (item.href === '/dashboard'
+                    ? pathname === '/dashboard'
+                    : pathname === item.href || pathname.startsWith(item.href + '/'))
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                   isCollapsed && 'md:justify-center md:px-2'
                 )}
                 title={isCollapsed ? item.label : undefined}
               >
-                <Icon className="h-5 w-5 flex-shrink-0" />
+                <item.icon className="h-5 w-5 flex-shrink-0" />
                 {showLabels && (
                   <div className="flex items-center justify-between flex-1 whitespace-nowrap min-w-0">
                     <span className="truncate">{item.label}</span>
                   </div>
                 )}
               </Link>
-            )
-          })}
+            </div>
+          ))}
         </nav>
 
         {/* User Info & Logout */}

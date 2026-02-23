@@ -81,7 +81,7 @@ interface ProductOperationLogItemProps {
 
 export function ProductOperationLogItem({ log }: ProductOperationLogItemProps) {
   return (
-    <div className="p-3 sm:p-4 hover:bg-muted/30 transition-colors min-w-0">
+    <div className="px-3 py-4 sm:px-4 sm:py-5 hover:bg-muted/30 transition-colors min-w-0">
       {/* Header: datetime + status */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className="text-xs sm:text-sm text-muted-foreground shrink-0">
@@ -247,7 +247,7 @@ export function ProductOperationLogItem({ log }: ProductOperationLogItemProps) {
 /** Skeleton matching ProductOperationLogItem layout: header (datetime + badges) + content lines */
 export function ProductOperationLogItemSkeleton() {
   return (
-    <div className="p-3 sm:p-4 animate-pulse min-w-0">
+    <div className="px-3 py-4 sm:px-4 sm:py-5 animate-pulse min-w-0">
       {/* Header: datetime + badges */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="h-3.5 sm:h-4 bg-muted rounded w-32" />

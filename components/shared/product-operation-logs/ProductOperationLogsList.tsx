@@ -35,7 +35,7 @@ export function ProductOperationLogsList({
     return (
       <Card className="border-border/50 overflow-hidden">
         <CardContent className="p-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-muted-foreground/40">
             {Array.from({ length: skeletonCount }).map((_, i) => (
               <ProductOperationLogItemSkeleton key={i} />
             ))}
@@ -71,7 +71,7 @@ export function ProductOperationLogsList({
     <Card className="border-border/50 overflow-hidden">
       <CardContent className="p-0">
         <div
-          className={maxHeight != null ? 'overflow-y-auto overflow-x-hidden divide-y divide-border' : 'divide-y divide-border'}
+          className={maxHeight != null ? 'overflow-y-auto overflow-x-hidden divide-y divide-muted-foreground/40' : 'divide-y divide-muted-foreground/40'}
           style={maxHeight != null ? { maxHeight: `${maxHeight}px` } : undefined}
         >
           {logs.map((log) => (
