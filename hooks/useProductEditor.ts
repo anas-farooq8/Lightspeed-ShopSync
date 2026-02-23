@@ -801,22 +801,17 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           const originalContent = updated[tld].content_by_language[langCode]?.content ?? ''
           initialContentRef.current[tld][langCode] = originalContent
           sourceValue = originalContent
-          // CREATE: No comparison on first sync – ReactQuill may fire with empty/normalized HTML.
-          // EDIT: Compare to detect first keystroke.
-          isChanged = mode === 'create' ? false : (normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue))
+          // No comparison on first sync – ReactQuill may fire with empty/normalized HTML on mount.
+          // Avoids false "Manually edited" for content field (same and different lang).
+          isChanged = false
         } else {
           sourceValue = initialContentRef.current[tld]?.[langCode] ?? ''
-          // CREATE: Manual only when user focused AND value differs from source. When value matches source
-          // (e.g. after Pick), show "Copied" – avoids ReactQuill's post-reset onChange overwriting meta to manual.
-          // EDIT: Compare for change detection.
-          if (mode === 'create') {
-            const focusKey = `${tld}:${langCode}`
-            const userHasFocused = !!contentFocusedRef.current[focusKey]
-            const valueMatchesSource = normalizeContentForComparison(value) === normalizeContentForComparison(sourceValue)
-            isChanged = userHasFocused && !valueMatchesSource
-          } else {
-            isChanged = normalizeContentForComparison(value) !== normalizeContentForComparison(sourceValue)
-          }
+          // Only mark as changed when user has focused the content field – avoids false "Manually edited"
+          // from ReactQuill normalization (e.g. trailing <p><br></p>, attribute differences).
+          const focusKey = `${tld}:${langCode}`
+          const userHasFocused = !!contentFocusedRef.current[focusKey]
+          const valueMatchesSource = normalizeContentForComparison(value) === normalizeContentForComparison(sourceValue)
+          isChanged = userHasFocused && !valueMatchesSource
         }
       } else if (field === 'description') {
         const normalizedValue = value.replace(/\r\n/g, '\n')
@@ -853,7 +848,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           const originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[translatableField as keyof ProductContent] ?? (translatableField === 'content' ? initialContentRef.current[tld]?.[langCode] : undefined) ?? ''
           const valueMatchesOriginal = translatableField === 'content'
             ? normalizeContentForComparison(value) === normalizeContentForComparison(originalValue)
-            : value === originalValue
+            : translatableField === 'description'
+              ? value.replace(/\r\n/g, '\n') === originalValue.replace(/\r\n/g, '\n')
+              : value === originalValue
           const currentMeta = newTranslationMeta?.[langCode]?.[translatableField]
           if (valueMatchesOriginal && currentMeta === 'manual') {
             // User had manually edited and reverted to original - restore meta

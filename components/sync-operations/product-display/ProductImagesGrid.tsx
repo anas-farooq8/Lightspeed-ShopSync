@@ -84,6 +84,8 @@ interface ProductImagesGridProps {
   shopTld: string
   /** When provided, use this data and do not fetch. Used by create-preview to pass source images to all panels. */
   images?: ProductImageMeta[] | null
+  /** When true and images are empty, show skeleton loading. Used when parent fetches images. */
+  imagesLoading?: boolean
   /** Product image or src for ordering (sortImagesForDisplay sorts by sortOrder + id only). */
   productOrSrc?: { product_image?: { src?: string; thumb?: string; title?: string } | null } | string | null
   className?: string
@@ -110,7 +112,7 @@ function normalizeImages(raw: ProductImageMeta[], productOrSrc?: ProductImagesGr
   return sortImagesForDisplay(withOrder, productOrSrc)
 }
 
-function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, productOrSrc, className, trailingElement, onRemoveImage }: ProductImagesGridProps) {
+function ProductImagesGridInner({ productId, imagesLink, shopTld, images: imagesProp, imagesLoading = false, productOrSrc, className, trailingElement, onRemoveImage }: ProductImagesGridProps) {
   const [fetchedImages, setFetchedImages] = useState<ProductImage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -165,7 +167,18 @@ function ProductImagesGridInner({ productId, imagesLink, shopTld, images: images
   }, [productId, imagesLink, shopTld, usePreFetched])
 
   if (usePreFetched) {
-    if (!images.length && !trailingElement) return null
+    if (!images.length && !trailingElement) {
+      if (imagesLoading) {
+        return (
+          <div className={cn("grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3", className)}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        )
+      }
+      return null
+    }
   } else if (!imagesLink) return null
 
   if (!usePreFetched && loading) {

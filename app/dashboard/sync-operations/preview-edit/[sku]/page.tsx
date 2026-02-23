@@ -33,6 +33,8 @@ export default function PreviewEditPage() {
   const selectedTargetShops = useMemo(() => targetShopsParam.split(',').filter(Boolean), [targetShopsParam])
   const [showAddImagesFromSource, setShowAddImagesFromSource] = useState(false)
   const [showAddVariantsFromSource, setShowAddVariantsFromSource] = useState(false)
+  const [sourceImagesLoading, setSourceImagesLoading] = useState(false)
+  const [targetImagesLoading, setTargetImagesLoading] = useState(false)
 
   // Use the shared product editor hook
   const editor = useProductEditor({
@@ -386,7 +388,7 @@ export default function PreviewEditPage() {
           
           const initialSourceProduct = data.source.find((p: any) => p.product_id === initialSourceId)
           
-          await initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
+          initializeTargetDataForEdit(data, initialSourceId, selectedTargetShops)
           
           const sortedTargets = [...selectedTargetShops].sort((a, b) => a.localeCompare(b))
           const firstTarget = sortedTargets.length > 0 ? sortedTargets[0] : null
@@ -394,25 +396,29 @@ export default function PreviewEditPage() {
             setActiveTargetTld(firstTarget)
           }
           
-          const imageFetchPromises: Promise<void>[] = []
+          // Show both source and target panels immediately; images load in background
+          setLoading(false)
           
+          // Fire off image fetches in parallel (don't block)
           if (initialSourceProduct?.images_link) {
-            const sourceImagePromise = fetchProductImages(
+            setSourceImagesLoading(true)
+            fetchProductImages(
               initialSourceProduct.product_id,
               initialSourceProduct.images_link,
               initialSourceProduct.shop_tld
-            ).then(() => {}).catch(err => console.error('Failed to fetch source images:', err))
-            imageFetchPromises.push(sourceImagePromise)
+            ).catch(err => console.error('Failed to fetch source images:', err))
+              .finally(() => setSourceImagesLoading(false))
           }
           
           if (firstTarget) {
             const targetProduct = data.targets?.[firstTarget]?.[0]
             if (targetProduct?.images_link) {
-              const targetImagePromise = fetchProductImages(
+              setTargetImagesLoading(true)
+              fetchProductImages(
                 targetProduct.product_id,
                 targetProduct.images_link,
                 firstTarget
-              )              .then((targetImages: ProductImage[]) => {
+              ).then((targetImages: ProductImage[]) => {
                 setTargetData(prev => {
                   const updated = { ...prev }
                   if (updated[firstTarget]) {
@@ -429,17 +435,14 @@ export default function PreviewEditPage() {
                   return updated
                 })
               }).catch(err => console.error(`Failed to fetch ${firstTarget} images:`, err))
-              imageFetchPromises.push(targetImagePromise)
+                .finally(() => setTargetImagesLoading(false))
             }
           }
-          
-          if (imageFetchPromises.length > 0) {
-            await Promise.all(imageFetchPromises)
-          }
+        } else {
+          setLoading(false)
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
-      } finally {
         setLoading(false)
       }
     }
@@ -567,6 +570,7 @@ export default function PreviewEditPage() {
       retranslatingField={retranslatingField}
       error={targetErrors[tld]}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+      targetImagesLoading={tld === sortedTargetShops[0] ? targetImagesLoading : false}
       onLanguageChange={handleLanguageChange(tld)}
       onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
       onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -601,6 +605,8 @@ export default function PreviewEditPage() {
     sourceProduct,
     targetErrors,
     productImages,
+    sortedTargetShops,
+    targetImagesLoading,
     resettingField,
     retranslatingField,
     handleLanguageChange,
@@ -691,6 +697,7 @@ export default function PreviewEditPage() {
                 selectedProductId={selectedSourceProductId}
                 onProductSelect={handleSourceProductSelect}
                 sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+                sourceImagesLoading={sourceImagesLoading}
                 sourceSwitching={sourceSwitching}
               />
               {sortedTargetShops.map(tld => (
@@ -713,6 +720,7 @@ export default function PreviewEditPage() {
               selectedProductId={selectedSourceProductId}
               onProductSelect={handleSourceProductSelect}
               sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+              sourceImagesLoading={sourceImagesLoading}
               sourceSwitching={sourceSwitching}
             />
             {renderTargetPanel(sortedTargetShops[0])}

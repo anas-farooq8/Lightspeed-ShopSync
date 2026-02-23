@@ -19,6 +19,8 @@ interface SourcePanelProps {
   onProductSelect: (id: number) => void
   /** Pre-fetched source images (create-preview: pass from page so grid does not fetch). */
   sourceImages?: ProductImageMeta[] | null
+  /** When true, show skeleton in images grid while images are loading. */
+  sourceImagesLoading?: boolean
   /** When true (preview-create source switching), shows loading on the duplicate selector. */
   sourceSwitching?: boolean
 }
@@ -31,6 +33,7 @@ function SourcePanelInner({
   selectedProductId,
   onProductSelect,
   sourceImages,
+  sourceImagesLoading = false,
   sourceSwitching = false
 }: SourcePanelProps) {
   const defaultLanguage = getDefaultLanguageCode(languages)
@@ -150,6 +153,7 @@ function SourcePanelInner({
                 imagesLink={product.images_link}
                 shopTld={product.shop_tld}
                 images={sourceImages ?? undefined}
+                imagesLoading={sourceImagesLoading}
                 productOrSrc={product.product_image ? { product_image: product.product_image } : null}
               />
             </div>

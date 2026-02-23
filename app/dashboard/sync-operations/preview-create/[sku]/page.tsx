@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
@@ -32,6 +32,7 @@ export default function PreviewCreatePage() {
   // Track initialization to prevent infinite loops
   const initializedRef = useRef(false)
   const initializationKeyRef = useRef<string>('')
+  const [sourceImagesLoading, setSourceImagesLoading] = useState(false)
 
   // Use the shared product editor hook
   const editor = useProductEditor({
@@ -305,33 +306,41 @@ export default function PreviewCreatePage() {
           const initialSourceId = productIdParam ? parseInt(productIdParam) : data.source[0].product_id
           setSelectedSourceProductId(initialSourceId)
           
+          const sortedTargets = [...selectedTargetShops].sort((a, b) => a.localeCompare(b))
+          if (sortedTargets.length > 0) {
+            setActiveTargetTld(sortedTargets[0])
+          }
+          
+          // Show source panel immediately; target panel shows loading until translation done
+          setLoading(false)
+          initializedRef.current = true
+          
           const initialSourceProduct = data.source.find((p: any) => p.product_id === initialSourceId)
-
+          
+          // Images and translation in parallel; target panel loading until translation completes
           if (initialSourceProduct?.images_link) {
-            const [sourceImages] = await Promise.all([
+            setSourceImagesLoading(true)
+            Promise.all([
               fetchProductImages(
                 initialSourceProduct.product_id,
                 initialSourceProduct.images_link,
                 initialSourceProduct.shop_tld
               ),
               initializeTargetData(data, initialSourceId, selectedTargetShops, []),
-            ])
-            patchImagesIntoTargetData(setTargetData, selectedTargetShops, sourceImages, initialSourceProduct)
+            ]).then(([sourceImages]) => {
+              patchImagesIntoTargetData(setTargetData, selectedTargetShops, sourceImages, initialSourceProduct)
+            }).finally(() => {
+              setSourceImagesLoading(false)
+            })
           } else {
-            await initializeTargetData(data, initialSourceId, selectedTargetShops, [])
+            initializeTargetData(data, initialSourceId, selectedTargetShops, [])
           }
+        } else {
+          setLoading(false)
+          initializedRef.current = true
         }
-        
-        const sortedTargets = [...selectedTargetShops].sort((a, b) => a.localeCompare(b))
-        if (sortedTargets.length > 0) {
-          setActiveTargetTld(sortedTargets[0])
-        }
-        
-        // Mark as initialized
-        initializedRef.current = true
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load product details')
-      } finally {
         setLoading(false)
       }
     }
@@ -388,6 +397,7 @@ export default function PreviewCreatePage() {
       translating={translating}
       error={targetErrors[tld]}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+      targetImagesLoading={sourceImagesLoading && (targetData[tld]?.images?.length ?? 0) === 0}
       onLanguageChange={handleLanguageChange(tld)}
       onUpdateField={(lang, field, value) => updateField(tld, lang, field, value)}
       onResetField={(lang, field) => resetField(tld, lang, field)}
@@ -413,7 +423,7 @@ export default function PreviewCreatePage() {
       onRemoveImageFromSource={(imgSrc) => removeImageFromTarget(tld, imgSrc)}
       onRestoreImageFromSource={(imgSrc) => restoreImageToTarget(tld, imgSrc)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, setContentFocused, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, sourceImagesLoading, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, setContentFocused, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
 
   if (loading) {
     return (
@@ -474,6 +484,7 @@ export default function PreviewCreatePage() {
                 selectedProductId={selectedSourceProductId}
                 onProductSelect={handleSourceProductSelect}
                 sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+                sourceImagesLoading={sourceImagesLoading}
                 sourceSwitching={sourceSwitching}
               />
               {sortedTargetShops.map(tld => (
@@ -496,6 +507,7 @@ export default function PreviewCreatePage() {
               selectedProductId={selectedSourceProductId}
               onProductSelect={handleSourceProductSelect}
               sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
+              sourceImagesLoading={sourceImagesLoading}
               sourceSwitching={sourceSwitching}
             />
             {renderTargetPanel(sortedTargetShops[0])}

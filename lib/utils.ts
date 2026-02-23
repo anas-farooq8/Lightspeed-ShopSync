@@ -84,18 +84,22 @@ export function getDefaultLanguageCode(languages: Language[]): string {
 
 /**
  * Normalize HTML/content for comparison (avoids false "changed" when ReactQuill normalizes).
- * - Trim whitespace
- * - Normalize line endings
- * - Remove trailing empty blocks like <p><br></p>, <p></p>
+ * Handles Quill output differences so Ctrl+Z undo correctly clears "Manually edited".
+ * - Trim whitespace, normalize line endings
+ * - Remove leading/trailing empty blocks: <p><br></p>, <p></p>, <p class="..."><br></p>
+ * - Strip attributes from tags (Quill may add class/style on undo)
  */
 export function normalizeContentForComparison(content: string): string {
   if (!content || typeof content !== 'string') return ''
   let s = content.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  // Remove trailing empty block elements (Quill often adds these)
+  // Strip attributes from tags so <p class="x"> matches <p>
+  s = s.replace(/<(\w+)(\s[^>]*)?>/g, (_, tag) => `<${tag}>`)
+  // Remove leading and trailing empty block elements (Quill adds these)
   let prev = ''
   while (prev !== s) {
     prev = s
     s = s.replace(/(<p><br\s*\/?><\/p>)+$/gi, '').replace(/(<p><\/p>)+$/gi, '').trim()
+    s = s.replace(/^(<p><br\s*\/?><\/p>)+/gi, '').replace(/^(<p><\/p>)+/gi, '').trim()
   }
   return s
 }

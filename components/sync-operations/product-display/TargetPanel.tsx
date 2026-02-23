@@ -30,6 +30,8 @@ interface TargetPanelProps {
   translating?: boolean
   error?: string | null
   sourceImages?: ProductImageMeta[] | null
+  /** When true (edit mode), show skeleton in images grid while target images are loading. */
+  targetImagesLoading?: boolean
   onLanguageChange: (lang: string) => void
   onUpdateField: (lang: string, field: keyof ProductContent, value: string) => void
   onResetField: (lang: string, field: keyof ProductContent) => void
@@ -76,6 +78,7 @@ export function TargetPanel({
   translating = false,
   error = null,
   sourceImages,
+  targetImagesLoading = false,
   onLanguageChange,
   onUpdateField,
   onResetField,
@@ -415,6 +418,7 @@ export function TargetPanel({
                   imagesLink={mode === 'edit' && data.targetImagesLink ? data.targetImagesLink : imagesLink}
                   shopTld={mode === 'edit' ? shopTld : sourceShopTld}
                   images={data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))}
+                  imagesLoading={targetImagesLoading}
                   productOrSrc={productOrSrc}
                   onRemoveImage={onRemoveImageFromSource ?? undefined}
                   trailingElement={onAddImagesFromSource ? (
