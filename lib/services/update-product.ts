@@ -420,17 +420,17 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     // When multiple images have sortOrder 1, Lightspeed picks by id. We reorder ALL images
     // to match intended order (1, 2, 3, ...) so only the intended first has sortOrder 1.
     // Includes both existing and newly created images (6 old + 2 new = reorder all 8).
-    const remainingCurrentIds = new Set(
-      currentImages.filter((ci) => !toDeleteImages.some((d) => d.id === ci.id)).map((ci) => ci.id)
-    )
-    const orderedIntended: Array<{ id: number }> = []
-    for (const ii of intendedImages) {
-      const existingId = parseImageId(ii)
-      const id = existingId != null && remainingCurrentIds.has(existingId)
-        ? existingId
-        : newImageIdBySrc.get(ii.src ?? '')
-      if (id != null) orderedIntended.push({ id })
-    }
+   // const remainingCurrentIds = new Set(
+   // currentImages.filter((ci) => !toDeleteImages.some((d) => d.id === ci.id)).map((ci) => ci.id)
+    //)
+    // const orderedIntended: Array<{ id: number }> = []
+    // for (const ii of intendedImages) {
+      // const existingId = parseImageId(ii)
+      // const id = existingId != null && remainingCurrentIds.has(existingId)
+      //   ? existingId
+      //   : newImageIdBySrc.get(ii.src ?? '')
+      // if (existingId != null) orderedIntended.push({ id: existingId })
+    //}
 
     // sortOrder reorder temporarily disabled
     // if (hasProductImageChange && orderedIntended.length > 0) {
