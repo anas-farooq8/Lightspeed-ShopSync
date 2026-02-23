@@ -244,8 +244,6 @@ export default function PreviewEditPage() {
           currentState,
           targetShopLanguages,
           changes,
-          productImageChanged: (data.productImage?.src ?? '') !== (data.originalProductImage?.src ?? ''),
-          imageOrderChanged: data.imageOrderChanged ?? false,
         })
       })
 

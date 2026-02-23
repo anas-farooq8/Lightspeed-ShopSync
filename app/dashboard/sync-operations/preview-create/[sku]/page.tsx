@@ -584,23 +584,26 @@ export default function PreviewCreatePage() {
           <div className="flex items-center gap-3">
             {(() => {
               const allCreated = sortedTargetShops.every(tld => createSuccess[tld])
+              const allShopsReady = sortedTargetShops.every(tld => targetData[tld])
+              const stillLoading = translating || sourceImagesLoading || !allShopsReady
+              const createDisabled = creating || allCreated || stillLoading
               return (
                 <>
                   <Button
                     variant="outline"
                     onClick={handleBack}
-                    disabled={creating}
+                    disabled={creating || stillLoading}
                     className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
                   >
                     {allCreated ? 'Done' : 'Cancel'}
                   </Button>
                   <Button
                     onClick={handleCreateClick}
-                    disabled={creating || allCreated}
+                    disabled={createDisabled}
                     className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
                   >
-                    {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {allCreated ? '✓ Created' : 'Create Product'}
+                    {(creating || stillLoading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {allCreated ? '✓ Created' : stillLoading ? 'Loading...' : 'Create Product'}
                   </Button>
                 </>
               )

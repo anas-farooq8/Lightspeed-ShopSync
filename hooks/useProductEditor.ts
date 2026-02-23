@@ -1100,6 +1100,10 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const toAdd = sourceVariants
         .filter(sv => !existingSkus.has((sv.sku || '').toLowerCase().trim()))
         .map((sv, i): EditableVariant => {
+          const newSortOrder = maxSortOrder + 1 + i
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[edit] variant added from source:', { sku: sv.sku, maxSortOrder, newSortOrder, idx: i })
+          }
           const titleByLang: Record<string, string> = {}
           const sourceTitle = sv.content_by_language?.[sourceDefaultLang]?.title ?? ''
           targetLanguages.forEach(lang => {
@@ -1110,7 +1114,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
             temp_id: `from-source-${sv.sku || Date.now()}-${Date.now()}`,
             sku: sv.sku || '',
             is_default: false,
-            sort_order: maxSortOrder + 1 + i,
+            sort_order: newSortOrder,
             price_excl: sv.price_excl,
             image: null,
             originalSku: sv.sku || '',
@@ -1601,12 +1605,15 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     setTargetData(prev => {
       const updated = { ...prev }
       if (!updated[tld]) return prev
-      const currentImages = updated[tld].images
+      const currentImages = updated[tld].images.filter(i => !updated[tld].removedImageSrcs.has(i.src ?? ''))
       const maxSortOrder = currentImages.length > 0
         ? Math.max(...currentImages.map(img => img.sort_order ?? img.originalSortOrder ?? 0))
         : 0
       const newImages: ProductImage[] = imagesToAdd.map((img, i) => {
         const order = maxSortOrder + 1 + i
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[edit] image added from source:', { idx: i, maxSortOrder, newSortOrder: order, src: img.src?.slice?.(0, 50) })
+        }
         return {
           id: String(img.id),
           src: img.src ?? '',
@@ -1617,12 +1624,11 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           addedFromSource: true,
         }
       })
-      // Append new images at end in pick order (like addVariantsFromSource); then normalize to 1,2,3...
-      const combined = [...currentImages, ...newImages]
-      const withCleanOrder = combined.map((img, idx) => ({ ...img, sort_order: idx + 1 }))
+      // Append new images at end; assign sort_order = maxSortOrder + 1 + i (no renormalization)
+      const combined = [...updated[tld].images, ...newImages]
       updated[tld] = {
         ...updated[tld],
-        images: withCleanOrder,
+        images: combined,
         originalImageOrder: updated[tld].originalImageOrder,
         imageOrderChanged: true,
         dirty: true
@@ -1674,9 +1680,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       if (nextIdx < 0) {
         const sourceImg = sourceImages.find(i => (i.src ?? '') === sourceProductImage.src) ?? sortedSource.find(i => (i.src ?? '') === sourceProductImage.src)
         if (sourceImg) {
-          const srcOrder = (sourceImg as { sort_order?: number; sortOrder?: number }).sort_order ?? (sourceImg as { sortOrder?: number }).sortOrder ?? 999
-          const maxSortOrder = available.length > 0 ? Math.max(...available.map(img => img.sort_order ?? 0)) : -1
+          const activeAvailable = available.filter(i => !updated[tld].removedImageSrcs.has(i.src ?? ''))
+          const maxSortOrder = activeAvailable.length > 0 ? Math.max(...activeAvailable.map(img => img.sort_order ?? img.originalSortOrder ?? 0)) : -1
           const order = maxSortOrder + 1
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[edit] image added from source (pick product image):', { maxSortOrder, newSortOrder: order, src: sourceProductImage.src?.slice?.(0, 50) })
+          }
           const newImg: ProductImage = {
             id: String(sourceImg.id),
             src: sourceImg.src ?? '',

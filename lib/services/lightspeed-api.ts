@@ -68,15 +68,21 @@ export class LightspeedAPIClient {
 
     try {
       const response = await fetch(url, options)
+      const responseText = await response.text()
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(
-          `Lightspeed API error (${response.status}): ${errorText}`
-        )
+        console.error(`[Lightspeed] API error ${response.status}: ${responseText.slice(0, 500)}`)
+        throw new Error(`Lightspeed API error (${response.status}): ${responseText}`)
       }
 
-      return await response.json()
+      const data = responseText ? JSON.parse(responseText) : {}
+      if (method === 'PUT' && endpoint.includes('/variants/')) {
+        const v = (data as { variant?: { priceExcl?: unknown; image?: unknown; title?: string } }).variant
+        if (v) {
+          console.log(`[Lightspeed] Variant PUT response: status=${response.status}, priceExcl=${v.priceExcl}, image=${v.image === false ? 'false' : typeof v.image}, title=${JSON.stringify(v.title?.slice(0, 30))}`)
+        }
+      }
+      return data
     } catch (error) {
       console.error(`Lightspeed API request failed: ${method} ${url}`, error)
       throw error

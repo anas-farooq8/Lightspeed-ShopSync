@@ -118,10 +118,6 @@ interface UpdateProductRequest {
   targetShopLanguages: Language[]
   /** Human-readable changes for product_operation_logs */
   changes?: string[]
-  /** True when product image src differs from original (matches dialog detection) */
-  productImageChanged?: boolean
-  /** True when user explicitly reordered product images */
-  imageOrderChanged?: boolean
 }
 
 export async function PUT(request: NextRequest) {
@@ -135,7 +131,7 @@ export async function PUT(request: NextRequest) {
     const { supabase } = auth
 
     const body: UpdateProductRequest = await request.json()
-    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages, changes, productImageChanged, imageOrderChanged } = body
+    const { targetShopTld, shopId, productId, updateProductData, currentState, targetShopLanguages, changes } = body
 
     if (!targetShopTld || !shopId || !updateProductData || !currentState) {
       return NextResponse.json(
@@ -158,7 +154,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log('[API] Updating product for target shop:', targetShopTld, 'productId:', productId, 'productImageChanged:', productImageChanged, 'imageOrderChanged:', imageOrderChanged)
+    console.log('[API] Updating product for target shop:', targetShopTld, 'productId:', productId)
 
     const defaultLanguage = getDefaultLanguageCode(targetShopLanguages)
     if (!defaultLanguage) {
@@ -206,8 +202,6 @@ export async function PUT(request: NextRequest) {
         id: img.id,
         addedFromSource: img.addedFromSource,
       })),
-      productImageChanged: productImageChanged ?? false,
-      imageOrderChanged: imageOrderChanged ?? false,
     })
 
     if (!result.success) {
@@ -243,6 +237,7 @@ export async function PUT(request: NextRequest) {
 
     try {
       const variants = updateProductData.variants
+      const updatedVariantIds = new Set(result.updatedVariants ?? [])
       const updatedVariantsList =
         result.updatedVariants?.map((vid: number) => {
           const idx = variants.findIndex((v: { variant_id?: number | null }) => v.variant_id === vid)
@@ -263,6 +258,20 @@ export async function PUT(request: NextRequest) {
             : null
         }).filter(Boolean) ?? []
 
+      // For DB sync: propagate default title to all langs for updated variants (we synced that to Lightspeed)
+      const intendedVariantsForDb = variants.map((v) => {
+        const mapped = mapVariantToIntended(v)
+        if (!updatedVariantIds.has(mapped.variant_id ?? -1)) return mapped
+        const defaultTitle = mapped.content_by_language?.[defaultLanguage]?.title ?? mapped.sku
+        const langCodes = Object.keys(updateProductData.content_by_language || {})
+        return {
+          ...mapped,
+          content_by_language: Object.fromEntries(
+            langCodes.map((lang) => [lang, { title: defaultTitle }])
+          ),
+        }
+      })
+
       await syncUpdatedProductToDb({
         supabase,
         shopId,
@@ -270,7 +279,7 @@ export async function PUT(request: NextRequest) {
         defaultLanguage,
         visibility: updateProductData.visibility,
         contentByLanguage: updateProductData.content_by_language,
-        intendedVariants: variants.map((v) => mapVariantToIntended(v)),
+        intendedVariants: intendedVariantsForDb,
         intendedImages: updateProductData.images,
         createdVariantsForDb: result.createdVariantsForDb ?? [],
         deletedVariantIds: result.deletedVariants ?? [],
@@ -278,6 +287,18 @@ export async function PUT(request: NextRequest) {
         productImageForDb: result.productImageForDb,
         updatedVariantImages: result.updatedVariantImages,
         createdVariantImages: result.createdVariantImages,
+        productChanged: result.productChanged,
+        contentChangedByLanguage: result.contentChangedByLanguage,
+        hasImageChanges: result.hasImageChanges,
+        currentVariants: currentState.variants.map((v) => ({
+          lightspeed_variant_id: v.lightspeed_variant_id,
+          sku: v.sku,
+          is_default: v.is_default,
+          sort_order: v.sort_order,
+          price_excl: v.price_excl,
+          image: v.image,
+          content_by_language: v.content_by_language,
+        })),
         changes: changesForLog,
       })
       console.log('[API] ✓ Product update synced to database')

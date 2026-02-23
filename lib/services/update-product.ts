@@ -2,18 +2,16 @@
  * Update Product Service (Simplified)
  *
  * Per UPDATE-SERVICE-ARCHITECTURE.md:
- * - Product image: only from existing target images (swap = sortOrder update)
+ * - Product image: cannot be altered directly; first image by order becomes product image
  * - Variant image: only from existing target images (API creates duplicate – limitation)
  * - New source images: append only, no product/variant selection
  *
  * Flow:
- * 1. Product: visibility & content (default)
+ * 1. Product: only update changed fields per language (visibility + content), for ALL languages
  * 2. Delete removed images
  * 3. Delete removed variants
- * 4. Create new images & variants (4a update, 4b create variants, 4c create images)
- * 5. Multi-language
- * 6. Product image swap (using diff data)
- * 7. Fetch + derive for DB sync
+ * 4. Variants (4a update existing + title sync to other langs, 4b create new, 4c create images)
+ * 5. Fetch + derive for DB sync
  */
 
 import { LightspeedAPIClient } from './lightspeed-api'
@@ -73,10 +71,6 @@ export interface UpdateProductInput {
   intendedContentByLanguage: Record<string, { title?: string; fulltitle?: string; description?: string; content?: string }>
   intendedVariants: UpdateVariantInfo[]
   intendedImages: UpdateImageInfo[]
-  /** True when product image src differs from original (matches dialog) */
-  productImageChanged?: boolean
-  /** True when user explicitly reordered product images */
-  imageOrderChanged?: boolean
 }
 
 /** Image for DB: { src, thumb, title } from Lightspeed API */
@@ -94,10 +88,14 @@ export interface UpdateProductResult {
   deletedVariants?: number[]
   /** Product image from API - for DB sync */
   productImageForDb?: ProductImageForDb
-  /** Variant images from API - variantId -> image (for updated variants) */
-  updatedVariantImages?: Record<number, VariantImageForDb>
+  /** Variant images from API - variantId -> image or null (for updated variants) */
+  updatedVariantImages?: Record<number, VariantImageForDb | null>
   /** Variant images from API - index -> image (for created variants) */
   createdVariantImages?: Record<number, VariantImageForDb>
+  /** For DB sync optimization: only update what changed */
+  productChanged?: boolean
+  contentChangedByLanguage?: Record<string, boolean>
+  hasImageChanges?: boolean
   error?: string
   details?: unknown
 }
@@ -171,8 +169,6 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     intendedContentByLanguage,
     intendedVariants,
     intendedImages,
-    productImageChanged = false,
-    imageOrderChanged = false,
   } = input
 
   try {
@@ -202,11 +198,6 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     const hasNewImages = intendedImages.some((ii) => isNewImage(ii, currentImages))
     const hasImageChanges = toDeleteImages.length > 0 || hasNewImages
 
-    // Product image: trust frontend only. Dialog detection (productImageChanged | imageOrderChanged)
-    // is the source of truth. Do NOT require intendedFirstId – when user deletes the product image,
-    // intendedImages may be empty so intendedFirstId would be null, but we still have a change.
-    const hasProductImageChange = productImageChanged || imageOrderChanged
-
     const variantsWithChanges = intendedExisting.filter((iv) => {
       const cv = currentVariants.find((c) => c.lightspeed_variant_id === iv.variant_id!)
       return cv != null && variantHasChanges(cv, iv, targetLanguages)
@@ -214,14 +205,14 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     const hasVariantChanges =
       toDeleteVariants.length > 0 || variantsWithChanges.length > 0 || intendedNew.length > 0
 
-    if (!productChanged && !hasImageChanges && !hasVariantChanges && !hasProductImageChange) {
+    if (!productChanged && !hasImageChanges && !hasVariantChanges) {
       console.log('[UPDATE] No changes detected, skipping API calls')
       return { success: true, skipped: true, productId }
     }
 
     console.log('[UPDATE] Applying changes:', {
       product: productChanged,
-      images: { toDelete: toDeleteImages.length, hasNew: hasNewImages, productImageChange: hasProductImageChange },
+      images: { toDelete: toDeleteImages.length, hasNew: hasNewImages },
       variants: { toDelete: toDeleteVariants.length, toUpdate: variantsWithChanges.length, toCreate: intendedNew.length },
     })
 
@@ -231,27 +222,31 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       if (iv.variant_id != null) variantIdMap.set(idx, iv.variant_id)
     }
 
-    // ─── Step 1: Product visibility & content (default language only) ───────
-    if (productChanged) {
-      const defaultContent = intendedContentByLanguage[defaultLanguage]
-      if (defaultContent) {
-        await targetClient.updateProduct(
-          productId,
-          {
-            product: {
-              visibility: intendedVisibility,
-              title: defaultContent.title,
-              fulltitle: defaultContent.fulltitle,
-              description: defaultContent.description,
-              content: defaultContent.content,
-            },
-          },
-          defaultLanguage
-        )
-        console.log(`[UPDATE] ✓ Product updated for default language: ${defaultLanguage}`)
+    // ─── Step 1: Product – only update changed fields, for ALL languages ─
+    // Per-language: if any field changed for that lang, update product with only those fields.
+    // Visibility: product-level; include in default-lang call if changed.
+    const visibilityChanged = currentVisibility !== intendedVisibility
+    for (const lang of targetLanguages) {
+      const langContent = intendedContentByLanguage[lang]
+      if (!langContent) {
+        console.warn(`[UPDATE] Product: lang=${lang}, no content, skipping`)
+        continue
       }
-    } else {
-      console.log('[UPDATE] Step 1: Product – no changes, skipped')
+      const cur = currentContentByLanguage[lang]
+      const payload: Record<string, unknown> = {}
+      if (lang === defaultLanguage && visibilityChanged) payload.visibility = intendedVisibility
+      if ((cur?.title ?? '') !== (langContent.title ?? '')) payload.title = langContent.title
+      if ((cur?.fulltitle ?? '') !== (langContent.fulltitle ?? '')) payload.fulltitle = langContent.fulltitle
+      if ((cur?.description ?? '') !== (langContent.description ?? '')) payload.description = langContent.description
+      if ((cur?.content ?? '') !== (langContent.content ?? '')) payload.content = langContent.content
+      const fields = Object.keys(payload)
+      if (fields.length > 0) {
+        console.log(`[UPDATE] Product: lang=${lang}, fields=${fields.join(',')}, calling updateProduct`)
+        await targetClient.updateProduct(productId, { product: payload }, lang)
+        console.log(`[UPDATE] ✓ Product updated: lang=${lang}, fields=${fields.join(',')}`)
+      } else {
+        console.log(`[UPDATE] Product: lang=${lang}, no changes, skipped`)
+      }
     }
 
     // ─── Step 2: Delete removed product images ─────────────────────────────
@@ -274,40 +269,76 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       console.log('[UPDATE] Step 3: Delete variants – none to delete, skipped')
     }
 
-    // ─── Step 4a: Update existing variants (fields + image from existing target) ─
+    // ─── Step 4a: Update existing variants – only changed fields + title sync to other langs ─
     const createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }> = []
+    const additionalLanguages = targetLanguages.filter((l) => l !== defaultLanguage)
+    const variantTitleChanged = (iv: UpdateVariantInfo, cv: { content_by_language?: Record<string, { title?: string }> } | undefined) =>
+      targetLanguages.some((lang) =>
+        (cv?.content_by_language?.[lang]?.title ?? '') !== (iv.content_by_language[lang]?.title ?? '')
+      )
     console.log(`[UPDATE] Step 4a: Update existing variants (${variantsWithChanges.length} with changes)`)
     for (const iv of intendedExisting) {
-      const idx = intendedVariants.indexOf(iv)
-
       const cv = currentVariants.find((c) => c.lightspeed_variant_id === iv.variant_id!)
       if (!cv || !variantHasChanges(cv, iv, targetLanguages)) continue
 
-      const payload: Parameters<typeof targetClient.updateVariant>[1] = {
-        variant: {
-          sku: iv.sku,
-          articleCode: iv.sku,
-          isDefault: iv.is_default,
-          sortOrder: iv.sort_order,
-          priceExcl: iv.price_excl,
-          title: sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku),
-        },
+      const payload: Parameters<typeof targetClient.updateVariant>[1] = { variant: {} }
+      if (cv.sku !== iv.sku) {
+        payload.variant!.sku = iv.sku
+        payload.variant!.articleCode = iv.sku
       }
-      // Include image only when it changed – otherwise Lightspeed creates a duplicate.
+      if (cv.is_default !== iv.is_default) payload.variant!.isDefault = iv.is_default
+      if (cv.sort_order !== iv.sort_order) payload.variant!.sortOrder = iv.sort_order
+      if (cv.price_excl !== iv.price_excl) payload.variant!.priceExcl = iv.price_excl
+      const defaultTitle = sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku)
+      const currentDefaultTitle = sanitizeVariantTitle(cv.content_by_language?.[defaultLanguage]?.title, iv.sku)
+      if (currentDefaultTitle !== defaultTitle) payload.variant!.title = defaultTitle
+
       const imageChanged = !isSameImage(cv.image, iv.image)
       if (imageChanged && iv.image?.src) {
         const imageData = await downloadImage(iv.image.src)
+        const filename = imageFilename(iv.image.title, imageData.extension)
         payload.variant!.image = {
           attachment: imageData.base64,
-          filename: imageFilename(iv.image.title, imageData.extension),
+          filename,
         }
+        console.log(`[UPDATE] Variant: variantId=${iv.variant_id}, attaching image: filename="${filename}", src="${iv.image.src?.slice(0, 60)}...", base64Len=${imageData.base64.length}`)
       } else if (imageChanged && !iv.image?.src) {
-        // Clearing variant image: pass null so API removes the image (type allows null to clear)
-        payload.variant!.image = null
+        // Skip updateVariant when variant's image is one we're deleting – Lightspeed auto-clears it
+        const variantImageSrc = cv.image?.src
+        const imageBeingDeleted = variantImageSrc && toDeleteImages.some((d) => d.src === variantImageSrc)
+        if (imageBeingDeleted) {
+          console.log(`[UPDATE] Variant: variantId=${iv.variant_id}, image removed by product image delete – skip updateVariant (Lightspeed auto-clears)`)
+        } else {
+          payload.variant!.image = null
+        }
       }
-      await targetClient.updateVariant(iv.variant_id!, payload, defaultLanguage)
+
+      const fields = Object.keys(payload.variant!)
+      if (fields.length > 0) {
+        const payloadLog = { ...payload.variant }
+        if (payloadLog.image && typeof payloadLog.image === 'object' && 'attachment' in payloadLog.image) {
+          payloadLog.image = { ...payloadLog.image, attachment: `[base64 ${(payloadLog.image as { attachment: string }).attachment.length} chars]` }
+        }
+        console.log(`[UPDATE] Variant: lang=${defaultLanguage}, variantId=${iv.variant_id}, fields=${fields.join(',')}, payload=${JSON.stringify(payloadLog)}`)
+        const res = await targetClient.updateVariant(iv.variant_id!, payload, defaultLanguage)
+        const v = (res as { variant?: { priceExcl?: unknown; image?: unknown } }).variant
+        console.log(`[UPDATE] ✓ Variant updated: lang=${defaultLanguage}, variantId=${iv.variant_id}, API returned priceExcl=${v?.priceExcl}, image=${v?.image === false ? 'false' : !!v?.image}`)
+      }
+      const idx = intendedVariants.indexOf(iv)
       variantIdMap.set(idx, iv.variant_id!)
-      console.log(`[UPDATE] ✓ Updated variant ${iv.variant_id}`)
+
+      // Title sync to other languages (when title changed)
+      // Always use default title – when user edits default, propagate to all other langs
+      if (variantTitleChanged(iv, cv)) {
+        const titleToSync = sanitizeVariantTitle(iv.content_by_language[defaultLanguage]?.title, iv.sku)
+        for (const lang of additionalLanguages) {
+          const title = titleToSync
+          console.log(`[UPDATE] Variant: lang=${lang}, variantId=${iv.variant_id}, field=title (sync), title="${title}", calling updateVariant`)
+          const res = await targetClient.updateVariant(iv.variant_id!, { variant: { title } }, lang)
+          const v = (res as { variant?: { title?: string } }).variant
+          console.log(`[UPDATE] ✓ Variant updated: lang=${lang}, variantId=${iv.variant_id}, API returned title=${JSON.stringify(v?.title?.slice(0, 30))}`)
+        }
+      }
     }
 
     // ─── Step 4b: Create new variants (image from existing target only) ─
@@ -344,10 +375,10 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
 
     // ─── Step 4c: Create new product images (from source) ────────────────────
     // New images are NOT attachable to product or variants. Just append via createProductImage.
+    // Order: created in the order they appear in intendedImages (which is sorted by sort_order).
     const newImageCount = intendedImages.filter((ii) => isNewImage(ii, currentImages)).length
-    console.log(`[UPDATE] Step 4c: Create new images (${newImageCount}) – append only`)
+    console.log(`[UPDATE] Step 4c: Create new images (${newImageCount}) – order follows intendedImages (sort_order)`)
     const newImages = intendedImages.filter((ii) => isNewImage(ii, currentImages))
-    const newImageIdBySrc = new Map<string, number>()
     for (const image of newImages) {
       const imageData = await downloadImage(image.src)
       const res = await targetClient.createProductImage(productId, {
@@ -356,118 +387,31 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
           filename: imageFilename(image.title, imageData.extension),
         },
       }, defaultLanguage)
-      const src = image.src ?? ''
-      if (src && res.productImage?.id != null) newImageIdBySrc.set(src, res.productImage.id)
       console.log(`[UPDATE] ✓ Created product image: "${image.title}" id=${res.productImage?.id}`)
-    }
-
-    // ─── Step 5: Multi-language (product content + variant titles for additional languages) ─
-    const additionalLanguages = targetLanguages.filter((l) => l !== defaultLanguage)
-    if (additionalLanguages.length === 0) {
-      console.log('[UPDATE] Step 5: Multi-language – no additional languages, skipped')
-    } else {
-      for (const lang of additionalLanguages) {
-        const langContent = intendedContentByLanguage[lang]
-        if (!langContent) {
-          console.warn(`[UPDATE] No content for language ${lang}, skipping`)
-          continue
-        }
-        const currentLang = currentContentByLanguage[lang]
-        const productLangChanged =
-          (currentLang?.title ?? '') !== (langContent.title ?? '') ||
-          (currentLang?.fulltitle ?? '') !== (langContent.fulltitle ?? '') ||
-          (currentLang?.description ?? '') !== (langContent.description ?? '') ||
-          (currentLang?.content ?? '') !== (langContent.content ?? '')
-        if (productLangChanged) {
-          await targetClient.updateProduct(
-            productId,
-            {
-              product: {
-                title: langContent.title,
-                fulltitle: langContent.fulltitle,
-                description: langContent.description,
-                content: langContent.content,
-              },
-            },
-            lang
-          )
-          console.log(`[UPDATE] ✓ Product updated for ${lang}`)
-        }
-        const variantsToUpdate: Array<{ variantId: number; title: string }> = []
-        for (const [index, variantId] of variantIdMap) {
-          const iv = intendedVariants[index]
-          const cv = currentVariants.find((c) => c.lightspeed_variant_id === variantId)
-          if (!iv) continue
-          const intendedTitle = sanitizeVariantTitle(iv.content_by_language[lang]?.title, iv.sku)
-          const currentTitle = sanitizeVariantTitle(cv?.content_by_language?.[lang]?.title, iv.sku)
-          if (intendedTitle !== currentTitle) {
-            variantsToUpdate.push({ variantId, title: intendedTitle })
-          }
-        }
-        for (const { variantId, title } of variantsToUpdate) {
-          await targetClient.updateVariant(variantId, { variant: { title } }, lang)
-        }
-        if (productLangChanged || variantsToUpdate.length > 0) {
-          console.log(`[UPDATE] ✓ Language ${lang}: product=${productLangChanged}, variants=${variantsToUpdate.length}`)
-        }
-      }
     }
 
     // Clear image cache (like create-product)
     clearImageCache()
 
-    // ─── Step 6: Product image reorder (no duplicates – avoids Lightspeed id tiebreaker) ─
-    // When multiple images have sortOrder 1, Lightspeed picks by id. We reorder ALL images
-    // to match intended order (1, 2, 3, ...) so only the intended first has sortOrder 1.
-    // Includes both existing and newly created images (6 old + 2 new = reorder all 8).
-   // const remainingCurrentIds = new Set(
-   // currentImages.filter((ci) => !toDeleteImages.some((d) => d.id === ci.id)).map((ci) => ci.id)
-    //)
-    // const orderedIntended: Array<{ id: number }> = []
-    // for (const ii of intendedImages) {
-      // const existingId = parseImageId(ii)
-      // const id = existingId != null && remainingCurrentIds.has(existingId)
-      //   ? existingId
-      //   : newImageIdBySrc.get(ii.src ?? '')
-      // if (existingId != null) orderedIntended.push({ id: existingId })
-    //}
-
-    // sortOrder reorder temporarily disabled
-    // if (hasProductImageChange && orderedIntended.length > 0) {
-    //   const currentById = new Map(currentImages.map((ci) => [ci.id, ci]))
-    //   for (let i = 0; i < orderedIntended.length; i++) {
-    //     const { id } = orderedIntended[i]
-    //     const newSortOrder = i + 1
-    //     const current = currentById.get(id)
-    //     if (current == null || current.sortOrder !== newSortOrder) {
-    //       await targetClient.updateProductImage(productId, id, { productImage: { sortOrder: newSortOrder } }, defaultLanguage)
-    //       console.log(`[UPDATE] ✓ Product image reorder: id=${id} -> ${newSortOrder}`)
-    //     }
-    //   }
-    // } else {
-    //   console.log('[UPDATE] Step 6: Product image – no reorder needed, skipped')
-    // }
-    console.log('[UPDATE] Step 6: Product image reorder – disabled (sortOrder changes commented out)')
-
-    // ─── Step 7: Fetch + derive for DB sync (only when needed) ─────────────────
-    const needsProductImage = hasProductImageChange || hasImageChanges
+    // ─── Step 5: Fetch + derive for DB sync (only when needed) ─────────────────
+    const needsProductImage = hasImageChanges
     const needsVariantImages = variantsWithChanges.length > 0 || intendedNew.length > 0
 
     let productImageForDb: ProductImageForDb | undefined
     const variantImagesByVariantId: Record<number, VariantImageForDb> = {}
 
     if (needsProductImage) {
-      console.log('[UPDATE] Step 7a: Fetching product (image changed)...')
+      console.log('[UPDATE] Step 5a: Fetching product (image changed)...')
       const productRes = await targetClient.getProduct(productId, defaultLanguage)
       productImageForDb = toImageForDb(productRes?.product?.image)
       console.log(`[UPDATE] ✓ Fetched product`)
     } else {
       productImageForDb = undefined
-      console.log('[UPDATE] Step 7a: Product image – no change, skip (DB keeps existing)')
+      console.log('[UPDATE] Step 5a: Product image – no change, skip (DB keeps existing)')
     }
 
     if (needsVariantImages) {
-      console.log('[UPDATE] Step 7b: Fetching variants (variants changed)...')
+      console.log('[UPDATE] Step 5b: Fetching variants (variants changed)...')
       const variantsRes = await targetClient.getVariants(productId, defaultLanguage)
       const fetchedVariants = variantsRes.variants ?? []
       for (const [index, variantId] of variantIdMap) {
@@ -477,7 +421,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       }
       console.log(`[UPDATE] ✓ Fetched ${fetchedVariants.length} variants`)
     } else {
-      console.log('[UPDATE] Step 7b: Variants – no change, skipped fetch')
+      console.log('[UPDATE] Step 5b: Variants – no change, skipped fetch')
     }
 
     console.log('[UPDATE] ✓✓✓ Update complete')
@@ -487,11 +431,22 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       return cv != null && variantHasChanges(cv, iv, targetLanguages)
     })
 
-    const updatedVariantImages: Record<number, VariantImageForDb> = {}
+    const contentChangedByLanguage: Record<string, boolean> = {}
+    for (const lang of targetLanguages) {
+      const cur = currentContentByLanguage[lang]
+      const intended = intendedContentByLanguage[lang]
+      contentChangedByLanguage[lang] =
+        (cur?.title ?? '') !== (intended?.title ?? '') ||
+        (cur?.fulltitle ?? '') !== (intended?.fulltitle ?? '') ||
+        (cur?.description ?? '') !== (intended?.description ?? '') ||
+        (cur?.content ?? '') !== (intended?.content ?? '')
+    }
+
+    const updatedVariantImages: Record<number, VariantImageForDb | null> = {}
     const createdVariantImages: Record<number, VariantImageForDb> = {}
     for (const vid of toUpdate.map((v) => v.variant_id!)) {
       const img = variantImagesByVariantId[vid]
-      if (img) updatedVariantImages[vid] = img
+      updatedVariantImages[vid] = img ?? null
     }
     for (const { variantId, index } of createdVariantsForDb) {
       const img = variantImagesByVariantId[variantId]
@@ -507,6 +462,9 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
       productImageForDb,
       updatedVariantImages: Object.keys(updatedVariantImages).length > 0 ? updatedVariantImages : undefined,
       createdVariantImages: Object.keys(createdVariantImages).length > 0 ? createdVariantImages : undefined,
+      productChanged,
+      contentChangedByLanguage,
+      hasImageChanges,
     }
   } catch (error) {
     console.error('[UPDATE] ✗✗✗ Update failed:', error)
