@@ -100,46 +100,53 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     throw new Error(`Failed to sync product content: ${contentError.message}`)
   }
 
-  // Insert variants
+  // Insert variants (batch)
+  const variantRows = createdVariantsForDb
+    .map(({ variantId, index }) => {
+      const variant = variants[index]
+      if (!variant) return null
+      const variantImage = variantImagesForDb?.[index] ?? null
+      return {
+        shop_id: shopId,
+        lightspeed_variant_id: variantId,
+        lightspeed_product_id: productId,
+        sku: variant.sku,
+        is_default: variant.is_default,
+        sort_order: variant.sort_order ?? index,
+        price_excl: variant.price_excl,
+        image: variantImage,
+      }
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null)
+
+  if (variantRows.length > 0) {
+    const { error: variantError } = await supabase.from('variants').insert(variantRows)
+    if (variantError) {
+      console.error('[DB] Failed to insert variants:', variantError)
+      throw new Error(`Failed to sync variants to database: ${variantError.message}`)
+    }
+  }
+
+  // Insert variant_content for all variants and languages (batch)
+  const allVariantContentRows: Array<{ shop_id: string; lightspeed_variant_id: number; language_code: string; title: string }> = []
   for (const { variantId, index } of createdVariantsForDb) {
     const variant = variants[index]
     if (!variant) continue
-
-    // Use variant image from Lightspeed API response only. No fallback to source - use null when no response.
-    const variantImage = variantImagesForDb?.[index] ?? null
-
-    const { error: variantError } = await supabase.from('variants').insert({
-      shop_id: shopId,
-      lightspeed_variant_id: variantId,
-      lightspeed_product_id: productId,
-      sku: variant.sku,
-      is_default: variant.is_default,
-      sort_order: variant.sort_order ?? index,
-      price_excl: variant.price_excl,
-      image: variantImage,
-    })
-
-    if (variantError) {
-      console.error('[DB] Failed to insert variant:', variantError)
-      throw new Error(`Failed to sync variant: ${variantError.message}`)
-    }
-
-    // Insert variant_content for each language
-    const variantContentRows = Object.keys(contentByLanguage).map((langCode) => {
+    for (const langCode of Object.keys(contentByLanguage)) {
       const title = variant.content_by_language?.[langCode]?.title ?? variant.sku
-      return {
+      allVariantContentRows.push({
         shop_id: shopId,
         lightspeed_variant_id: variantId,
         language_code: langCode,
         title: title || variant.sku,
-      }
-    })
-
-    const { error: variantContentError } = await supabase.from('variant_content').insert(variantContentRows)
-
+      })
+    }
+  }
+  if (allVariantContentRows.length > 0) {
+    const { error: variantContentError } = await supabase.from('variant_content').insert(allVariantContentRows)
     if (variantContentError) {
       console.error('[DB] Failed to insert variant content:', variantContentError)
-      throw new Error(`Failed to sync variant content: ${variantContentError.message}`)
+      throw new Error(`Failed to sync variant content to database: ${variantContentError.message}`)
     }
   }
 

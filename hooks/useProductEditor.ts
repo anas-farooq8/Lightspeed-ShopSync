@@ -29,6 +29,7 @@ import {
   normalizeContentForComparison,
   sortImagesForDisplay,
   getDisplayProductImage,
+  sortVariants,
 } from '@/lib/utils'
 import type {
   ProductDetails,
@@ -83,9 +84,21 @@ function cloneTargetData(data: Record<string, EditableTargetData>): Record<strin
   return result
 }
 
-function toEditableImage(img: { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number }, idx: number) {
-  const order = img.sort_order ?? img.sortOrder ?? idx
-  return { ...img, id: String(img.id ?? idx), src: img.src ?? '', sort_order: order, originalSortOrder: order }
+/**
+ * Create editable image for target. For create flow, assigns sequential sort_order (index+1)
+ * based on display order; originalSortOrder preserves the source value for debug.
+ */
+function toEditableImage(
+  img: { id?: number | string; src?: string; thumb?: string; title?: string; sortOrder?: number; sort_order?: number },
+  idx: number,
+  forCreate?: boolean
+) {
+  const originalOrder = img.sort_order ?? img.sortOrder ?? idx
+  const order = forCreate ? idx + 1 : originalOrder
+  if (forCreate && process.env.NODE_ENV === 'development') {
+    console.log('[create] image copied to target:', { idx, originalSortOrder: originalOrder, newSortOrder: order, src: img.src?.slice?.(0, 50) })
+  }
+  return { ...img, id: String(img.id ?? idx), src: img.src ?? '', sort_order: order, originalSortOrder: originalOrder }
 }
 
 export function patchImagesIntoTargetData(
@@ -97,7 +110,7 @@ export function patchImagesIntoTargetData(
   if (!images.length) return
   const productOrSrc = srcProduct?.product_image ? { product_image: srcProduct.product_image } : null
   const sortedByOrder = sortImagesForDisplay([...images], productOrSrc)
-  const editableImages = sortedByOrder.map((img, idx) => toEditableImage(img, idx))
+  const editableImages = sortedByOrder.map((img, idx) => toEditableImage(img, idx, true))
   const productImageCandidate = editableImages[0]
   const fallbackProductImage: ImageInfo | null = productImageCandidate
     ? { src: productImageCandidate.src, thumb: productImageCandidate.thumb, title: productImageCandidate.title }
@@ -410,26 +423,35 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         }
       })
 
-      const variants: EditableVariant[] = sourceProduct.variants.map(v => ({
-        ...v,
-        sku: v.sku || '',
-        originalSku: v.sku || '',
-        originalPrice: v.price_excl,
-        originalIsDefault: v.is_default,
-        originalImage: v.image ? { src: v.image.src, thumb: v.image.thumb, title: v.image.title } : null,
-        originalTitle: Object.fromEntries(
-          targetLanguages.map(lang => [
-            lang.code,
-            sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
-          ])
-        ),
-        content_by_language: Object.fromEntries(
-          targetLanguages.map(lang => [
-            lang.code,
-            { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
-          ])
-        )
-      }))
+      const sortedSourceVariants = sortVariants([...sourceProduct.variants])
+      const variants: EditableVariant[] = sortedSourceVariants.map((v, idx) => {
+        const originalSortOrder = v.sort_order ?? (v as { sortOrder?: number }).sortOrder ?? 999
+        const newSortOrder = idx + 1
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[create] variant copied to target:', { idx, sku: v.sku, originalSortOrder, newSortOrder })
+        }
+        return {
+          ...v,
+          sort_order: newSortOrder,
+          sku: v.sku || '',
+          originalSku: v.sku || '',
+          originalPrice: v.price_excl,
+          originalIsDefault: v.is_default,
+          originalImage: v.image ? { src: v.image.src, thumb: v.image.thumb, title: v.image.title } : null,
+          originalTitle: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : ''
+            ])
+          ),
+          content_by_language: Object.fromEntries(
+            targetLanguages.map(lang => [
+              lang.code,
+              { title: sourceDefaultLang ? (v.content_by_language?.[sourceDefaultLang]?.title || '') : '' }
+            ])
+          )
+        }
+      })
 
       const productOrSrc = sourceProduct.product_image ? { product_image: sourceProduct.product_image } : null
       const sortedSourceImages = sortImagesForDisplay([...sourceImages], productOrSrc)
@@ -440,7 +462,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           ? { src: firstBySortOrder.src, thumb: firstBySortOrder.thumb, title: firstBySortOrder.title }
           : null
 
-      const editableSourceImages = sortedSourceImages.map((img, idx) => toEditableImage(img, idx))
+      const editableSourceImages = sortedSourceImages.map((img, idx) => toEditableImage(img, idx, true))
       newTargetData[tld] = {
         content_by_language,
         variants,
@@ -1515,11 +1537,15 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       const newProductImage = isSameImageInfo(updated[tld].productImage ?? null, deletedImageInfo)
         ? (remainingImages[0] ? { src: remainingImages[0].src, thumb: remainingImages[0].thumb, title: remainingImages[0].title } : null)
         : updated[tld].productImage
+      const removedWasAddedFromSource = img?.addedFromSource === true
+      const remainingAddedFromSource = remainingImages.filter((i: { addedFromSource?: boolean }) => i.addedFromSource).length
+      const newImageOrderChanged = removedWasAddedFromSource && remainingAddedFromSource === 0 ? false : updated[tld].imageOrderChanged
       updated[tld] = {
         ...updated[tld],
         removedImageSrcs: newRemoved,
         variants: newVariants,
         productImage: newProductImage,
+        imageOrderChanged: newImageOrderChanged,
         dirty: true,
       }
       setIsDirty(checkAnyDirty(updated))

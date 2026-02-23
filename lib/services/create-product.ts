@@ -7,8 +7,7 @@
  * Notes on multi-language:
  * - Product details (title, description, etc.) are created in default language first,
  *   then updated for all additional languages after base product creation.
- * - Variant titles are initially created per the default language, then
- *   updated for each language (if available in content_by_language) right after product/variant creation. 
+ * - Variant titles are set only in the default language at creation time. 
  */
 
 import { LightspeedAPIClient } from './lightspeed-api'
@@ -318,12 +317,12 @@ export async function createProduct(
     }
 
     // ============================================================
-    // MULTI-LANGUAGE: Update product details and variant titles for all additional languages
+    // MULTI-LANGUAGE: Update product details for all additional languages (not variants)
     // ============================================================
     const additionalLanguages = targetLanguages.filter(lang => lang !== defaultLanguage)
     
     if (additionalLanguages.length > 0) {
-      console.log('[MULTI-LANG] Updating additional languages:', additionalLanguages)
+      console.log('[MULTI-LANG] Updating product content for additional languages:', additionalLanguages)
       
       for (const lang of additionalLanguages) {
         const langContent = content_by_language[lang]
@@ -333,7 +332,6 @@ export async function createProduct(
           continue
         }
 
-        // Update product content in this language
         console.log(`[MULTI-LANG] Updating product content for language: ${lang}`)
         await targetClient.updateProduct(productId, {
           product: {
@@ -344,31 +342,6 @@ export async function createProduct(
           }
         }, lang)
         console.log(`[MULTI-LANG] ✓ Updated product for ${lang}`)
-
-        // Now update each variant for this language, if a title is provided
-        for (let i = 0; i < variants.length; i++) {
-          const variant = variants[i]
-          const variantId = variantIdMap.get(i)
-          
-          if (!variantId) {
-            console.warn(`[MULTI-LANG] Warning: No variant ID found for index ${i}`)
-            continue
-          }
-
-          // For each language, look for the localized title (optional per variant)
-          const variantLangTitle = sanitizeVariantTitle(
-            variant.content_by_language[lang]?.title,
-            variant.sku
-          )
-          
-          // Always make the update for this language for the variant, even if fallback to sku.
-          await targetClient.updateVariant(variantId, {
-            variant: {
-              title: variantLangTitle,
-            }
-          }, lang)
-          console.log(`[MULTI-LANG] ✓ Updated variant ${variantId} for ${lang}`)
-        }
       }
     }
 
@@ -376,27 +349,32 @@ export async function createProduct(
     clearImageCache()
 
     // ============================================================
-    // FETCH: Get product and variants from target
+    // FETCH: Get product and variants from target (only when we have images)
     // ============================================================
-    const [productRes, variantsRes] = await Promise.all([
-      targetClient.getProduct(productId, defaultLanguage),
-      targetClient.getVariants(productId, defaultLanguage),
-    ])
+    if (images.length > 0) {
+      const [productRes, variantsRes] = await Promise.all([
+        targetClient.getProduct(productId, defaultLanguage),
+        targetClient.getVariants(productId, defaultLanguage),
+      ])
 
-    // Variant images: from fetched variants by variantId
-    const fetchedVariants = variantsRes.variants ?? []
-    for (const [index, variantId] of variantIdMap) {
-      const fv = fetchedVariants.find((v) => v.id === variantId)
-      const img = toImageForDb(fv?.image)
-      if (img) {
-        variantImagesForDb[index] = img
+      // Variant images: from fetched variants by variantId
+      const fetchedVariants = variantsRes.variants ?? []
+      for (const [index, variantId] of variantIdMap) {
+        const fv = fetchedVariants.find((v) => v.id === variantId)
+        const img = toImageForDb(fv?.image)
+        if (img) {
+          variantImagesForDb[index] = img
+        }
       }
-    }
 
-    // Product image: from product.image (main product image in Lightspeed response)
-    productImageForDb = toImageForDb(productRes.product.image)
-    if (productImageForDb) {
-      console.log(`[DEBUG] productImageForDb from product.image`)
+      // Product image: from product.image (main product image in Lightspeed response)
+      productImageForDb = toImageForDb(productRes.product.image)
+      if (productImageForDb) {
+        console.log(`[DEBUG] productImageForDb from product.image`)
+      }
+    } else {
+      // No images: product and variant images are null, skip API fetch
+      productImageForDb = null
     }
 
     console.log('[CREATE] ✓✓✓ Product creation complete!')
