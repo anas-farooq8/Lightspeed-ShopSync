@@ -50,7 +50,7 @@ function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-base sm:text-lg break-words">{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
