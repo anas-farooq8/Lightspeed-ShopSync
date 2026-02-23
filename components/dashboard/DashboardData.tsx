@@ -79,7 +79,7 @@ export function DashboardData() {
       const [statsRes, lastSyncRes, logsRes] = await Promise.all([
         fetch('/api/stats'),
         fetch('/api/last-sync'),
-        fetch('/api/product-operation-logs?limit=20'),
+        fetch('/api/last-product-operation'),
       ])
 
       if (cancelled) return

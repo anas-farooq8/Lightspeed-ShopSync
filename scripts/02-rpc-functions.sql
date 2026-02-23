@@ -461,7 +461,7 @@ BEGIN
   -- INPUT VALIDATION
   -- ========================================
 
-  v_limit := GREATEST(1, LEAST(COALESCE(p_limit, 20), 100));
+  v_limit := GREATEST(1, LEAST(COALESCE(p_limit, 50), 100));
   v_offset := GREATEST(0, COALESCE(p_offset, 0));
 
   IF p_shop_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM shops WHERE id = p_shop_id) THEN
@@ -478,11 +478,23 @@ BEGIN
 
   -- ========================================
   -- QUERY EXECUTION
+  -- Returns { data: [...], total_count: N } for pagination support
   -- ========================================
 
   RETURN (
-    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.created_at DESC), '[]'::json)
-    FROM (
+    WITH filtered AS (
+      SELECT pol.id, pol.shop_id, pol.lightspeed_product_id, pol.operation_type, pol.status,
+             pol.error_message, pol.details, pol.source_shop_id, pol.source_lightspeed_product_id,
+             pol.created_at
+      FROM product_operation_logs pol
+      WHERE (p_shop_id IS NULL OR pol.shop_id = p_shop_id)
+        AND (p_operation_type IS NULL OR pol.operation_type::text = p_operation_type)
+        AND (p_status IS NULL OR pol.status::text = p_status)
+    ),
+    total_ct AS (
+      SELECT COUNT(*)::bigint AS cnt FROM filtered
+    ),
+    enriched AS (
       SELECT
         pol.id,
         pol.shop_id,
@@ -511,7 +523,7 @@ BEGIN
             'default_sku', v_s.sku
           )
         ELSE NULL END AS source_product
-      FROM product_operation_logs pol
+      FROM filtered pol
       JOIN shops ts ON ts.id = pol.shop_id
       LEFT JOIN shops ss ON ss.id = pol.source_shop_id
       LEFT JOIN products tp ON tp.shop_id = pol.shop_id AND tp.lightspeed_product_id = pol.lightspeed_product_id
@@ -546,23 +558,25 @@ BEGIN
         ORDER BY v.is_default DESC NULLS LAST, v.sort_order NULLS LAST
         LIMIT 1
       ) v_s ON sp.shop_id IS NOT NULL
-      WHERE (p_shop_id IS NULL OR pol.shop_id = p_shop_id)
-        AND (p_operation_type IS NULL OR pol.operation_type::text = p_operation_type)
-        AND (p_status IS NULL OR pol.status::text = p_status)
       ORDER BY pol.created_at DESC
       LIMIT v_limit
       OFFSET v_offset
-    ) t
+    )
+    SELECT json_build_object(
+      'data', COALESCE((SELECT json_agg(row_to_json(e) ORDER BY e.created_at DESC) FROM enriched e), '[]'::json),
+      'total_count', (SELECT cnt FROM total_ct)
+    )
   );
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION get_product_operation_logs(INTEGER, INTEGER, UUID, TEXT, TEXT) TO authenticated;
 
--- Example Response:
---   [
---     {
---       "id": 1,
+-- Example Response (paginated):
+--   {
+--     "data": [
+--       {
+--         "id": 1,
 --       "shop_id": "uuid",
 --       "lightspeed_product_id": 12345,
 --       "operation_type": "create",
@@ -574,7 +588,9 @@ GRANT EXECUTE ON FUNCTION get_product_operation_logs(INTEGER, INTEGER, UUID, TEX
 --       "created_at": "2026-02-22T14:30:00Z",
 --       "target_shop": { "id": "uuid", "name": "Shop BE", "base_url": "https://..." },
 --       "source_shop": { "id": "uuid", "name": "Shop NL", "base_url": "https://..." },
---       "target_product": { "title": "Product Name", "default_sku": "SKU-001", "image": {...} },
---       "source_product": { "title": "Product Name", "default_sku": "SKU-001" }
---     }
---   ]
+--         "target_product": { "title": "Product Name", "default_sku": "SKU-001", "image": {...} },
+--         "source_product": { "title": "Product Name", "default_sku": "SKU-001" }
+--       }
+--     ],
+--     "total_count": 123
+--   }

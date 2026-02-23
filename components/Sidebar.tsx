@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, LayoutDashboard, RefreshCw, LogOut, User, ArrowLeftRight, Menu, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LayoutDashboard, RefreshCw, LogOut, User, ArrowLeftRight, Menu, X, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
@@ -80,7 +80,8 @@ export function Sidebar() {
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/dashboard/sync-operations', icon: ArrowLeftRight, label: 'Sync Operations' },
-    { href: '/dashboard/sync-logs', icon: RefreshCw, label: 'Sync Logs' },
+    { href: '/dashboard/product-sync-logs', icon: FileText, label: 'Product Sync Logs' },
+    { href: '/dashboard/sync-logs', icon: RefreshCw, label: 'Shop Sync Logs' },
   ]
 
   const showLabels = !isCollapsed

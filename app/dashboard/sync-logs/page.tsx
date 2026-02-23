@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { SyncLog } from '@/types/database'
-import { SyncLogCard, SyncLogCardSkeleton } from '@/components/dashboard/SyncLogCard'
+import { SyncLogCard, SyncLogCardSkeleton } from '@/components/sync-logs/SyncLogCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RefreshCw, AlertCircle, Filter, ChevronDown, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
