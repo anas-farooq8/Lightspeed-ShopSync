@@ -558,6 +558,8 @@ interface TargetShop {
   tld: string
   name: string
   status: 'not_exists' | 'exists' | 'unknown'
+  /** When status is 'exists', total_matches count (e.g. 2 for x2). */
+  count?: number
 }
 
 export function TargetShopSelectionDialog({
@@ -642,9 +644,19 @@ export function TargetShopSelectionDialog({
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1">
                     <Badge variant="outline" className="text-xs shrink-0">.{shop.tld}</Badge>
                     {exists ? (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-green-600 shrink-0" />
-                        <span className="whitespace-nowrap">Already exists</span>
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-green-600 shrink-0" />
+                          <span className="whitespace-nowrap">Already exists</span>
+                        </div>
+                        {shop.count != null && shop.count > 1 && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-xs font-bold min-w-[2rem] bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-400/40 ring-1 ring-emerald-500/20 dark:ring-emerald-400/20"
+                          >
+                            ×{shop.count}
+                          </Badge>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">

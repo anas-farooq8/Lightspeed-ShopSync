@@ -493,6 +493,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
             tld,
             name: info.shop_name,
             status: info.status,
+            count: info.status === 'exists' ? (info.total_matches ?? 0) : undefined,
           }))}
           onConfirm={handleTargetShopConfirm}
           productSku={selectedProduct.default_sku}

@@ -173,6 +173,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false)
   const [resettingField, setResettingField] = useState<string | null>(null)
   const [retranslatingField, setRetranslatingField] = useState<string | null>(null)
+  const [targetSwitching, setTargetSwitching] = useState(false)
 
   const initialContentRef = useRef<Record<string, Record<string, string>>>({})
   const contentEditorReadyRef = useRef<Record<string, Record<string, boolean>>>({})
@@ -509,7 +510,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     data: ProductDetails,
     sourceProductId: number,
     targetShopTlds: string[],
-    options?: { preserveExisting?: boolean }
+    options?: { preserveExisting?: boolean; targetProductIdOverrides?: Record<string, number>; tldsToUpdate?: string[] }
   ) => {
     const sourceProduct = data.source.find(p => p.product_id === sourceProductId)
     if (!sourceProduct) return
@@ -536,8 +537,10 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     }
 
     const newTargetErrors: Record<string, string> = {}
+    const tldsToProcess = options?.tldsToUpdate ?? targetShopTlds
+    const overrides = options?.targetProductIdOverrides ?? {}
 
-    for (const tld of targetShopTlds) {
+    for (const tld of tldsToProcess) {
       const targetLanguages = data.shops[tld]?.languages ?? []
       const defaultLang = targetLanguages.find(l => l.is_default)?.code || targetLanguages[0]?.code
 
@@ -549,7 +552,10 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         continue
       }
 
-      const targetProduct = targetProducts[0]
+      const preferredId = overrides[tld]
+      const targetProduct = preferredId
+        ? targetProducts.find((p: ProductData) => p.product_id === preferredId) || targetProducts[0]
+        : targetProducts[0]
 
       const content_by_language: Record<string, ProductContent> = {}
       targetLanguages.forEach(lang => {
@@ -753,6 +759,24 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
       setSourceSwitching(false)
     }
   }, [mode, selectedSourceProductId, details, productImages, selectedTargetShops, fetchProductImages, initializeTargetData, initializeTargetDataForEdit])
+
+  // ─── Target Product Switch Handler (EDIT mode, when target has duplicates) ─
+  const handleTargetProductSelect = useCallback(async (tld: string, targetProductId: number) => {
+    if (!details || mode !== 'edit' || selectedSourceProductId == null) return
+    const currentTargetId = targetDataRef.current[tld]?.targetProductId
+    if (currentTargetId === targetProductId) return
+
+    setTargetSwitching(true)
+    try {
+      await initializeTargetDataForEdit(details, selectedSourceProductId, selectedTargetShops, {
+        preserveExisting: true,
+        targetProductIdOverrides: { [tld]: targetProductId },
+        tldsToUpdate: [tld],
+      })
+    } finally {
+      setTargetSwitching(false)
+    }
+  }, [mode, details, selectedSourceProductId, selectedTargetShops, initializeTargetDataForEdit])
 
   // ─── Field Update Handlers ────────────────────────────────────────────────
   const updateField = useCallback((tld: string, langCode: string, field: keyof ProductContent, value: string) => {
@@ -2656,6 +2680,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     initializeTargetData,
     initializeTargetDataForEdit,
     handleSourceProductSelect,
+    handleTargetProductSelect,
+    targetSwitching,
     updateField,
     updateVariant,
     updateVariantTitle,

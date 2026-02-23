@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star, Undo2 } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
+import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
-import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay, cn } from '@/lib/utils'
+import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay, cn, getDefaultLanguageCode } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
 interface TargetPanelProps {
@@ -58,6 +59,12 @@ interface TargetPanelProps {
   onRestoreImageFromSource?: (imageSrc: string) => void
   onAddVariantsFromSource?: () => void
   onResetVariantImage?: (idx: number) => void
+  /** Target duplicate selector (edit mode, when product exists multiple times in this target store) */
+  hasTargetDuplicates?: boolean
+  allTargetProducts?: ProductData[]
+  selectedTargetProductId?: number | null
+  onTargetProductSelect?: (productId: number) => void
+  targetSwitching?: boolean
 }
 
 export function TargetPanel({
@@ -105,6 +112,11 @@ export function TargetPanel({
   onRestoreImageFromSource,
   onAddVariantsFromSource,
   onResetVariantImage,
+  hasTargetDuplicates = false,
+  allTargetProducts = [],
+  selectedTargetProductId = null,
+  onTargetProductSelect,
+  targetSwitching = false,
 }: TargetPanelProps) {
   if (!data && !error) {
     // Show loading state when data is being initialized (same style as main page loading)
@@ -242,6 +254,16 @@ export function TargetPanel({
             </div>
           </div>
         </div>
+        {hasTargetDuplicates && allTargetProducts.length > 1 && onTargetProductSelect && (
+          <DuplicateProductSelector
+            products={allTargetProducts}
+            selectedProductId={selectedTargetProductId ?? data.targetProductId ?? null}
+            onProductSelect={onTargetProductSelect}
+            defaultLanguage={getDefaultLanguageCode(languages)}
+            isSource={false}
+            loading={targetSwitching}
+          />
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3 sm:space-y-4 pt-0 px-4 sm:px-6 pb-4 sm:pb-6">

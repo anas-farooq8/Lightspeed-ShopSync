@@ -89,6 +89,8 @@ export default function PreviewEditPage() {
     fetchProductImages,
     initializeTargetDataForEdit,
     handleSourceProductSelect,
+    handleTargetProductSelect,
+    targetSwitching,
     updateField,
     updateVariant,
     updateVariantTitle,
@@ -604,6 +606,11 @@ export default function PreviewEditPage() {
       onRemoveImageFromSource={(imageId) => removeImageFromTarget(tld, imageId)}
       onRestoreImageFromSource={(imageId) => restoreImageToTarget(tld, imageId)}
       onAddVariantsFromSource={() => setShowAddVariantsFromSource(true)}
+      hasTargetDuplicates={(details?.targets?.[tld]?.length ?? 0) > 1}
+      allTargetProducts={details?.targets?.[tld] ?? []}
+      selectedTargetProductId={targetData[tld]?.targetProductId ?? null}
+      onTargetProductSelect={(productId) => handleTargetProductSelect(tld, productId)}
+      targetSwitching={targetSwitching}
     />
   ), [
     details,
@@ -642,6 +649,8 @@ export default function PreviewEditPage() {
     restoreImageToTarget,
     resetProductImage,
     addVariantsFromSource,
+    handleTargetProductSelect,
+    targetSwitching,
   ])
 
   if (loading) {
