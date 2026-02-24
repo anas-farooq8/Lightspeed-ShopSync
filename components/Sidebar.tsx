@@ -3,6 +3,14 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, LayoutDashboard, RefreshCw, LogOut, User, ArrowLeftRight, Menu, X, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -16,6 +24,7 @@ export function Sidebar() {
   const [mounted, setMounted] = useState(false)
   const [userEmail, setUserEmail] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -70,6 +79,7 @@ export function Sidebar() {
     setLoading(true)
     const { error } = await supabase.auth.signOut()
     if (!error) {
+      setLogoutDialogOpen(false)
       router.push('/login')
     }
     setLoading(false)
@@ -216,7 +226,7 @@ export function Sidebar() {
           <Button
             variant="outline"
             size={isCollapsed ? 'icon' : 'default'}
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             disabled={loading}
             className={cn(
               'cursor-pointer w-full hover:bg-red-50 hover:text-red-600 hover:border-red-200 min-h-[44px] touch-manipulation',
@@ -229,6 +239,30 @@ export function Sidebar() {
           </Button>
         </div>
       </aside>
+
+      {/* Logout confirmation dialog */}
+      <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Log out</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to log out? You will need to sign in again to access the dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLogoutDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleLogout}
+              disabled={loading}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {loading ? 'Logging out...' : 'Log out'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Desktop: Collapse/Expand toggle button */}
       <button
