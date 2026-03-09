@@ -235,7 +235,6 @@ Configure secrets in **Settings → Secrets and variables → Actions**.
 ├── scripts/                          # SQL schema (01–05), sync.py
 ├── .github/workflows/
 │   └── sync-cron.yml                 # Daily Lightspeed sync (00:05 UTC)
-└── docs/                             # PROJECT_UNDERSTANDING, TRANSLATION_SYSTEM
 ```
 
 ---

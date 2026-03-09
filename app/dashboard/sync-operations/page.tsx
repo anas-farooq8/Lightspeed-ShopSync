@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { ProductListTab } from '@/components/sync-operations/product-list/ProductListTab'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
@@ -19,6 +20,8 @@ export default function SyncOperationsPage() {
   const [, startTransition] = useTransition()
   const shopsLoadedRef = useRef(false)
   const navigationInProgressRef = useRef(false)
+  const [isTabChanging, setIsTabChanging] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   
   // Get activeTab directly from URL, default to 'create'
   const activeTab = searchParams.get('tab') || 'create'
@@ -39,6 +42,8 @@ export default function SyncOperationsPage() {
       } catch (err) {
         console.error('Failed to load shops:', err)
         shopsLoadedRef.current = false
+      } finally {
+        setIsInitialLoading(false)
       }
     }
     
@@ -51,12 +56,14 @@ export default function SyncOperationsPage() {
     if (navigationInProgressRef.current || newTab === activeTab) return
     
     navigationInProgressRef.current = true
+    setIsTabChanging(true)
     
     startTransition(() => {
       router.push(`/dashboard/sync-operations?tab=${newTab}`, { scroll: false })
       // Reset flag after navigation completes
       setTimeout(() => {
         navigationInProgressRef.current = false
+        setIsTabChanging(false)
       }, 100)
     })
   }
@@ -71,6 +78,8 @@ export default function SyncOperationsPage() {
             Manage product synchronization between shops
           </p>
         </div>
+
+        <LoadingShimmer show={isInitialLoading || isTabChanging} position="top" />
 
         {/* Tabs - Compact on mobile, spacious on web */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full min-w-0">

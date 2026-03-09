@@ -188,7 +188,7 @@ export function ProductSyncLogsTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4 min-w-0">
-      <LoadingShimmer show={loading && logs.length === 0} position="top" />
+      <LoadingShimmer show={loading || isFilterLoading} position="top" />
 
       {loading && logs.length === 0 ? (
         <>

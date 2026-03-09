@@ -189,7 +189,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     router.push(`/dashboard/sync-operations?${params.toString()}`, { scroll: false })
   }
 
-  const handleSort = (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created') => {
+  const handleSort = (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated') => {
     const currentSortBy = searchParams.get('sortBy') || 'created'
     const currentSortOrder = searchParams.get('sortOrder') || 'desc'
     
@@ -197,7 +197,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     if (currentSortBy === column) {
       newSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc'
     } else {
-      newSortOrder = column === 'created' ? 'desc' : 'asc'
+      newSortOrder = (column === 'created' || column === 'updated') ? 'desc' : 'asc'
     }
     
     updateURL({ sortBy: column, sortOrder: newSortOrder, page: 1 })
@@ -220,12 +220,14 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
 
   const handleCreateClick = (product: SyncProduct, event: React.MouseEvent) => {
     event.stopPropagation()
+    setIsRefreshing(true)
     setSelectedProduct(product)
     setShowSelectionDialog(true)
   }
 
   const handleEditClick = (product: SyncProduct, event: React.MouseEvent) => {
     event.stopPropagation()
+    setIsRefreshing(true)
     setSelectedProduct(product)
     setShowSelectionDialog(true)
   }
@@ -235,6 +237,9 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
     
     // Close dialog
     setShowSelectionDialog(false)
+    
+    // Keep shimmer showing for navigation
+    setIsRefreshing(true)
     
     // Preserve all current URL params
     const params = new URLSearchParams(searchParams.toString())
@@ -450,7 +455,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
       ) : viewMode === 'table' ? (
         <ProductListTable 
           products={products}
-          sortBy={currentSortBy as 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'}
+          sortBy={currentSortBy as 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated'}
           sortOrder={currentSortOrder as 'asc' | 'desc'}
           loading={isRefreshing}
           onSort={handleSort}

@@ -32,7 +32,7 @@
 --   p_missing_in     'all' | shop TLD (e.g. 'be') | NULL (default: 'all')
 --   p_search         Search in product ID, SKU, product title, variant title
 --   p_only_duplicates  Filter to products with duplicate SKUs only
---   p_sort_by        'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
+--   p_sort_by        'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated'
 --   p_sort_order     'asc' | 'desc'
 --   p_page           Page number (1-based)
 --   p_page_size      Rows per page (1-1000)
@@ -77,7 +77,7 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
-  updated_at TIMESTAMP WITH TIME ZONE,
+  ls_updated_at TIMESTAMP WITH TIME ZONE,
   source_duplicate_count INTEGER,
   source_has_duplicates BOOLEAN,
   source_duplicate_product_ids BIGINT[],
@@ -95,8 +95,8 @@ BEGIN
   IF p_operation IS NULL OR p_operation NOT IN ('create', 'edit') THEN
     RAISE EXCEPTION 'Invalid operation. Must be ''create'' or ''edit'', got: %', COALESCE(p_operation, 'NULL');
   END IF;
-  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'sku', 'variants', 'price', 'created') THEN
-    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, sku, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
+  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'sku', 'variants', 'price', 'created', 'updated') THEN
+    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, sku, variants, price, created, updated. Got: %', COALESCE(p_sort_by, 'NULL');
   END IF;
   IF p_sort_order IS NULL OR p_sort_order NOT IN ('asc', 'desc') THEN
     RAISE EXCEPTION 'Invalid sort_order. Must be ''asc'' or ''desc'', got: %', COALESCE(p_sort_order, 'NULL');
@@ -128,7 +128,7 @@ BEGIN
       pss.price_excl,
       pss.source_variant_count,
       pss.ls_created_at,
-      pss.updated_at,
+      pss.ls_updated_at,
       pss.source_duplicate_count,
       pss.source_has_duplicates,
       pss.source_duplicate_product_ids,
@@ -178,6 +178,7 @@ BEGIN
           WHEN p_sort_by = 'sku' THEN fp.default_sku
           WHEN p_sort_by = 'variants' THEN fp.source_variant_count::TEXT
           WHEN p_sort_by = 'price' THEN fp.price_excl::TEXT
+          WHEN p_sort_by = 'updated' THEN fp.ls_updated_at::TEXT
           ELSE fp.ls_created_at::TEXT
         END
       ) OVER (
@@ -201,8 +202,8 @@ BEGIN
           CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' THEN sg.group_sort_value END DESC NULLS LAST,
           CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'asc' THEN sg.group_sort_value::NUMERIC END ASC NULLS LAST,
           CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'desc' THEN sg.group_sort_value::NUMERIC END DESC NULLS LAST,
-          CASE WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
-          CASE WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
+          CASE WHEN p_sort_by IN ('created', 'updated') AND p_sort_order = 'asc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
+          CASE WHEN p_sort_by IN ('created', 'updated') AND p_sort_order = 'desc' THEN sg.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
           sg.group_secondary_sort DESC,
           sg.default_sku ASC
       ) AS sku_group_rank
@@ -240,7 +241,7 @@ BEGIN
     pp.price_excl,
     pp.source_variant_count::INTEGER,
     pp.ls_created_at,
-    pp.updated_at,
+    pp.ls_updated_at,
     pp.source_duplicate_count::INTEGER,
     pp.source_has_duplicates,
     pp.source_duplicate_product_ids,
@@ -253,8 +254,8 @@ BEGIN
     CASE WHEN p_sort_by IN ('title', 'sku') AND p_sort_order = 'desc' THEN pp.group_sort_value END DESC NULLS LAST,
     CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'asc' THEN pp.group_sort_value::NUMERIC END ASC NULLS LAST,
     CASE WHEN p_sort_by IN ('product_id', 'variants', 'price') AND p_sort_order = 'desc' THEN pp.group_sort_value::NUMERIC END DESC NULLS LAST,
-    CASE WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
-    CASE WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
+    CASE WHEN p_sort_by IN ('created', 'updated') AND p_sort_order = 'asc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END ASC NULLS LAST,
+    CASE WHEN p_sort_by IN ('created', 'updated') AND p_sort_order = 'desc' THEN pp.group_sort_value::TIMESTAMP WITH TIME ZONE END DESC NULLS LAST,
     pp.group_secondary_sort DESC,
     pp.default_sku ASC,
     pp.source_product_id ASC;
@@ -278,7 +279,7 @@ GRANT EXECUTE ON FUNCTION get_sync_operations(TEXT, TEXT, TEXT, BOOLEAN, TEXT, T
 -- PARAMETERS:
 --   p_shop_tld   Filter by shop TLD (e.g. 'nl', 'be') or NULL for all shops
 --   p_search     Search in product ID, product title, variant title
---   p_sort_by    'product_id' | 'title' | 'variants' | 'price' | 'created' (no 'sku' - products have no SKU)
+--   p_sort_by    'product_id' | 'title' | 'variants' | 'price' | 'created' | 'updated' (no 'sku' - products have no SKU)
 --   p_sort_order 'asc' | 'desc'
 --   p_page       Page number (1-based)
 --   p_page_size  Rows per page (1-1000)
@@ -310,7 +311,7 @@ RETURNS TABLE(
   price_excl NUMERIC,
   source_variant_count INTEGER,
   ls_created_at TIMESTAMP WITH TIME ZONE,
-  updated_at TIMESTAMP WITH TIME ZONE,
+  ls_updated_at TIMESTAMP WITH TIME ZONE,
   source_duplicate_count INTEGER,
   source_has_duplicates BOOLEAN,
   source_duplicate_product_ids BIGINT[],
@@ -325,8 +326,8 @@ SET search_path = public, pg_temp
 AS $$
 BEGIN
   -- Input validation
-  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'variants', 'price', 'created') THEN
-    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, variants, price, created. Got: %', COALESCE(p_sort_by, 'NULL');
+  IF p_sort_by IS NULL OR p_sort_by NOT IN ('product_id', 'title', 'variants', 'price', 'created', 'updated') THEN
+    RAISE EXCEPTION 'Invalid sort_by. Must be one of: product_id, title, variants, price, created, updated. Got: %', COALESCE(p_sort_by, 'NULL');
   END IF;
   IF p_sort_order IS NULL OR p_sort_order NOT IN ('asc', 'desc') THEN
     RAISE EXCEPTION 'Invalid sort_order. Must be ''asc'' or ''desc'', got: %', COALESCE(p_sort_order, 'NULL');
@@ -355,7 +356,7 @@ BEGIN
       p.image AS product_image,
       v.price_excl,
       p.ls_created_at,
-      p.updated_at
+      p.ls_updated_at
     FROM shops s
     INNER JOIN variants v ON v.shop_id = s.id
       AND v.is_default = true
@@ -410,6 +411,8 @@ BEGIN
           CASE WHEN p_sort_by = 'price' AND p_sort_order = 'desc' THEN cp.price_excl END DESC NULLS LAST,
           CASE WHEN p_sort_by = 'created' AND p_sort_order = 'asc' THEN cp.ls_created_at END ASC NULLS LAST,
           CASE WHEN p_sort_by = 'created' AND p_sort_order = 'desc' THEN cp.ls_created_at END DESC NULLS LAST,
+          CASE WHEN p_sort_by = 'updated' AND p_sort_order = 'asc' THEN cp.ls_updated_at END ASC NULLS LAST,
+          CASE WHEN p_sort_by = 'updated' AND p_sort_order = 'desc' THEN cp.ls_updated_at END DESC NULLS LAST,
           cp.ls_created_at DESC,
           cp.product_title ASC
       ) AS rn
@@ -429,7 +432,7 @@ BEGIN
     p.price_excl,
     p.variant_count AS source_variant_count,
     p.ls_created_at,
-    p.updated_at,
+    p.ls_updated_at,
     1 AS source_duplicate_count,
     false AS source_has_duplicates,
     ARRAY[p.product_id] AS source_duplicate_product_ids,

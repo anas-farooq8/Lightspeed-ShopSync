@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { SyncLog } from '@/types/database'
 import { SyncLogCard, SyncLogCardSkeleton } from '@/components/sync-logs/SyncLogCard'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RefreshCw, AlertCircle, Filter, ChevronDown, ChevronRight, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -175,6 +176,8 @@ export default function SyncLogsPage() {
     <div className="w-full h-full p-4 sm:p-5 md:p-6">
       <div className="max-w-full mx-auto min-w-0">
         <SyncLogsPageHeader />
+        
+        <LoadingShimmer show={loading || isFilterLoading} position="top" />
 
         {loading && syncLogs.length === 0 ? (
           <>

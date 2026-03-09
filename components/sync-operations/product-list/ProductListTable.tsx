@@ -18,10 +18,10 @@ import { extractTargetShops, formatDateShort, getImageUrl } from '@/lib/utils'
 
 interface ProductListTableProps {
   products: SyncProduct[]
-  sortBy?: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
+  sortBy?: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated'
   sortOrder?: 'asc' | 'desc'
   loading?: boolean
-  onSort?: (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created') => void
+  onSort?: (column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated') => void
   onProductClick: (product: SyncProduct) => void
   hideSkuColumn?: boolean
   showProductIdColumn?: boolean
@@ -103,7 +103,7 @@ export function ProductListTable({
     children, 
     className = '' 
   }: { 
-    column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created'
+    column: 'product_id' | 'title' | 'sku' | 'variants' | 'price' | 'created' | 'updated'
     children: React.ReactNode
     className?: string
   }) => {
@@ -228,7 +228,7 @@ export function ProductListTable({
         {/* Updated At */}
         <TableCell>
           <span className="text-sm text-muted-foreground">
-            {product.updated_at ? formatDateShort(product.updated_at) : '—'}
+            {product.ls_updated_at ? formatDateShort(product.ls_updated_at) : '—'}
           </span>
         </TableCell>
 
@@ -326,9 +326,9 @@ export function ProductListTable({
                 <SortableHeader column="created" className="w-[130px]">
                   Created
                 </SortableHeader>
-                <TableHead className="w-[130px]">
+                <SortableHeader column="updated" className="w-[130px]">
                   Updated
-                </TableHead>
+                </SortableHeader>
                 {!hideShopIndicators && targetShops.map(shop => (
                   <TableHead key={shop.tld} className="text-center w-[80px]">
                     .{shop.tld}

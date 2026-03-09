@@ -7,6 +7,7 @@ import { StatsCards } from '@/components/dashboard/StatsCards'
 import { LastSync } from '@/components/dashboard/LastSync'
 import { ProductOperationLogsCard } from '@/components/dashboard/ProductOperationLogsCard'
 import { Button } from '@/components/ui/button'
+import { LoadingShimmer } from '@/components/ui/loading-shimmer'
 import { sortShopsSourceFirstThenByTld } from '@/lib/utils'
 import type { DashboardKpi } from '@/types/database'
 
@@ -109,6 +110,7 @@ export function DashboardData() {
 
   return (
     <>
+      <LoadingShimmer show={state.loading} position="top" />
       <StatsCards
         data={state.stats}
         loading={state.loading}
