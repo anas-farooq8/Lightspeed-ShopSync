@@ -6,13 +6,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, Layers, CheckCircle2, XCircle, Plus, Pencil } from 'lucide-react'
 import type { SyncProduct } from '@/types/product'
-import { getImageUrl, sortShopsSourceFirstThenByTld } from '@/lib/utils'
+import { getImageUrl, formatDateShort, sortShopsSourceFirstThenByTld } from '@/lib/utils'
 
 interface ProductCardProps {
   product: SyncProduct
   onClick: () => void
   hideShopIndicators?: boolean
   showShopBadge?: boolean
+  showProductIdColumn?: boolean
   hideDuplicateBadges?: boolean
   showCreateButton?: boolean
   onCreateClick?: (product: SyncProduct, event: React.MouseEvent) => void
@@ -20,7 +21,7 @@ interface ProductCardProps {
   onEditClick?: (product: SyncProduct, event: React.MouseEvent) => void
 }
 
-function ProductCardComponent({ product, onClick, hideShopIndicators = false, showShopBadge = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick, showEditButton = false, onEditClick }: ProductCardProps) {
+function ProductCardComponent({ product, onClick, hideShopIndicators = false, showShopBadge = false, showProductIdColumn = false, hideDuplicateBadges = false, showCreateButton = false, onCreateClick, showEditButton = false, onEditClick }: ProductCardProps) {
   const imageUrl = getImageUrl(product.product_image as { src?: string; thumb?: string } | null)
   const sortedShops = useMemo(
     () => sortShopsSourceFirstThenByTld(Object.entries(product.targets || {}).map(([tld, info]) => ({ tld, role: 'target', ...info }))),
@@ -52,13 +53,12 @@ function ProductCardComponent({ product, onClick, hideShopIndicators = false, sh
           )}
         </div>
 
-        {/* SKU/Shop Badge with Duplicate Badge */}
-        <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+        {/* SKU / Product id / Shop Badge with Duplicate Badge */}
+        <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
           {showShopBadge ? (
             <>
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                {product.source_product_id}
-              </code>
+              <span className="text-muted-foreground">Product id:</span>
+              <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{product.source_product_id}</code>
               <Badge variant="outline" className="text-xs">
                 {product.source_shop_name} (.{product.source_shop_tld})
               </Badge>
@@ -68,9 +68,14 @@ function ProductCardComponent({ product, onClick, hideShopIndicators = false, sh
             </>
           ) : (
             <>
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                {product.default_sku}
-              </code>
+              <span className="text-muted-foreground">SKU:</span>
+              <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{product.default_sku}</code>
+              {showProductIdColumn && (
+                <>
+                  <span className="text-muted-foreground ml-1 sm:ml-2">Product id:</span>
+                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono">{product.source_product_id}</code>
+                </>
+              )}
               {!hideDuplicateBadges && product.source_has_duplicates && (
                 <Badge variant="outline" className="text-xs border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
                   x{product.source_duplicate_count}
@@ -93,18 +98,26 @@ function ProductCardComponent({ product, onClick, hideShopIndicators = false, sh
         )}
 
         {/* Variant Count & Price */}
-        <div className="flex items-center justify-between mb-2 sm:mb-3 text-xs">
+        <div className="flex items-center justify-between mb-1.5 sm:mb-2 text-xs">
           <div className="flex items-center gap-1.5">
             <Layers className="h-3 w-3 text-muted-foreground" />
             <span className="text-muted-foreground">
               {product.source_variant_count} variant{product.source_variant_count !== 1 ? 's' : ''}
             </span>
           </div>
-          {product.price_excl && (
+          {product.price_excl != null && product.price_excl !== 0 ? (
             <span className="font-semibold text-sm">
               €{product.price_excl.toFixed(2)}
             </span>
+          ) : (
+            <span className="text-muted-foreground text-sm">-</span>
           )}
+        </div>
+
+        {/* Created At & Updated At - single row */}
+        <div className="mb-2 sm:mb-3 text-xs text-muted-foreground">
+          <span>Created: {formatDateShort(product.ls_created_at)}</span>
+          <span className="ml-2 sm:ml-3">Updated: {product.ls_updated_at ? formatDateShort(product.ls_updated_at) : '—'}</span>
         </div>
 
         {/* Shop Status Indicators (like table view) - Hidden for NULL SKU mode */}

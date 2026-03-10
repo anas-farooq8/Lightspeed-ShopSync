@@ -479,6 +479,7 @@ export function ProductListTab({ operation = 'create', shops }: ProductListTabPr
               onClick={() => handleProductClick(product)}
               hideShopIndicators={isNullSku}
               showShopBadge={isNullSku}
+              showProductIdColumn={!isNullSku}
               hideDuplicateBadges={isNullSku}
               showCreateButton={isCreate}
               onCreateClick={handleCreateClick}
