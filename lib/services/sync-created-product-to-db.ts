@@ -22,6 +22,7 @@ interface SyncCreatedProductInput {
     description?: string
     content?: string
   }>
+  productSlug: string
   variants: VariantInfo[]
   createdVariantsForDb: Array<{ variantId: number; sku: string; index: number }>
   images: ImageInfo[]
@@ -45,6 +46,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     defaultLanguage,
     visibility,
     contentByLanguage,
+    productSlug,
     variants,
     createdVariantsForDb,
     images,
@@ -87,6 +89,7 @@ export async function syncCreatedProductToDb(input: SyncCreatedProductInput): Pr
     shop_id: shopId,
     lightspeed_product_id: productId,
     language_code: langCode,
+    url: productSlug,
     title: content.title ?? null,
     fulltitle: content.fulltitle ?? null,
     description: content.description ?? null,

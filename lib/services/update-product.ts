@@ -226,6 +226,7 @@ export async function updateProduct(input: UpdateProductInput): Promise<UpdatePr
     // Per-language: if any field changed for that lang, update product with only those fields.
     // Visibility: product-level; include in default-lang call if changed.
     const visibilityChanged = currentVisibility !== intendedVisibility
+    
     for (const lang of targetLanguages) {
       const langContent = intendedContentByLanguage[lang]
       if (!langContent) {

@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
     console.log('[API] ✓ Product created successfully:', result.productId)
 
     // Sync to database
-    if (result.createdVariantsForDb) {
+    if (result.createdVariantsForDb && result.productSlug) {
       try {
         await syncCreatedProductToDb({
           supabase,
@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
           defaultLanguage,
           visibility: sourceProductData.visibility,
           contentByLanguage: sourceProductData.content_by_language,
+          productSlug: result.productSlug,
           variants: sourceProductData.variants,
           createdVariantsForDb: result.createdVariantsForDb,
           images: sourceProductData.images,

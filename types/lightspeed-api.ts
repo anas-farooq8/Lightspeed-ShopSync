@@ -80,6 +80,7 @@ export interface UpdateProductImagePayload {
 export interface LightspeedProduct {
   id: number
   visibility: string
+  url: string
   title: string
   fulltitle?: string
   description?: string

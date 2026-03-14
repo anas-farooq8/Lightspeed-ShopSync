@@ -67,6 +67,8 @@ export interface CreateProductResult {
   productImageForDb?: ProductImageForDb
   /** Variant images from Lightspeed API - index -> { src, thumb, title } */
   variantImagesForDb?: Record<number, { src: string; thumb?: string; title?: string }>
+  /** Product slug/URL from Lightspeed API - for product_content.url (same for all languages) */
+  productSlug?: string
   error?: string
   details?: any
 }
@@ -316,6 +318,10 @@ export async function createProduct(
       }
     }
 
+    // Capture slug from creation response (same for all languages)
+    const productSlug = createProductResponse.product.url
+    console.log(`[CREATE] Product slug: ${productSlug}`)
+
     // ============================================================
     // MULTI-LANGUAGE: Update product details for all additional languages (not variants)
     // ============================================================
@@ -397,6 +403,7 @@ export async function createProduct(
       createdVariantsForDb: createdVariantsList,
       productImageForDb,
       variantImagesForDb: Object.keys(variantImagesForDb).length > 0 ? variantImagesForDb : undefined,
+      productSlug,
     }
   } catch (error) {
     console.error('[CREATE] ✗✗✗ Product creation failed:', error)
