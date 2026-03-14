@@ -177,8 +177,10 @@ def attach_variants(products, variants, shop_name=None):
 # =====================================================
 # DB HELPERS
 # =====================================================
-def fetch_db_table_paginated(supabase, table, select_fields, shop_id):
-    """Fetch all rows from a table with pagination."""
+def fetch_db_table_paginated(supabase_url, supabase_key, table, select_fields, shop_id):
+    """Fetch all rows from a table with pagination. Creates own Supabase client for thread-safety."""
+    # Create a new client for this thread to avoid connection reuse issues
+    supabase = create_client(supabase_url, supabase_key)
     all_rows = []
     start = 0
     
@@ -322,7 +324,7 @@ def sync_shop(shop):
         content_rows = []  # Will include ALL languages
         variant_rows = []
         variant_content_rows = []  # Will include ALL languages
-        api_variant_ids = set()  # Track variant IDs to avoid duplicates
+        variant_ids_seen = set()  # Track variant IDs to avoid duplicates
 
         # Get valid product and variant IDs from API
         api_product_ids = {p["id"] for p in products}
@@ -353,7 +355,7 @@ def sync_shop(shop):
             for v in p["variants"]:
                 variant_id = v["id"]
                 # Only add variant rows once (from base language)
-                if variant_id not in api_variant_ids:
+                if variant_id not in variant_ids_seen:
                     variant_rows.append({
                         "shop_id": shop["id"],
                         "lightspeed_product_id": p["id"],
@@ -364,7 +366,7 @@ def sync_shop(shop):
                         "price_excl": v.get("priceExcl"),
                         "image": v.get("image"),
                     })
-                    api_variant_ids.add(variant_id)
+                    variant_ids_seen.add(variant_id)
 
                 # Base language variant content
                 variant_content_rows.append({
@@ -392,7 +394,7 @@ def sync_shop(shop):
             
             # Variant content for this language
             for v in localized_variants:
-                if v["id"] in api_variant_ids:
+                if v["id"] in variant_ids_seen:
                     variant_content_rows.append({
                         "shop_id": shop["id"],
                         "lightspeed_variant_id": v["id"],
@@ -403,34 +405,49 @@ def sync_shop(shop):
         print(f"   📊 [{shop['name']}] Built {len(product_rows)} products, {len(variant_rows)} variants to upsert")
         metrics["products_synced"] = len(product_rows)
         metrics["variants_synced"] = len(variant_rows)
+        
+        # Build set of API variant IDs for cleanup comparison
+        api_variant_ids = {v["lightspeed_variant_id"] for v in variant_rows}
     
         # -------------------------------------------------
         # SMART UPDATE: COMPARE MONITORED FIELDS
         # -------------------------------------------------
-        # Fetch existing data from DB for comparison (with pagination)
-        existing_products_list = fetch_db_table_paginated(
-            supabase, "products", 
-            "lightspeed_product_id,visibility,image,ls_updated_at",
-            shop["id"]
-        )
-        
-        existing_product_content_list = fetch_db_table_paginated(
-            supabase, "product_content",
-            "lightspeed_product_id,language_code,title,fulltitle,description,content",
-            shop["id"]
-        )
-        
-        existing_variants_list = fetch_db_table_paginated(
-            supabase, "variants",
-            "lightspeed_variant_id,lightspeed_product_id,is_default,sort_order,price_excl,image",
-            shop["id"]
-        )
-        
-        existing_variant_content_list = fetch_db_table_paginated(
-            supabase, "variant_content",
-            "lightspeed_variant_id,language_code,title",
-            shop["id"]
-        )
+        # Fetch existing data from DB for comparison (with pagination, in parallel for speed)
+        # Each thread creates its own Supabase client for thread-safety
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            products_future = executor.submit(
+                fetch_db_table_paginated,
+                SUPABASE_URL, SUPABASE_KEY, "products", 
+                "lightspeed_product_id,visibility,image,ls_updated_at",
+                shop["id"]
+            )
+            
+            content_future = executor.submit(
+                fetch_db_table_paginated,
+                SUPABASE_URL, SUPABASE_KEY, "product_content",
+                "lightspeed_product_id,language_code,title,fulltitle,description,content",
+                shop["id"]
+            )
+            
+            variants_future = executor.submit(
+                fetch_db_table_paginated,
+                SUPABASE_URL, SUPABASE_KEY, "variants",
+                "lightspeed_variant_id,lightspeed_product_id,is_default,sort_order,price_excl,image",
+                shop["id"]
+            )
+            
+            variant_content_future = executor.submit(
+                fetch_db_table_paginated,
+                SUPABASE_URL, SUPABASE_KEY, "variant_content",
+                "lightspeed_variant_id,language_code,title",
+                shop["id"]
+            )
+            
+            # Wait for all fetches to complete
+            existing_products_list = products_future.result()
+            existing_product_content_list = content_future.result()
+            existing_variants_list = variants_future.result()
+            existing_variant_content_list = variant_content_future.result()
         
         # Index existing data for fast lookup
         existing_products = {p["lightspeed_product_id"]: p for p in existing_products_list}
