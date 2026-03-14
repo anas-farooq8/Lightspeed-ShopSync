@@ -368,13 +368,13 @@ def sync_shop(shop):
                     })
                     variant_ids_seen.add(variant_id)
 
-                # Base language variant content
-                variant_content_rows.append({
-                    "shop_id": shop["id"],
-                    "lightspeed_variant_id": variant_id,
-                    "language_code": base_lang,
-                    "title": v.get("title"),
-                })
+                    # Base language variant content (add only once per variant)
+                    variant_content_rows.append({
+                        "shop_id": shop["id"],
+                        "lightspeed_variant_id": variant_id,
+                        "language_code": base_lang,
+                        "title": v.get("title"),
+                    })
 
         # Add secondary language content
         for lang, (localized_products, localized_variants) in localized_data.items():
@@ -449,6 +449,8 @@ def sync_shop(shop):
             existing_variants_list = variants_future.result()
             existing_variant_content_list = variant_content_future.result()
         
+        print(f"   📊 [{shop['name']}] DB has {len(existing_products_list)} products, {len(existing_variants_list)} variants, {len(existing_variant_content_list)} variant contents")
+        
         # Index existing data for fast lookup
         existing_products = {p["lightspeed_product_id"]: p for p in existing_products_list}
         
@@ -470,9 +472,6 @@ def sync_shop(shop):
         for vc in existing_variant_content_list:
             key = (vc["lightspeed_variant_id"], vc["language_code"])
             existing_variant_content[key] = vc
-        
-        # Log DB data summary
-        print(f"   📊 [{shop['name']}] DB has {len(existing_products)} products, {len(existing_product_content)} product contents, {len(existing_variants)} variants")
         
         # Group new content by product_id for faster lookup
         content_by_product = defaultdict(list)
