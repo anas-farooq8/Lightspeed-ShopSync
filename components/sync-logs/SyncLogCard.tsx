@@ -147,16 +147,6 @@ export function SyncLogCard({ log }: SyncLogCardProps) {
         </div>
       </div>
 
-      {/* Error Message */}
-      {log.error_message && (
-        <div className="mb-1.5 sm:mb-2 p-1.5 sm:p-2 bg-red-50 border border-red-200 rounded text-[10px] sm:text-xs text-red-800">
-          <div className="flex items-start gap-1.5 sm:gap-2">
-            <AlertCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3 mt-0.5 flex-shrink-0" />
-            <span className="line-clamp-2 break-words">{log.error_message}</span>
-          </div>
-        </div>
-      )}
-
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 sm:gap-3">
         {/* Products Fetched */}
