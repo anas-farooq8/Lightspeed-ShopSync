@@ -21,9 +21,43 @@ LIMIT = 250
 API_TIMEOUT = 30
 MAX_RETRIES = 3
 DB_BATCH_SIZE = 1000  # Supabase pagination batch size
+MAX_DELETE_BATCH = 100  # Max items to delete in one operation
 
 PRODUCT_FIELDS = "id,visibility,url,title,fulltitle,description,content,image,images,createdAt,updatedAt"
 VARIANT_FIELDS = "id,isDefault,sortOrder,sku,priceExcl,title,image,product"
+
+# =====================================================
+# RETRY HELPER
+# =====================================================
+def retry_operation(operation, max_retries=MAX_RETRIES, error_context="", on_error=None, raise_on_final_failure=True):
+    """
+    Generic retry wrapper with exponential backoff.
+    
+    Args:
+        operation: Callable that performs the operation
+        max_retries: Number of retry attempts
+        error_context: Description for error messages
+        on_error: Optional callback(attempt, error, wait_time) for custom error handling
+        raise_on_final_failure: Whether to raise exception on final failure
+    
+    Returns:
+        Result of operation if successful
+    """
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                if on_error:
+                    on_error(attempt, e, 0)
+                if raise_on_final_failure:
+                    raise RuntimeError(f"{error_context} after {max_retries} attempts: {e}") from e
+                return None
+            
+            wait_time = 2 ** attempt
+            if on_error:
+                on_error(attempt, e, wait_time)
+            time.sleep(wait_time)
 
 # =====================================================
 # API HELPERS
@@ -54,30 +88,26 @@ def fetch_api_with_pagination(url, resource_key, fields, lang, api_key, api_secr
     full_url = f"https://api.webshopapp.com/{lang}/{url}.json"
 
     while True:
-        for attempt in range(MAX_RETRIES):
-            try:
-                r = requests.get(
-                    full_url,
-                    params={"limit": LIMIT, "page": page, "fields": fields},
-                    auth=(api_key, api_secret),
-                    timeout=API_TIMEOUT,
-                )
-                r.raise_for_status()
-                break
-            except requests.exceptions.Timeout as e:
-                if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Timeout fetching {url} (page {page}) after {MAX_RETRIES} attempts") from e
-                wait_time = 2 ** attempt
-                print(f"   ⚠️  Timeout on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s")
-                time.sleep(wait_time)
-            except requests.exceptions.RequestException as e:
-                if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Failed to fetch {url} (page {page}): {e}") from e
-                wait_time = 2 ** attempt
+        def fetch_page():
+            r = requests.get(
+                full_url,
+                params={"limit": LIMIT, "page": page, "fields": fields},
+                auth=(api_key, api_secret),
+                timeout=API_TIMEOUT,
+            )
+            r.raise_for_status()
+            return r.json().get(resource_key, [])
+        
+        def on_error(attempt, e, wait_time):
+            if wait_time > 0:
                 print(f"   ⚠️  Error on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
-                time.sleep(wait_time)
-
-        batch = r.json().get(resource_key, [])
+        
+        batch = retry_operation(
+            fetch_page,
+            error_context=f"Failed to fetch {url} (page {page})",
+            on_error=on_error
+        )
+        
         if not batch:
             break
 
@@ -143,36 +173,31 @@ def fetch_db_table_paginated(supabase_url, supabase_key, table, select_fields, s
     all_rows, start = [], 0
     
     while True:
-        # Retry logic for transient DB failures
-        for attempt in range(MAX_RETRIES):
-            try:
-                batch = (
-                    supabase.table(table)
-                    .select(select_fields)
-                    .eq("shop_id", shop_id)
-                    .range(start, start + DB_BATCH_SIZE - 1)
-                    .execute()
-                    .data
-                )
-                break  # Success - exit retry loop
-                
-            except Exception as e:
-                if attempt == MAX_RETRIES - 1:
-                    # Last attempt failed - raise error
-                    raise RuntimeError(f"Failed to fetch from {table} at offset {start} after {MAX_RETRIES} attempts: {e}") from e
-                
-                # Transient failure - retry with exponential backoff
-                wait_time = 2 ** attempt
-                print(f"   ⚠️  DB fetch error for {table} at offset {start}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
-                time.sleep(wait_time)
+        def fetch_batch():
+            return (
+                supabase.table(table)
+                .select(select_fields)
+                .eq("shop_id", shop_id)
+                .range(start, start + DB_BATCH_SIZE - 1)
+                .execute()
+                .data
+            )
         
-        # Check if we're done fetching
+        def on_error(attempt, e, wait_time):
+            if wait_time > 0:
+                print(f"   ⚠️  DB fetch error for {table} at offset {start}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
+        
+        batch = retry_operation(
+            fetch_batch,
+            error_context=f"Failed to fetch from {table} at offset {start}",
+            on_error=on_error
+        )
+        
         if not batch:
             break
             
         all_rows.extend(batch)
         
-        # If we got less than DB_BATCH_SIZE rows, we've reached the end
         if len(batch) < DB_BATCH_SIZE:
             break
             
@@ -185,18 +210,58 @@ def bulk_upsert(supabase, table, rows, conflict_cols, shop_name=None):
     """Upsert rows to database table with retry logic."""
     if not rows:
         return
+    
     shop_prefix = f"[{shop_name}] " if shop_name else ""
-    for attempt in range(MAX_RETRIES):
-        try:
-            supabase.table(table).upsert(rows, on_conflict=conflict_cols).execute()
-            return
-        except Exception as e:
-            if attempt == MAX_RETRIES - 1:
-                print(f"   ❌ {shop_prefix}Failed to upsert {len(rows)} rows to {table} after {MAX_RETRIES} attempts: {e}")
-                raise
-            wait_time = 2 ** attempt
+    
+    def upsert_operation():
+        return supabase.table(table).upsert(rows, on_conflict=conflict_cols).execute()
+    
+    def on_error(attempt, e, wait_time):
+        if wait_time > 0:
             print(f"   ⚠️  {shop_prefix}Upsert error for {table}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
-            time.sleep(wait_time)
+        else:
+            print(f"   ❌ {shop_prefix}Failed to upsert {len(rows)} rows to {table} after {MAX_RETRIES} attempts: {e}")
+    
+    retry_operation(
+        upsert_operation,
+        error_context=f"Failed to upsert to {table}",
+        on_error=on_error
+    )
+
+
+def bulk_delete(supabase, table, id_column, ids, shop_id, shop_name=None):
+    """Delete rows from database table in batches with retry logic."""
+    if not ids:
+        return 0
+    
+    shop_prefix = f"[{shop_name}] " if shop_name else ""
+    ids_list = list(ids)
+    total_deleted = 0
+    
+    # Batch deletes to avoid overwhelming DB
+    for i in range(0, len(ids_list), MAX_DELETE_BATCH):
+        batch = ids_list[i:i + MAX_DELETE_BATCH]
+        
+        def delete_operation():
+            return supabase.table(table).delete() \
+                .eq("shop_id", shop_id) \
+                .in_(id_column, batch) \
+                .execute()
+        
+        def on_error(attempt, e, wait_time):
+            if wait_time > 0:
+                print(f"   ⚠️  {shop_prefix}Delete error for {table} batch, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
+            else:
+                print(f"   ❌ {shop_prefix}Failed to delete {table} batch after {MAX_RETRIES} attempts: {e}")
+        
+        retry_operation(
+            delete_operation,
+            error_context=f"Failed to delete from {table}",
+            on_error=on_error
+        )
+        total_deleted += len(batch)
+    
+    return total_deleted
 
 
 def normalize_for_comparison(value):
@@ -621,44 +686,60 @@ def sync_shop(shop):
         orphaned_products = existing_product_ids - api_product_ids
 
         if orphaned_products:
-            supabase.table("products").delete() \
-                .eq("shop_id", shop["id"]) \
-                .in_("lightspeed_product_id", list(orphaned_products)) \
-                .execute()
-            metrics["products_deleted"] = len(orphaned_products)
-            print(f"   🗑️  [{shop['name']}] Deleted {len(orphaned_products)} orphaned products")
+            deleted_count = bulk_delete(supabase, "products", "lightspeed_product_id", orphaned_products, shop["id"], shop["name"])
+            metrics["products_deleted"] = deleted_count
+            print(f"   🗑️  [{shop['name']}] Deleted {deleted_count} orphaned products")
 
         existing_variant_ids = set(existing_variants.keys())
         orphaned_variants = existing_variant_ids - api_variant_ids
 
         if orphaned_variants:
-            supabase.table("variants").delete() \
-                .eq("shop_id", shop["id"]) \
-                .in_("lightspeed_variant_id", list(orphaned_variants)) \
-                .execute()
-            metrics["variants_deleted"] = len(orphaned_variants)
-            print(f"   🗑️  [{shop['name']}] Deleted {len(orphaned_variants)} orphaned variants")
+            deleted_count = bulk_delete(supabase, "variants", "lightspeed_variant_id", orphaned_variants, shop["id"], shop["name"])
+            metrics["variants_deleted"] = deleted_count
+            print(f"   🗑️  [{shop['name']}] Deleted {deleted_count} orphaned variants")
         
-        # Update sync log with success
-        supabase.table("sync_logs").update({
-            "status": "success",
-            "completed_at": "now()",
-            **metrics
-        }).eq("id", log_id).execute()
+        # Update sync log with success (with retry)
+        def update_log_success():
+            return supabase.table("sync_logs").update({
+                "status": "success",
+                "completed_at": "now()",
+                **metrics
+            }).eq("id", log_id).execute()
+        
+        def on_log_error(attempt, e, wait_time):
+            if wait_time == 0:
+                print(f"   ⚠️  [{shop['name']}] Failed to update sync log to success after {MAX_RETRIES} attempts: {e}")
+        
+        retry_operation(
+            update_log_success,
+            error_context="Failed to update sync log",
+            on_error=on_log_error,
+            raise_on_final_failure=False  # Don't fail sync if log update fails
+        )
         
     except Exception as e:
         error_msg = str(e)
         print(f"   ❌ [{shop['name']}] Error: {error_msg}")
         
-        try:
-            supabase.table("sync_logs").update({
+        # Try to update sync log with error (with retry, but don't fail if this fails)
+        def update_log_error():
+            return supabase.table("sync_logs").update({
                 "status": "error",
                 "completed_at": "now()",
                 "error_message": error_msg,
                 **metrics
             }).eq("id", log_id).execute()
-        except Exception as log_error:
-            print(f"   ❌ [{shop['name']}] Failed to update sync log: {log_error}")
+        
+        def on_log_error(attempt, e, wait_time):
+            if wait_time == 0:
+                print(f"   ⚠️  [{shop['name']}] Failed to update sync log with error: {e}")
+        
+        retry_operation(
+            update_log_error,
+            error_context="Failed to update sync log with error",
+            on_error=on_log_error,
+            raise_on_final_failure=False
+        )
         
         raise
 
