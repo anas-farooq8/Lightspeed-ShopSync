@@ -14,7 +14,6 @@ load_dotenv()
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-# Validate required environment variables
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("Missing required environment variables: SUPABASE_URL or SUPABASE_KEY")
 
@@ -34,20 +33,8 @@ def normalize_image(img):
     if not isinstance(img, dict):
         return None
     
-    # Extract the fields
-    title = img.get("title")
-    thumb = img.get("thumb")
-    src = img.get("src")
-    
-    # If all fields are None/empty, return None instead of a dict
-    if not any([title, thumb, src]):
-        return None
-    
-    return {
-        "title": title,
-        "thumb": thumb,
-        "src": src,
-    }
+    title, thumb, src = img.get("title"), img.get("thumb"), img.get("src")
+    return {"title": title, "thumb": thumb, "src": src} if any([title, thumb, src]) else None
 
 
 def extract_images_link(images):
@@ -61,17 +48,17 @@ def extract_images_link(images):
     return link if isinstance(link, str) and link.strip() else None
 
 
-def fetch_products(lang, api_key, api_secret):
-    """Fetch all products from Lightspeed API with pagination and retry logic."""
-    products, page = [], 1
-    url = f"https://api.webshopapp.com/{lang}/products.json"
+def fetch_api_with_pagination(url, resource_key, fields, lang, api_key, api_secret, normalize_func=None):
+    """Generic function to fetch API resources with pagination and retry logic."""
+    items, page = [], 1
+    full_url = f"https://api.webshopapp.com/{lang}/{url}.json"
 
     while True:
         for attempt in range(MAX_RETRIES):
             try:
                 r = requests.get(
-                    url,
-                    params={"limit": LIMIT, "page": page, "fields": PRODUCT_FIELDS},
+                    full_url,
+                    params={"limit": LIMIT, "page": page, "fields": fields},
                     auth=(api_key, api_secret),
                     timeout=API_TIMEOUT,
                 )
@@ -79,79 +66,47 @@ def fetch_products(lang, api_key, api_secret):
                 break
             except requests.exceptions.Timeout as e:
                 if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Timeout fetching products (page {page}) after {MAX_RETRIES} attempts") from e
+                    raise RuntimeError(f"Timeout fetching {url} (page {page}) after {MAX_RETRIES} attempts") from e
                 wait_time = 2 ** attempt
                 print(f"   ⚠️  Timeout on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s")
                 time.sleep(wait_time)
             except requests.exceptions.RequestException as e:
                 if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Failed to fetch products (page {page}): {e}") from e
+                    raise RuntimeError(f"Failed to fetch {url} (page {page}): {e}") from e
                 wait_time = 2 ** attempt
                 print(f"   ⚠️  Error on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
                 time.sleep(wait_time)
 
-        batch = r.json().get("products", [])
+        batch = r.json().get(resource_key, [])
         if not batch:
             break
 
-        for p in batch:
-            p["image"] = normalize_image(p.get("image"))
+        if normalize_func:
+            for item in batch:
+                item["image"] = normalize_func(item.get("image"))
 
-        products.extend(batch)
+        items.extend(batch)
         if len(batch) < LIMIT:
             break
         page += 1
 
-    return products
+    return items
+
+
+def fetch_products(lang, api_key, api_secret):
+    """Fetch all products from Lightspeed API."""
+    return fetch_api_with_pagination("products", "products", PRODUCT_FIELDS, lang, api_key, api_secret, normalize_image)
 
 
 def fetch_variants(lang, api_key, api_secret):
-    """Fetch all variants from Lightspeed API with pagination and retry logic."""
-    variants, page = [], 1
-    url = f"https://api.webshopapp.com/{lang}/variants.json"
-
-    while True:
-        for attempt in range(MAX_RETRIES):
-            try:
-                r = requests.get(
-                    url,
-                    params={"limit": LIMIT, "page": page, "fields": VARIANT_FIELDS},
-                    auth=(api_key, api_secret),
-                    timeout=API_TIMEOUT,
-                )
-                r.raise_for_status()
-                break
-            except requests.exceptions.Timeout as e:
-                if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Timeout fetching variants (page {page}) after {MAX_RETRIES} attempts") from e
-                wait_time = 2 ** attempt
-                print(f"   ⚠️  Timeout on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s")
-                time.sleep(wait_time)
-            except requests.exceptions.RequestException as e:
-                if attempt == MAX_RETRIES - 1:
-                    raise RuntimeError(f"Failed to fetch variants (page {page}): {e}") from e
-                wait_time = 2 ** attempt
-                print(f"   ⚠️  Error on page {page}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
-                time.sleep(wait_time)
-
-        batch = r.json().get("variants", [])
-        if not batch:
-            break
-
-        for v in batch:
-            v["image"] = normalize_image(v.get("image"))
-
-        variants.extend(batch)
-        if len(batch) < LIMIT:
-            break
-        page += 1
-
-    return variants
+    """Fetch all variants from Lightspeed API."""
+    return fetch_api_with_pagination("variants", "variants", VARIANT_FIELDS, lang, api_key, api_secret, normalize_image)
 
 
 def attach_variants(products, variants, shop_name=None):
+    """Attach variants to their corresponding products."""
     by_product = defaultdict(list)
-    orphaned_variants = []  # Track variants with no matching product
+    orphaned_variants = []
 
     for v in variants:
         pid = v.get("product", {}).get("resource", {}).get("id")
@@ -164,11 +119,11 @@ def attach_variants(products, variants, shop_name=None):
     for p in products:
         p["variants"] = by_product.get(p["id"], [])
     
-    # Check for variants attached to non-existent products and filter them out
+    # Check for orphaned variants
     for pid, variants_list in by_product.items():
         if pid not in product_ids:
-            shop_prefix = f"[{shop_name}] " if shop_name else ""
             orphaned_variants.extend(variants_list)
+            shop_prefix = f"[{shop_name}] " if shop_name else ""
             print(f"   ⚠️  {shop_prefix}{len(variants_list)} variant(s) reference non-existent product ID {pid} & variant IDs {[v['id'] for v in variants_list]} (skipped)")
 
     return products, orphaned_variants
@@ -178,11 +133,13 @@ def attach_variants(products, variants, shop_name=None):
 # DB HELPERS
 # =====================================================
 def fetch_db_table_paginated(supabase_url, supabase_key, table, select_fields, shop_id):
-    """Fetch all rows from a table with pagination. Creates own Supabase client for thread-safety."""
-    # Create a new client for this thread to avoid connection reuse issues
+    """
+    Fetch all rows from a table with pagination.
+    Creates own Supabase client for thread-safety.
+    Ensures no data is missed by paginating until batch < DB_BATCH_SIZE.
+    """
     supabase = create_client(supabase_url, supabase_key)
-    all_rows = []
-    start = 0
+    all_rows, start = [], 0
     
     while True:
         try:
@@ -194,10 +151,18 @@ def fetch_db_table_paginated(supabase_url, supabase_key, table, select_fields, s
                 .execute()
                 .data
             )
+            
+            if not batch:
+                break
+                
             all_rows.extend(batch)
+            
+            # If we got less than DB_BATCH_SIZE rows, we've reached the end
             if len(batch) < DB_BATCH_SIZE:
                 break
+                
             start += DB_BATCH_SIZE
+            
         except Exception as e:
             raise RuntimeError(f"Failed to fetch from {table} at offset {start}: {e}") from e
     
@@ -238,14 +203,172 @@ def images_equal(img1, img2):
     return norm1 == norm2
 
 
+def fetch_existing_data_for_comparison(shop_id):
+    """
+    Fetch all existing data from DB for source shop comparison.
+    Uses parallel threads, each with its own Supabase client (thread-safe).
+    """
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        products_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "products", 
+            "lightspeed_product_id,visibility,image,ls_updated_at",
+            shop_id
+        )
+        content_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "product_content",
+            "lightspeed_product_id,language_code,title,fulltitle,description,content",
+            shop_id
+        )
+        variants_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "variants",
+            "lightspeed_variant_id,lightspeed_product_id,is_default,sort_order,price_excl,image",
+            shop_id
+        )
+        variant_content_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "variant_content",
+            "lightspeed_variant_id,language_code,title",
+            shop_id
+        )
+        
+        # Block until all fetches complete
+        return {
+            "products": products_future.result(),
+            "product_content": content_future.result(),
+            "variants": variants_future.result(),
+            "variant_content": variant_content_future.result()
+        }
+
+
+def fetch_existing_data_for_cleanup(shop_id):
+    """
+    Fetch only IDs from DB for target shop cleanup.
+    Uses parallel threads, each with its own Supabase client (thread-safe).
+    """
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        products_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "products", 
+            "lightspeed_product_id",
+            shop_id
+        )
+        variants_future = executor.submit(
+            fetch_db_table_paginated,
+            SUPABASE_URL, SUPABASE_KEY, "variants",
+            "lightspeed_variant_id",
+            shop_id
+        )
+        
+        # Block until all fetches complete
+        return {
+            "products": products_future.result(),
+            "variants": variants_future.result()
+        }
+
+
+def compare_product_changes(product_row, existing_products, existing_product_content, existing_variants, 
+                           existing_variants_by_product, existing_variant_content, content_by_product, 
+                           variants_by_product, variant_content_by_variant):
+    """
+    Compare a product with its existing data to detect monitored field changes.
+    Returns (has_changes: bool, change_reasons: list).
+    Uses early return for performance.
+    """
+    ls_product_id = product_row["lightspeed_product_id"]
+    existing_product = existing_products.get(ls_product_id)
+    
+    # If product doesn't exist in DB, it's new - keep new ls_updated_at
+    if not existing_product:
+        return False, []
+    
+    # 1. Product-level fields
+    if product_row["visibility"] != existing_product["visibility"]:
+        return True, [f"visibility: {existing_product['visibility']} → {product_row['visibility']}"]
+    
+    if not images_equal(product_row["image"], existing_product["image"]):
+        return True, ["image changed"]
+    
+    # 2. Product content fields (all active languages)
+    for content_row in content_by_product[ls_product_id]:
+        lang = content_row["language_code"]
+        key = (ls_product_id, lang)
+        existing_content = existing_product_content.get(key)
+        
+        if not existing_content:
+            return True, [f"new language content: {lang}"]
+        
+        # Compare content fields
+        for field in ["title", "fulltitle", "description", "content"]:
+            new_val = normalize_for_comparison(content_row.get(field))
+            old_val = normalize_for_comparison(existing_content.get(field))
+            if new_val != old_val:
+                return True, [f"{field}[{lang}] changed"]
+    
+    # 3. Variant count
+    new_variants = variants_by_product[ls_product_id]
+    old_variants = existing_variants_by_product.get(ls_product_id, [])
+    if len(new_variants) != len(old_variants):
+        return True, [f"variant count: {len(old_variants)} → {len(new_variants)}"]
+    
+    # 4. Variant fields (for each variant)
+    for variant_row in new_variants:
+        ls_variant_id = variant_row["lightspeed_variant_id"]
+        existing_variant = existing_variants.get(ls_variant_id)
+        
+        if not existing_variant:
+            return True, [f"new variant: {ls_variant_id}"]
+        
+        # Compare variant fields
+        if variant_row["is_default"] != existing_variant["is_default"]:
+            return True, [f"variant {ls_variant_id} isDefault changed"]
+        
+        if variant_row["sort_order"] != existing_variant["sort_order"]:
+            return True, [f"variant {ls_variant_id} sortOrder changed"]
+        
+        # Compare price
+        new_price = variant_row["price_excl"]
+        old_price = existing_variant["price_excl"]
+        if new_price != old_price:
+            try:
+                if float(new_price or 0) != float(old_price or 0):
+                    return True, [f"variant {ls_variant_id} priceExcl changed"]
+            except (ValueError, TypeError):
+                return True, [f"variant {ls_variant_id} priceExcl changed"]
+        
+        if not images_equal(variant_row["image"], existing_variant["image"]):
+            return True, [f"variant {ls_variant_id} image changed"]
+        
+        # 5. Variant content (all active languages)
+        for variant_content_row in variant_content_by_variant[ls_variant_id]:
+            lang = variant_content_row["language_code"]
+            key = (ls_variant_id, lang)
+            existing_vc = existing_variant_content.get(key)
+            
+            if not existing_vc:
+                return True, [f"new variant content: variant {ls_variant_id}, lang {lang}"]
+            
+            new_title = normalize_for_comparison(variant_content_row.get("title"))
+            old_title = normalize_for_comparison(existing_vc.get("title"))
+            if new_title != old_title:
+                return True, [f"variant {ls_variant_id} title[{lang}] changed"]
+    
+    return False, []
+
+
 # =====================================================
 # SYNC ONE SHOP
 # =====================================================
 def sync_shop(shop):
-    # Create thread-safe Supabase client for this shop
+    """
+    Sync a single shop. Creates own Supabase client for thread-safety.
+    This function is called in parallel by multiple threads.
+    """
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     
-    print(f"🔄 Syncing shop: {shop['name']}")
+    print(f"🔄 Syncing shop: {shop['name']} ({shop['role'].upper()})")
     
     # Create sync log entry
     log_result = supabase.table("sync_logs").insert({
@@ -254,7 +377,6 @@ def sync_shop(shop):
     }).execute()
     log_id = log_result.data[0]["id"]
     
-    # Metrics tracking
     metrics = {
         "products_fetched": 0,
         "variants_fetched": 0,
@@ -266,7 +388,7 @@ def sync_shop(shop):
     }
 
     try:
-        # credentials resolved via TLD
+        # Get API credentials
         tld = shop["tld"].upper()
         api_key = os.getenv(f"LIGHTSPEED_API_KEY_{tld}")
         api_secret = os.getenv(f"LIGHTSPEED_API_SECRET_{tld}")
@@ -279,32 +401,28 @@ def sync_shop(shop):
         active_langs = [l["code"] for l in languages if l["is_active"]]
 
         # -------------------------------------------------
-        # FETCH ALL LANGUAGES IN PARALLEL
+        # FETCH API DATA FOR ALL LANGUAGES IN PARALLEL
         # -------------------------------------------------
         print(f"   🌍 [{shop['name']}] Fetching data for languages: {', '.join(active_langs)}")
         
-        # Fetch base language products and variants (with full data)
+        # Fetch base language
         with ThreadPoolExecutor(max_workers=2) as executor:
             products_future = executor.submit(fetch_products, base_lang, api_key, api_secret)
             variants_future = executor.submit(fetch_variants, base_lang, api_key, api_secret)
-        
             products = products_future.result()
             variants = variants_future.result()
     
         metrics["products_fetched"] = len(products)
         metrics["variants_fetched"] = len(variants)
-    
         print(f"   📊 [{shop['name']}] Fetched {len(products)} products, {len(variants)} variants from API")
     
         products, orphaned_from_api = attach_variants(products, variants, shop['name'])
-        
-        # Count filtered variants (orphaned from API)
         metrics["variants_filtered"] = len(orphaned_from_api)
 
-        # Fetch secondary language content in parallel
-        localized_data = {}  # {lang: (products, variants)}
-        
+        # Fetch secondary languages
+        localized_data = {}
         secondary_langs = [lang for lang in active_langs if lang != base_lang]
+        
         if secondary_langs:
             with ThreadPoolExecutor(max_workers=len(secondary_langs) * 2) as executor:
                 futures = {}
@@ -315,18 +433,16 @@ def sync_shop(shop):
                 
                 for lang, (p_future, v_future) in futures.items():
                     localized_data[lang] = (p_future.result(), v_future.result())
-                    print(f"      ↳ Fetched {len(localized_data[lang][0])} products, {len(localized_data[lang][1])} variants for {lang}")
+                    print(f"      ↳ [{shop['name']}] Fetched {len(localized_data[lang][0])} products, {len(localized_data[lang][1])} variants for {lang}")
 
         # -------------------------------------------------
         # BUILD DATA ROWS FOR ALL LANGUAGES
         # -------------------------------------------------
         product_rows = []
-        content_rows = []  # Will include ALL languages
+        content_rows = []
         variant_rows = []
-        variant_content_rows = []  # Will include ALL languages
-        variant_ids_seen = set()  # Track variant IDs to avoid duplicates
-
-        # Get valid product and variant IDs from API
+        variant_content_rows = []
+        variant_ids_seen = set()
         api_product_ids = {p["id"] for p in products}
 
         for p in products:
@@ -352,9 +468,9 @@ def sync_shop(shop):
                 "content": p.get("content"),
             })
 
+            # Variants
             for v in p["variants"]:
                 variant_id = v["id"]
-                # Only add variant rows once (from base language)
                 if variant_id not in variant_ids_seen:
                     variant_rows.append({
                         "shop_id": shop["id"],
@@ -368,7 +484,7 @@ def sync_shop(shop):
                     })
                     variant_ids_seen.add(variant_id)
 
-                    # Base language variant content (add only once per variant)
+                    # Base language variant content
                     variant_content_rows.append({
                         "shop_id": shop["id"],
                         "lightspeed_variant_id": variant_id,
@@ -378,7 +494,6 @@ def sync_shop(shop):
 
         # Add secondary language content
         for lang, (localized_products, localized_variants) in localized_data.items():
-            # Product content for this language
             for p in localized_products:
                 if p["id"] in api_product_ids:
                     content_rows.append({
@@ -392,7 +507,6 @@ def sync_shop(shop):
                         "content": p.get("content"),
                     })
             
-            # Variant content for this language
             for v in localized_variants:
                 if v["id"] in variant_ids_seen:
                     variant_content_rows.append({
@@ -406,233 +520,84 @@ def sync_shop(shop):
         metrics["products_synced"] = len(product_rows)
         metrics["variants_synced"] = len(variant_rows)
         
-        # Build set of API variant IDs for cleanup comparison
         api_variant_ids = {v["lightspeed_variant_id"] for v in variant_rows}
     
         # -------------------------------------------------
-        # SMART UPDATE: COMPARE MONITORED FIELDS
+        # SMART UPDATE: ROLE-BASED LOGIC
         # -------------------------------------------------
-        # Fetch existing data from DB for comparison (with pagination, in parallel for speed)
-        # Each thread creates its own Supabase client for thread-safety
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            products_future = executor.submit(
-                fetch_db_table_paginated,
-                SUPABASE_URL, SUPABASE_KEY, "products", 
-                "lightspeed_product_id,visibility,image,ls_updated_at",
-                shop["id"]
-            )
+        if shop["role"] == "source":
+            # SOURCE shop: Compare monitored fields and preserve ls_updated_at if unchanged
+            print(f"   🔍 [{shop['name']}] SOURCE shop - comparing monitored fields")
             
-            content_future = executor.submit(
-                fetch_db_table_paginated,
-                SUPABASE_URL, SUPABASE_KEY, "product_content",
-                "lightspeed_product_id,language_code,title,fulltitle,description,content",
-                shop["id"]
-            )
+            existing_data = fetch_existing_data_for_comparison(shop["id"])
+            print(f"   📊 [{shop['name']}] DB has {len(existing_data['products'])} products, {len(existing_data['variants'])} variants")
             
-            variants_future = executor.submit(
-                fetch_db_table_paginated,
-                SUPABASE_URL, SUPABASE_KEY, "variants",
-                "lightspeed_variant_id,lightspeed_product_id,is_default,sort_order,price_excl,image",
-                shop["id"]
-            )
+            # Index existing data (thread-safe - no shared mutable state)
+            existing_products = {p["lightspeed_product_id"]: p for p in existing_data["products"]}
+            existing_product_content = {(pc["lightspeed_product_id"], pc["language_code"]): pc for pc in existing_data["product_content"]}
+            existing_variants = {v["lightspeed_variant_id"]: v for v in existing_data["variants"]}
+            existing_variants_by_product = defaultdict(list)
+            for v in existing_data["variants"]:
+                existing_variants_by_product[v["lightspeed_product_id"]].append(v)
+            existing_variant_content = {(vc["lightspeed_variant_id"], vc["language_code"]): vc for vc in existing_data["variant_content"]}
             
-            variant_content_future = executor.submit(
-                fetch_db_table_paginated,
-                SUPABASE_URL, SUPABASE_KEY, "variant_content",
-                "lightspeed_variant_id,language_code,title",
-                shop["id"]
-            )
+            # Group new data for comparison
+            content_by_product = defaultdict(list)
+            for content_row in content_rows:
+                content_by_product[content_row["lightspeed_product_id"]].append(content_row)
             
-            # Wait for all fetches to complete
-            existing_products_list = products_future.result()
-            existing_product_content_list = content_future.result()
-            existing_variants_list = variants_future.result()
-            existing_variant_content_list = variant_content_future.result()
-        
-        print(f"   📊 [{shop['name']}] DB has {len(existing_products_list)} products, {len(existing_variants_list)} variants, {len(existing_variant_content_list)} variant contents")
-        
-        # Index existing data for fast lookup
-        existing_products = {p["lightspeed_product_id"]: p for p in existing_products_list}
-        
-        # Index product content by (product_id, language)
-        existing_product_content = {}
-        for pc in existing_product_content_list:
-            key = (pc["lightspeed_product_id"], pc["language_code"])
-            existing_product_content[key] = pc
-        
-        # Index variants by product_id and variant_id
-        existing_variants_by_product = defaultdict(list)
-        existing_variants = {}
-        for v in existing_variants_list:
-            existing_variants[v["lightspeed_variant_id"]] = v
-            existing_variants_by_product[v["lightspeed_product_id"]].append(v)
-        
-        # Index variant content by (variant_id, language)
-        existing_variant_content = {}
-        for vc in existing_variant_content_list:
-            key = (vc["lightspeed_variant_id"], vc["language_code"])
-            existing_variant_content[key] = vc
-        
-        # Group new content by product_id for faster lookup
-        content_by_product = defaultdict(list)
-        for content_row in content_rows:
-            content_by_product[content_row["lightspeed_product_id"]].append(content_row)
-        
-        # Group new variant content by variant_id for faster lookup
-        variant_content_by_variant = defaultdict(list)
-        for vc_row in variant_content_rows:
-            variant_content_by_variant[vc_row["lightspeed_variant_id"]].append(vc_row)
-        
-        # Group variant rows by product_id for faster lookup
-        variants_by_product = defaultdict(list)
-        for variant_row in variant_rows:
-            variants_by_product[variant_row["lightspeed_product_id"]].append(variant_row)
-        
-        # Compare and preserve ls_updated_at if monitored fields haven't changed
-        products_unchanged = 0
-        products_changed = 0
-        
-        for product_row in product_rows:
-            ls_product_id = product_row["lightspeed_product_id"]
-            existing_product = existing_products.get(ls_product_id)
+            variant_content_by_variant = defaultdict(list)
+            for vc_row in variant_content_rows:
+                variant_content_by_variant[vc_row["lightspeed_variant_id"]].append(vc_row)
             
-            # If product doesn't exist in DB, it's new - keep new ls_updated_at
-            if not existing_product:
-                continue
+            variants_by_product = defaultdict(list)
+            for variant_row in variant_rows:
+                variants_by_product[variant_row["lightspeed_product_id"]].append(variant_row)
             
-            # Compare monitored fields
-            has_changes = False
-            change_reasons = []
+            # Compare and preserve ls_updated_at
+            products_unchanged = 0
+            products_changed = 0
             
-            # 1. Product-level fields
-            if product_row["visibility"] != existing_product["visibility"]:
-                has_changes = True
-                change_reasons.append(f"visibility: {existing_product['visibility']} → {product_row['visibility']}")
-            
-            if not has_changes and not images_equal(product_row["image"], existing_product["image"]):
-                has_changes = True
-                change_reasons.append("image changed")
-            
-            # 2. Product content fields (all active languages)
-            if not has_changes:
-                for content_row in content_by_product[ls_product_id]:
-                    lang = content_row["language_code"]
-                    key = (ls_product_id, lang)
-                    existing_content = existing_product_content.get(key)
-                    
-                    if not existing_content:
-                        has_changes = True
-                        change_reasons.append(f"new language content: {lang}")
-                        break
-                    
-                    # Compare content fields
-                    for field in ["title", "fulltitle", "description", "content"]:
-                        new_val = normalize_for_comparison(content_row.get(field))
-                        old_val = normalize_for_comparison(existing_content.get(field))
-                        if new_val != old_val:
-                            has_changes = True
-                            change_reasons.append(f"{field}[{lang}] changed")
-                            break
-                    
-                    if has_changes:
-                        break
-            
-            # 3. Variant count (added/removed variants)
-            if not has_changes:
-                new_variants = variants_by_product[ls_product_id]
-                old_variants = existing_variants_by_product.get(ls_product_id, [])
+            for product_row in product_rows:
+                has_changes, change_reasons = compare_product_changes(
+                    product_row, existing_products, existing_product_content, existing_variants,
+                    existing_variants_by_product, existing_variant_content, content_by_product,
+                    variants_by_product, variant_content_by_variant
+                )
                 
-                if len(new_variants) != len(old_variants):
-                    has_changes = True
-                    change_reasons.append(f"variant count: {len(old_variants)} → {len(new_variants)}")
+                if has_changes:
+                    products_changed += 1
+                    if products_changed <= 10:
+                        print(f"   🔄 [{shop['name']}] Product {product_row['lightspeed_product_id']}: {', '.join(change_reasons[:2])}")
+                else:
+                    # Preserve old ls_updated_at
+                    existing_product = existing_products.get(product_row["lightspeed_product_id"])
+                    if existing_product:
+                        product_row["ls_updated_at"] = existing_product["ls_updated_at"]
+                        products_unchanged += 1
             
-            # 4. Variant fields (for each variant)
-            if not has_changes:
-                for variant_row in variants_by_product[ls_product_id]:
-                    ls_variant_id = variant_row["lightspeed_variant_id"]
-                    existing_variant = existing_variants.get(ls_variant_id)
-                    
-                    if not existing_variant:
-                        has_changes = True
-                        change_reasons.append(f"new variant: {ls_variant_id}")
-                        break
-                    
-                    # Compare variant fields
-                    if variant_row["is_default"] != existing_variant["is_default"]:
-                        has_changes = True
-                        change_reasons.append(f"variant {ls_variant_id} isDefault changed")
-                        break
-                    
-                    if variant_row["sort_order"] != existing_variant["sort_order"]:
-                        has_changes = True
-                        change_reasons.append(f"variant {ls_variant_id} sortOrder changed")
-                        break
-                    
-                    # Compare price (handle None and numeric comparison)
-                    new_price = variant_row["price_excl"]
-                    old_price = existing_variant["price_excl"]
-                    if new_price != old_price:
-                        try:
-                            if float(new_price or 0) != float(old_price or 0):
-                                has_changes = True
-                                change_reasons.append(f"variant {ls_variant_id} priceExcl changed")
-                                break
-                        except (ValueError, TypeError):
-                            has_changes = True
-                            change_reasons.append(f"variant {ls_variant_id} priceExcl changed")
-                            break
-                    
-                    if not images_equal(variant_row["image"], existing_variant["image"]):
-                        has_changes = True
-                        change_reasons.append(f"variant {ls_variant_id} image changed")
-                        break
-                    
-                    # 5. Variant content (all active languages)
-                    for variant_content_row in variant_content_by_variant[ls_variant_id]:
-                        lang = variant_content_row["language_code"]
-                        key = (ls_variant_id, lang)
-                        existing_vc = existing_variant_content.get(key)
-                        
-                        if not existing_vc:
-                            has_changes = True
-                            change_reasons.append(f"new variant content: variant {ls_variant_id}, lang {lang}")
-                            break
-                        
-                        new_title = normalize_for_comparison(variant_content_row.get("title"))
-                        old_title = normalize_for_comparison(existing_vc.get("title"))
-                        if new_title != old_title:
-                            has_changes = True
-                            change_reasons.append(f"variant {ls_variant_id} title[{lang}] changed")
-                            break
-                    
-                    if has_changes:
-                        break
-            
-            # Decision: preserve or update ls_updated_at
-            if has_changes:
-                products_changed += 1
-                # Only log first 10 changed products to avoid spam
-                if products_changed <= 10:
-                    print(f"   🔄 Product {ls_product_id}: {', '.join(change_reasons[:2])}")
-            else:
-                # No changes in monitored fields - preserve old ls_updated_at
-                product_row["ls_updated_at"] = existing_product["ls_updated_at"]
-                products_unchanged += 1
+            if products_unchanged > 0:
+                print(f"   ⏸️  [{shop['name']}] {products_unchanged} product(s) unchanged (preserved ls_updated_at)")
+            if products_changed > 0:
+                print(f"   🔄 [{shop['name']}] {products_changed} product(s) changed (updated ls_updated_at)")
         
-        if products_unchanged > 0:
-            print(f"   ⏸️  [{shop['name']}] {products_unchanged} product(s) unchanged (preserved ls_updated_at)")
-        if products_changed > 0:
-            print(f"   🔄 [{shop['name']}] {products_changed} product(s) changed (updated ls_updated_at)")
+        else:
+            # TARGET shop: Use API ls_updated_at directly (no comparison)
+            existing_data = fetch_existing_data_for_cleanup(shop["id"])
+            existing_products = {p["lightspeed_product_id"]: p for p in existing_data["products"]}
+            existing_variants = {v["lightspeed_variant_id"]: v for v in existing_data["variants"]}
     
+        # -------------------------------------------------
+        # UPSERT TO DATABASE
+        # -------------------------------------------------
         bulk_upsert(supabase, "products", product_rows, "shop_id,lightspeed_product_id")
         bulk_upsert(supabase, "product_content", content_rows, "shop_id,lightspeed_product_id,language_code")
         bulk_upsert(supabase, "variants", variant_rows, "shop_id,lightspeed_variant_id")
         bulk_upsert(supabase, "variant_content", variant_content_rows, "shop_id,lightspeed_variant_id,language_code")
 
         # -------------------------------------------------
-        # CLEANUP: DELETE ORPHANED PRODUCTS & VARIANTS
+        # CLEANUP: DELETE ORPHANED DATA
         # -------------------------------------------------
-        # Reuse existing data from comparison step (no extra DB call needed)
         existing_product_ids = set(existing_products.keys())
         orphaned_products = existing_product_ids - api_product_ids
 
@@ -642,9 +607,8 @@ def sync_shop(shop):
                 .in_("lightspeed_product_id", list(orphaned_products)) \
                 .execute()
             metrics["products_deleted"] = len(orphaned_products)
-            print(f"   🗑️  Deleted {len(orphaned_products)} orphaned products")
+            print(f"   🗑️  [{shop['name']}] Deleted {len(orphaned_products)} orphaned products")
 
-        # Compare API variants vs DB variants (reuse existing data)
         existing_variant_ids = set(existing_variants.keys())
         orphaned_variants = existing_variant_ids - api_variant_ids
 
@@ -654,7 +618,7 @@ def sync_shop(shop):
                 .in_("lightspeed_variant_id", list(orphaned_variants)) \
                 .execute()
             metrics["variants_deleted"] = len(orphaned_variants)
-            print(f"   🗑️  Deleted {len(orphaned_variants)} orphaned variants")
+            print(f"   🗑️  [{shop['name']}] Deleted {len(orphaned_variants)} orphaned variants")
         
         # Update sync log with success
         supabase.table("sync_logs").update({
@@ -664,7 +628,6 @@ def sync_shop(shop):
         }).eq("id", log_id).execute()
         
     except Exception as e:
-        # Update sync log with error
         error_msg = str(e)
         print(f"   ❌ [{shop['name']}] Error: {error_msg}")
         
@@ -676,7 +639,7 @@ def sync_shop(shop):
                 **metrics
             }).eq("id", log_id).execute()
         except Exception as log_error:
-            print(f"   ❌ Failed to update sync log: {log_error}")
+            print(f"   ❌ [{shop['name']}] Failed to update sync log: {log_error}")
         
         raise
 
@@ -688,11 +651,10 @@ if __name__ == "__main__":
     start = time.time()
 
     try:
-        # Create initial client to fetch shops list
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         shops = (
             supabase.table("shops")
-            .select("id,name,tld,shop_languages(code,is_active,is_default)")
+            .select("id,name,tld,role,shop_languages(code,is_active,is_default)")
             .execute()
             .data
         )
@@ -703,7 +665,6 @@ if __name__ == "__main__":
         
         print(f"📋 Found {len(shops)} shop(s) to sync\n")
 
-        # Run all shops in parallel
         success_count = 0
         error_count = 0
         
@@ -713,7 +674,7 @@ if __name__ == "__main__":
             for future in as_completed(futures):
                 shop = futures[future]
                 try:
-                    future.result()  # This will raise any exceptions that occurred
+                    future.result()
                     success_count += 1
                 except Exception as e:
                     error_count += 1
@@ -727,7 +688,6 @@ if __name__ == "__main__":
         print(f"Success: {success_count}, Errors: {error_count}")
         print("=" * 60)
         
-        # Exit with error code if any shop failed
         exit(1 if error_count > 0 else 0)
         
     except KeyboardInterrupt:
