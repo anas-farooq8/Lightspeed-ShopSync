@@ -134,50 +134,69 @@ def attach_variants(products, variants, shop_name=None):
 # =====================================================
 def fetch_db_table_paginated(supabase_url, supabase_key, table, select_fields, shop_id):
     """
-    Fetch all rows from a table with pagination.
+    Fetch all rows from a table with pagination and retry logic.
     Creates own Supabase client for thread-safety.
     Ensures no data is missed by paginating until batch < DB_BATCH_SIZE.
+    Retries on transient failures (network issues, timeouts, rate limits).
     """
     supabase = create_client(supabase_url, supabase_key)
     all_rows, start = [], 0
     
     while True:
-        try:
-            batch = (
-                supabase.table(table)
-                .select(select_fields)
-                .eq("shop_id", shop_id)
-                .range(start, start + DB_BATCH_SIZE - 1)
-                .execute()
-                .data
-            )
-            
-            if not batch:
-                break
+        # Retry logic for transient DB failures
+        for attempt in range(MAX_RETRIES):
+            try:
+                batch = (
+                    supabase.table(table)
+                    .select(select_fields)
+                    .eq("shop_id", shop_id)
+                    .range(start, start + DB_BATCH_SIZE - 1)
+                    .execute()
+                    .data
+                )
+                break  # Success - exit retry loop
                 
-            all_rows.extend(batch)
-            
-            # If we got less than DB_BATCH_SIZE rows, we've reached the end
-            if len(batch) < DB_BATCH_SIZE:
-                break
+            except Exception as e:
+                if attempt == MAX_RETRIES - 1:
+                    # Last attempt failed - raise error
+                    raise RuntimeError(f"Failed to fetch from {table} at offset {start} after {MAX_RETRIES} attempts: {e}") from e
                 
-            start += DB_BATCH_SIZE
+                # Transient failure - retry with exponential backoff
+                wait_time = 2 ** attempt
+                print(f"   ⚠️  DB fetch error for {table} at offset {start}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
+                time.sleep(wait_time)
+        
+        # Check if we're done fetching
+        if not batch:
+            break
             
-        except Exception as e:
-            raise RuntimeError(f"Failed to fetch from {table} at offset {start}: {e}") from e
+        all_rows.extend(batch)
+        
+        # If we got less than DB_BATCH_SIZE rows, we've reached the end
+        if len(batch) < DB_BATCH_SIZE:
+            break
+            
+        start += DB_BATCH_SIZE
     
     return all_rows
 
 
-def bulk_upsert(supabase, table, rows, conflict_cols):
-    """Upsert rows to database table."""
+def bulk_upsert(supabase, table, rows, conflict_cols, shop_name=None):
+    """Upsert rows to database table with retry logic."""
     if not rows:
         return
-    try:
-        supabase.table(table).upsert(rows, on_conflict=conflict_cols).execute()
-    except Exception as e:
-        print(f"   ❌ Failed to upsert {len(rows)} rows to {table}: {e}")
-        raise
+    shop_prefix = f"[{shop_name}] " if shop_name else ""
+    for attempt in range(MAX_RETRIES):
+        try:
+            supabase.table(table).upsert(rows, on_conflict=conflict_cols).execute()
+            return
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                print(f"   ❌ {shop_prefix}Failed to upsert {len(rows)} rows to {table} after {MAX_RETRIES} attempts: {e}")
+                raise
+            wait_time = 2 ** attempt
+            print(f"   ⚠️  {shop_prefix}Upsert error for {table}, retry {attempt + 1}/{MAX_RETRIES} after {wait_time}s: {e}")
+            time.sleep(wait_time)
 
 
 def normalize_for_comparison(value):
@@ -590,10 +609,10 @@ def sync_shop(shop):
         # -------------------------------------------------
         # UPSERT TO DATABASE
         # -------------------------------------------------
-        bulk_upsert(supabase, "products", product_rows, "shop_id,lightspeed_product_id")
-        bulk_upsert(supabase, "product_content", content_rows, "shop_id,lightspeed_product_id,language_code")
-        bulk_upsert(supabase, "variants", variant_rows, "shop_id,lightspeed_variant_id")
-        bulk_upsert(supabase, "variant_content", variant_content_rows, "shop_id,lightspeed_variant_id,language_code")
+        bulk_upsert(supabase, "products", product_rows, "shop_id,lightspeed_product_id", shop["name"])
+        bulk_upsert(supabase, "product_content", content_rows, "shop_id,lightspeed_product_id,language_code", shop["name"])
+        bulk_upsert(supabase, "variants", variant_rows, "shop_id,lightspeed_variant_id", shop["name"])
+        bulk_upsert(supabase, "variant_content", variant_content_rows, "shop_id,lightspeed_variant_id,language_code", shop["name"])
 
         # -------------------------------------------------
         # CLEANUP: DELETE ORPHANED DATA
