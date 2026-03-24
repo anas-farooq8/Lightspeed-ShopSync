@@ -30,6 +30,48 @@ function cleanPlainText(text: string, field: string): string {
   return he.decode(text).replace(/<br\s*\/?>/gi, '\r\n')
 }
 
+/**
+ * Format HTML content with proper line breaks between tags.
+ * This ensures the HTML displays correctly in Lightspeed storefront.
+ * 
+ * Google Translate sometimes returns HTML without line breaks between tags,
+ * causing rendering issues in Lightspeed.
+ */
+function formatHtmlWithLineBreaks(html: string): string {
+  if (!html || typeof html !== 'string') return html
+  
+  // Add line breaks after closing block-level tags
+  let formatted = html
+    .replace(/(<\/p>)/gi, '$1\n')
+    .replace(/(<\/h[1-6]>)/gi, '$1\n')
+    .replace(/(<\/div>)/gi, '$1\n')
+    .replace(/(<\/ul>)/gi, '$1\n')
+    .replace(/(<\/ol>)/gi, '$1\n')
+    .replace(/(<\/li>)/gi, '$1\n')
+    .replace(/(<\/blockquote>)/gi, '$1\n')
+    .replace(/(<\/pre>)/gi, '$1\n')
+    .replace(/(<br\s*\/?>)/gi, '$1\n')
+  
+  // Add line breaks before opening block-level tags (but not if already at start of line)
+  formatted = formatted
+    .replace(/([^\n])(<p[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<h[1-6][^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<div[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<ul[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<ol[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<li[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<blockquote[^>]*>)/gi, '$1\n$2')
+    .replace(/([^\n])(<pre[^>]*>)/gi, '$1\n$2')
+  
+  // Clean up multiple consecutive newlines (max 2)
+  formatted = formatted.replace(/\n{3,}/g, '\n\n')
+  
+  // Trim leading/trailing whitespace
+  formatted = formatted.trim()
+  
+  return formatted
+}
+
 function getClient(): TranslationServiceClient {
   const projectId = process.env.GOOGLE_PROJECT_ID
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
@@ -80,7 +122,25 @@ async function callTranslateApi(
 
   return response.translations.map((t, i) => {
     const text = t.translatedText || ''
-    return cleanPlainText(text, items[i].field)
+    let cleanedText = cleanPlainText(text, items[i].field)
+    
+    // Format HTML content fields with proper line breaks
+    if (items[i].field === 'content') {
+      cleanedText = formatHtmlWithLineBreaks(cleanedText)
+    }
+    
+    // Debug: Log translation for content field to check line breaks
+    if (items[i].field === 'content') {
+      console.log('[TRANSLATION DEBUG] Field: content')
+      console.log('[TRANSLATION DEBUG] Original length:', items[i].text.length)
+      console.log('[TRANSLATION DEBUG] Translated length:', cleanedText.length)
+      console.log('[TRANSLATION DEBUG] Original has line breaks:', items[i].text.includes('\n'))
+      console.log('[TRANSLATION DEBUG] Translated has line breaks:', cleanedText.includes('\n'))
+      console.log('[TRANSLATION DEBUG] First 200 chars of original:', items[i].text.substring(0, 200))
+      console.log('[TRANSLATION DEBUG] First 200 chars of translated:', cleanedText.substring(0, 200))
+    }
+    
+    return cleanedText
   })
 }
 

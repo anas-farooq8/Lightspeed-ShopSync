@@ -72,6 +72,7 @@ export default function PreviewCreatePage() {
     dialogSelectedImage,
     removeImageFromTarget,
     restoreImageToTarget,
+    getContentForSubmission,
     setDetails,
     setLoading,
     setError,
@@ -167,7 +168,7 @@ export default function PreviewCreatePage() {
       const activeVariants = data.variants.filter(v => !v.deleted)
       const sourceProductData = {
         visibility: data.visibility,
-        content_by_language: data.content_by_language,
+        content_by_language: getContentForSubmission(tld), // Use original translated content with proper line breaks
         variants: activeVariants.map(v => ({
           sku: v.sku || '',
           is_default: v.is_default,

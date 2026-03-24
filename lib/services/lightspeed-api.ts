@@ -63,7 +63,28 @@ export class LightspeedAPIClient {
     }
 
     if (body) {
-      options.body = JSON.stringify(body)
+      const bodyString = JSON.stringify(body)
+      options.body = bodyString
+      
+      // Debug: Log content field being sent to Lightspeed
+      if (body.product?.content) {
+        console.log('[LIGHTSPEED DEBUG] Sending product content to API')
+        console.log('[LIGHTSPEED DEBUG] Content length:', body.product.content.length)
+        console.log('[LIGHTSPEED DEBUG] Content has line breaks:', body.product.content.includes('\n'))
+        console.log('[LIGHTSPEED DEBUG] First 200 chars:', body.product.content.substring(0, 200))
+        console.log('[LIGHTSPEED DEBUG] After JSON.stringify - body length:', bodyString.length)
+        
+        // Check if double-stringified
+        try {
+          const parsed = JSON.parse(bodyString)
+          if (typeof parsed.product?.content === 'string') {
+            const hasEscapedNewlines = parsed.product.content.includes('\\n')
+            console.log('[LIGHTSPEED DEBUG] After parse - has escaped newlines:', hasEscapedNewlines)
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
     }
 
     try {

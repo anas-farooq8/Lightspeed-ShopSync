@@ -2611,10 +2611,39 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     }
   }, [details, selectedSourceProductId])
 
+
   // ─── Cleanup ──────────────────────────────────────────────────────────────
   const cleanup = useCallback(() => {
     clearProductImagesCache()
   }, [])
+
+  // Get content for API submission - uses original translated content for content field if not manually edited
+  const getContentForSubmission = useCallback((tld: string): Record<string, ProductContent> => {
+    const data = targetData[tld]
+    if (!data) return {}
+
+    const result: Record<string, ProductContent> = {}
+    const languages = Object.keys(data.content_by_language)
+
+    languages.forEach(langCode => {
+      const currentContent = data.content_by_language[langCode]
+      const contentMeta = data.translationMeta?.[langCode]?.content
+      
+      // Use original translated content if it was translated/copied and not manually edited
+      const useOriginalContent = contentMeta === 'translated' || contentMeta === 'copied'
+      const originalContent = originalTranslatedContentRef.current[tld]?.[langCode]?.content || ''
+      
+      result[langCode] = {
+        title: currentContent.title || '',
+        fulltitle: currentContent.fulltitle || '',
+        description: currentContent.description || '',
+        // Use original translated content (with proper line breaks) instead of ReactQuill-modified version
+        content: useOriginalContent && originalContent ? originalContent : (currentContent.content || '')
+      }
+    })
+
+    return result
+  }, [targetData])
 
   // ─── Return API ───────────────────────────────────────────────────────────
   return {
@@ -2710,6 +2739,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     retranslateField,
     retranslateLanguage,
     setContentFocused,
+    getContentForSubmission,
     
     // Cleanup
     cleanup,

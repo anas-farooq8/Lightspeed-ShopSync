@@ -106,6 +106,7 @@ export default function PreviewEditPage() {
     addImagesToTarget,
     removeImageFromTarget,
     restoreImageToTarget,
+    getContentForSubmission,
     resetProductImage,
     resetField,
     resetLanguage,
@@ -179,7 +180,7 @@ export default function PreviewEditPage() {
       )
       const updateProductData = {
         visibility: data.visibility,
-        content_by_language: data.content_by_language,
+        content_by_language: getContentForSubmission(tld), // Use original translated content with proper line breaks
         variants: activeVariants.map(v => ({
           variant_id: v.addedFromSource ? null : v.variant_id,
           sku: v.sku || '',
