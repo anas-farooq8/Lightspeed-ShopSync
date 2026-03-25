@@ -273,7 +273,7 @@ create table sync_logs (
     variants_filtered integer default 0,  -- Orphaned variants filtered out
     
     -- Standard timestamps
-    created_at timestamp with time zone not null default now(),
+    created_at timestamp with time zone not null default now()
 );
 
 -- Indexes

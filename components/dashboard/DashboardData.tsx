@@ -123,7 +123,7 @@ export function DashboardData() {
             loading={state.loading}
             error={state.productLogsError}
           />
-          <Link href="/dashboard/sync-operations" className="block">
+          <Link href="/dashboard/sync-operations" prefetch={false} className="block">
             <Button variant="outline" className="w-full justify-between">
               Create or edit products
               <ChevronRight className="h-4 w-4" />
