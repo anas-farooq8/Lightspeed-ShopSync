@@ -403,3 +403,24 @@ for each row execute function set_updated_at();
 create trigger trg_variant_content_updated
 before update on variant_content
 for each row execute function set_updated_at();
+
+
+-- =========================
+-- UPDATE AUTO-INCREMENT SEQUENCES
+-- =========================
+-- Set sequence values to max IDs for tables with auto-incremented integer IDs
+-- This ensures the next insert will use the next sequential ID
+
+SELECT setval(
+  pg_get_serial_sequence('sync_logs', 'id'),
+  COALESCE(MAX(id), 1),
+  true
+) FROM sync_logs;
+
+SELECT setval(
+  pg_get_serial_sequence('product_operation_logs', 'id'),
+  COALESCE(MAX(id), 1),
+  true
+) FROM product_operation_logs;
+
+
