@@ -72,3 +72,6 @@ tmp/
 *.bak
 *.swp
 *~
+
+# Virtual Environments
+venv/
