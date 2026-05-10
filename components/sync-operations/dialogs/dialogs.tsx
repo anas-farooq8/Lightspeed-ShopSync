@@ -628,8 +628,10 @@ export function TargetShopSelectionDialog({
                 tabIndex={canSelect ? 0 : -1}
                 aria-disabled={!canSelect}
                 className={cn(
-                  'w-full flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border text-left transition-colors',
-                  !canSelect ? 'bg-muted/30 border-muted cursor-not-allowed opacity-60' : 'bg-background border-border hover:bg-muted/50 cursor-pointer'
+                  'w-full flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3 rounded-lg border text-left transition-colors outline-none focus-visible:outline-none',
+                  !canSelect
+                    ? 'cursor-not-allowed bg-gradient-to-br from-gray-300 via-gray-200 to-gray-100 border-gray-400/80 shadow-[0_1px_3px_rgba(0,0,0,0.07),inset_0_1px_0_rgba(255,255,255,0.58)] dark:from-neutral-800 dark:via-neutral-900 dark:to-neutral-950 dark:border-neutral-600 dark:shadow-[0_1px_2px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.09)]'
+                    : 'bg-background border-border hover:bg-muted/50 cursor-pointer',
                 )}
                 onClick={() => handleToggle(shop.tld, canSelect)}
                 onKeyDown={(e) => canSelect && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleToggle(shop.tld, true))}
