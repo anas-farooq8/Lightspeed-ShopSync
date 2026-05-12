@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RotateCcw, RefreshCw, Loader2, ArrowDownToLine } from 'lucide-react'
 import {
   cn,
@@ -13,16 +14,8 @@ import {
   sortLanguages,
   getDefaultLanguageCode,
 } from '@/lib/utils'
-import { QL_TOOLBAR_TITLES } from '@/lib/constants/product-ui'
+import { TipTapEditor } from '@/components/sync-operations/editors/TipTapEditor'
 import type { TranslationMetaByLang, TranslationOrigin, ProductData } from '@/types/product'
-import dynamic from 'next/dynamic'
-import type { default as ReactQuillType } from 'react-quill-new'
-import 'react-quill-new/dist/quill.snow.css'
-
-const ReactQuill = dynamic(
-  () => import('react-quill-new'),
-  { ssr: false }
-) as React.ComponentType<React.ComponentProps<typeof ReactQuillType>>
 
 interface Language {
   code: string
@@ -76,29 +69,9 @@ export function EditableLanguageContentTabs({
   const sortedLanguages = sortLanguages(languages)
   const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
-  const contentWrapperRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const el = contentWrapperRef.current
-      if (!el) return
-      el.querySelectorAll('.ql-toolbar').forEach((toolbar) => {
-        toolbar.querySelectorAll('button, .ql-picker-label, .ql-picker-item').forEach((btn) => {
-          const el = btn as HTMLElement
-          if (el.getAttribute('title')) return
-          for (const [cls, title] of Object.entries(QL_TOOLBAR_TITLES)) {
-            if (el.classList.contains(cls) || el.closest(`.${cls}`)) {
-              el.setAttribute('title', title)
-              return
-            }
-          }
-          if (el.classList.contains('ql-picker-label')) el.setAttribute('title', el.parentElement?.classList.contains('ql-header') ? 'Heading' : (el.textContent?.trim() || 'Options'))
-          else if (el.classList.contains('ql-picker-item')) el.setAttribute('title', el.textContent?.trim() || '')
-        })
-      })
-    }, 150)
-    return () => clearTimeout(id)
-  }, [activeLanguage, content])
+  
+  // Track content editor mode per language (source/edit/visual)
+  const [contentMode, setContentMode] = useState<Record<string, 'source' | 'edit' | 'visual'>>({})
 
   if (sortedLanguages.length === 0) return null
 
@@ -297,7 +270,7 @@ export function EditableLanguageContentTabs({
   }
 
   return (
-    <div ref={contentWrapperRef} className="w-full min-w-0">
+    <div className="w-full min-w-0">
     <Tabs value={activeLanguage} onValueChange={setActiveLanguage} className="w-full min-w-0">
       <div className="flex items-center justify-between mb-2 sm:mb-3">
         <TabsList className="flex-1 h-9 sm:h-10 flex p-0.5 sm:p-1 items-stretch gap-0">
@@ -453,45 +426,133 @@ export function EditableLanguageContentTabs({
             </div>
 
             <div>
-              <FieldHeader
-                label="Content"
-                lang={lang.code}
-                field="content"
-                meta={langMeta?.content}
-                isResetting={isResettingContent}
-                isRetranslating={isRetranslatingContent}
-                canRetranslate={!!canRetranslate}
-                onReset={() => onResetField(lang.code, 'content')}
-                onRetranslate={() => onRetranslateField!(lang.code, 'content')}
-                currentValue={langContent.content || ''}
-              />
-              <div
-                className={cn(
-                  "rounded-md overflow-hidden border transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-red-400 focus-within:border-red-300",
-                  dirtyFields.has(`${lang.code}.content`) ? 'border-amber-500' : 'border-border'
-                )}
-              >
-                <ReactQuill
-                  value={langContent.content || ''}
-                  onChange={(value) => onUpdateField(lang.code, 'content', value)}
-                  onFocus={() => onContentFocus?.(lang.code)}
-                  theme="snow"
-                  modules={{
-                    history: { userOnly: true },
-                    toolbar: {
-                      container: [
-                        [{ 'header': [1, 2, 3, false] }],
-                        ['bold', 'italic', 'underline', 'strike'],
-                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                        [{ 'color': [] }, { 'background': [] }],
-                        ['link', 'image'],
-                        ['clean']
-                      ]
-                    },
-                  }}
-                  className="bg-transparent dark:bg-input/30 [&_.ql-editor]:min-h-[20rem] [&_.ql-editor]:max-h-[28rem] [&_.ql-editor]:cursor-text [&_.ql-toolbar]:cursor-pointer [&_.ql-toolbar_button]:cursor-pointer [&_.ql-toolbar_.ql-picker]:cursor-pointer"
-                />
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-bold uppercase">Content</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {getFieldStatusText(lang.code, 'content', langMeta?.content, dirtyFields.has(`${lang.code}.content`))}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Field action buttons */}
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const isDirty = dirtyFields.has(`${lang.code}.content`)
+                      const isSameLanguage = lang.code === sourceDefaultLang
+                      const meta = langMeta?.content
+                      
+                      // Button visibility logic (same as FieldHeader)
+                      let showPickFromSourceButton = false
+                      let showResetButton = false
+                      let showRetranslateButton = false
+                      
+                      if (mode === 'create') {
+                        const showAsEdited = meta === 'manual' || (meta == null && isDirty)
+                        if (isSameLanguage) {
+                          showPickFromSourceButton = showAsEdited
+                          showResetButton = false
+                        } else {
+                          showPickFromSourceButton = false
+                          showResetButton = showAsEdited
+                          showRetranslateButton = true
+                        }
+                      } else {
+                        if (meta === 'existing') {
+                          showPickFromSourceButton = true
+                          showResetButton = false
+                        } else if (meta === 'copied' || meta === 'translated') {
+                          showPickFromSourceButton = false
+                          showResetButton = true
+                        } else if (meta === 'manual') {
+                          showPickFromSourceButton = true
+                          showResetButton = true
+                        } else {
+                          showPickFromSourceButton = true
+                          showResetButton = false
+                        }
+                        showRetranslateButton = false
+                      }
+
+                      const handlePickFromSource = async () => {
+                        if (mode === 'create' && isSameLanguage) {
+                          onResetField(lang.code, 'content')
+                        } else if (mode === 'edit') {
+                          if (onRetranslateField && !isResettingContent && !isRetranslatingContent) {
+                            onRetranslateField(lang.code, 'content')
+                          }
+                        } else if (!isSameLanguage) {
+                          if (onRetranslateField && !isResettingContent && !isRetranslatingContent) {
+                            onRetranslateField(lang.code, 'content')
+                          }
+                        }
+                      }
+
+                      return (
+                        <>
+                          {showPickFromSourceButton && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handlePickFromSource}
+                              disabled={isResettingContent || isRetranslatingContent}
+                              className="h-7 w-7 p-0 cursor-pointer text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 disabled:opacity-50"
+                              title={!isSameLanguage ? "Pick from source (auto-translated)" : "Pick from source"}
+                            >
+                              {isRetranslatingContent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowDownToLine className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                          {showResetButton && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onResetField(lang.code, 'content')}
+                              disabled={isResettingContent || isRetranslatingContent}
+                              className="h-7 w-7 p-0 cursor-pointer"
+                              title={mode === 'create' && !isSameLanguage ? "Reset to last translated value" : "Reset to original value"}
+                            >
+                              {isResettingContent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                          {showRetranslateButton && canRetranslate && onRetranslateField && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isResettingContent && !isRetranslatingContent) onRetranslateField(lang.code, 'content') }}
+                              disabled={isResettingContent || isRetranslatingContent}
+                              className="h-7 w-7 p-0 cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                              title="Re-translate this field from source"
+                            >
+                              {isRetranslatingContent ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            </Button>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <Select
+                    value={contentMode[lang.code] || 'edit'}
+                    onValueChange={(value: 'source' | 'edit' | 'visual') =>
+                      setContentMode((prev) => ({ ...prev, [lang.code]: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-[130px] h-8 text-xs cursor-pointer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="source">Source</SelectItem>
+                      <SelectItem value="edit">Edit</SelectItem>
+                      <SelectItem value="visual">Visual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <TipTapEditor
+                value={langContent.content || ''}
+                onChange={(value) => onUpdateField(lang.code, 'content', value)}
+                onFocus={() => onContentFocus?.(lang.code)}
+                mode={contentMode[lang.code] || 'edit'}
+                isDirty={dirtyFields.has(`${lang.code}.content`)}
+              />
             </div>
           </TabsContent>
         )

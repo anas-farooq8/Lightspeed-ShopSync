@@ -26,7 +26,6 @@ import {
   storeTranslationsInMemo,
   isSameImageInfo,
   getVariantKey,
-  normalizeContentForComparison,
   sortImagesForDisplay,
   getDisplayProductImage,
   sortVariants,
@@ -853,10 +852,9 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         } else {
           sourceValue = initialContentRef.current[tld]?.[langCode] ?? ''
           // Only mark as changed when user has focused the content field – avoids false "Manually edited"
-          // from ReactQuill normalization (e.g. trailing <p><br></p>, attribute differences).
           const focusKey = `${tld}:${langCode}`
           const userHasFocused = !!contentFocusedRef.current[focusKey]
-          const valueMatchesSource = normalizeContentForComparison(value) === normalizeContentForComparison(sourceValue)
+          const valueMatchesSource = value.trim() === sourceValue.trim()
           isChanged = userHasFocused && !valueMatchesSource
         }
       } else if (field === 'description') {
@@ -893,7 +891,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           // Pick, the value equals original but meta should stay 'copied'.
           const originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[translatableField as keyof ProductContent] ?? (translatableField === 'content' ? initialContentRef.current[tld]?.[langCode] : undefined) ?? ''
           const valueMatchesOriginal = translatableField === 'content'
-            ? normalizeContentForComparison(value) === normalizeContentForComparison(originalValue)
+            ? value.trim() === originalValue.trim()
             : translatableField === 'description'
               ? value.replace(/\r\n/g, '\n') === originalValue.replace(/\r\n/g, '\n')
               : value === originalValue
@@ -2389,6 +2387,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
   // ─── Re-translate Operations ──────────────────────────────────────────────
   const retranslateField = useCallback(async (tld: string, langCode: string, field: keyof ProductContent) => {
+    console.log('[retranslateField] Called with:', { tld, langCode, field })
+    
     if (!details || !selectedSourceProductId) return
 
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
@@ -2396,14 +2396,24 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
     const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
-    if (!sourceDefaultLang) return
+    
+    console.log('[retranslateField] Source info:', {
+      sourceShopTld: sourceProduct.shop_tld,
+      sourceDefaultLang,
+      sourceShopLanguages: sourceShopLanguages.map(l => l.code)
+    })
+    
+    if (!sourceDefaultLang) {
+      console.error('[retranslateField] No source default language found!')
+      return
+    }
     
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     
     // In CREATE mode, don't allow re-translating same language (it's just a copy, use reset instead)
     // In EDIT mode, allow it for "Pick from source" functionality
     if (langCode === sourceDefaultLang && mode === 'create') {
-      alert('Cannot re-translate content in the same language as source.')
+      console.warn('[retranslateField] Cannot re-translate content in the same language as source.')
       return
     }
 
@@ -2498,8 +2508,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         return updated
       })
     } catch (error) {
-      console.error('Failed to re-translate field:', error)
-      alert(`Re-translation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('[retranslateField] Failed to re-translate field:', error)
+      // Don't show alert, just log the error
     } finally {
       setRetranslatingField(null)
     }
@@ -2516,7 +2526,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (!sourceDefaultLang) return
     
     if (langCode === sourceDefaultLang) {
-      alert('Cannot re-translate content in the same language as source.')
+      console.warn('[retranslateLanguage] Cannot re-translate content in the same language as source.')
       return
     }
 
@@ -2604,8 +2614,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         return updated
       })
     } catch (error) {
-      console.error('Failed to re-translate language:', error)
-      alert(`Re-translation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('[retranslateLanguage] Failed to re-translate language:', error)
+      // Don't show alert, just log the error
     } finally {
       setRetranslatingField(null)
     }

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { Eye, Code } from 'lucide-react'
 import type { Language, ProductContent } from '@/types/product'
 import { toSafeExternalHref, cn, sortLanguages, getDefaultLanguageCode } from '@/lib/utils'
 
@@ -24,6 +26,7 @@ export function LanguageContentTabs({
   const sortedLanguages = sortLanguages(languages)
   const defaultLanguage = getDefaultLanguageCode(languages)
   const [activeLanguage, setActiveLanguage] = useState(defaultLanguage)
+  const [contentMode, setContentMode] = useState<Record<string, 'visual' | 'source'>>({})
 
   useEffect(() => {
     if (!sortedLanguages.some(l => l.code === activeLanguage)) setActiveLanguage(defaultLanguage)
@@ -100,13 +103,43 @@ export function LanguageContentTabs({
             )}
             {langContent.content && (
               <div>
-                <label className="text-sm font-bold text-foreground uppercase mb-1.5 block">Content:</label>
-                <div className="text-sm sm:text-base break-words max-h-[20rem] sm:max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-3 sm:p-4 bg-muted/30">
-                  <div 
-                    dangerouslySetInnerHTML={{ __html: langContent.content }} 
-                    className="prose prose-base max-w-none [&>:first-child]:mt-0 prose-headings:text-foreground prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-muted-foreground prose-p:my-2 prose-li:text-muted-foreground prose-strong:text-foreground prose-ul:my-2 prose-ol:my-2"
-                  />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-bold text-foreground uppercase">Content:</label>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant={contentMode[lang.code] === 'source' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setContentMode(prev => ({ ...prev, [lang.code]: 'source' }))}
+                      className="h-7 px-2 text-xs cursor-pointer"
+                      title="Source mode (raw HTML)"
+                    >
+                      <Code className="h-3 w-3 mr-1" />
+                      Source
+                    </Button>
+                    <Button
+                      variant={contentMode[lang.code] === 'visual' || !contentMode[lang.code] ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setContentMode(prev => ({ ...prev, [lang.code]: 'visual' }))}
+                      className="h-7 px-2 text-xs cursor-pointer"
+                      title="Visual mode"
+                    >
+                      <Eye className="h-3 w-3 mr-1" />
+                      Visual
+                    </Button>
+                  </div>
                 </div>
+                {contentMode[lang.code] === 'source' ? (
+                  <pre className="text-xs sm:text-sm break-words max-h-[20rem] sm:max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-3 sm:p-4 bg-muted/30 font-mono whitespace-pre-wrap">
+                    <code>{langContent.content}</code>
+                  </pre>
+                ) : (
+                  <div className="text-sm sm:text-base break-words max-h-[20rem] sm:max-h-[28rem] overflow-y-auto border border-border/40 rounded-lg p-3 sm:p-4 bg-muted/30">
+                    <div 
+                      dangerouslySetInnerHTML={{ __html: langContent.content }} 
+                      className="prose prose-base max-w-none [&>:first-child]:mt-0 prose-headings:text-foreground prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-muted-foreground prose-p:my-2 prose-li:text-muted-foreground prose-strong:text-foreground prose-ul:my-2 prose-ol:my-2"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

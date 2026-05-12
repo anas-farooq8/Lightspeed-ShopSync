@@ -82,28 +82,6 @@ export function getDefaultLanguageCode(languages: Language[]): string {
 
 // ─── Images ─────────────────────────────────────────────────────────────────
 
-/**
- * Normalize HTML/content for comparison (avoids false "changed" when ReactQuill normalizes).
- * Handles Quill output differences so Ctrl+Z undo correctly clears "Manually edited".
- * - Trim whitespace, normalize line endings
- * - Remove leading/trailing empty blocks: <p><br></p>, <p></p>, <p class="..."><br></p>
- * - Strip attributes from tags (Quill may add class/style on undo)
- */
-export function normalizeContentForComparison(content: string): string {
-  if (!content || typeof content !== 'string') return ''
-  let s = content.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  // Strip attributes from tags so <p class="x"> matches <p>
-  s = s.replace(/<(\w+)(\s[^>]*)?>/g, (_, tag) => `<${tag}>`)
-  // Remove leading and trailing empty block elements (Quill adds these)
-  let prev = ''
-  while (prev !== s) {
-    prev = s
-    s = s.replace(/(<p><br\s*\/?><\/p>)+$/gi, '').replace(/(<p><\/p>)+$/gi, '').trim()
-    s = s.replace(/^(<p><br\s*\/?><\/p>)+/gi, '').replace(/^(<p><\/p>)+/gi, '').trim()
-  }
-  return s
-}
-
 /** Compare two ImageInfo objects for equality by src (unique per image). */
 export function isSameImageInfo(a: ImageInfo | null, b: ImageInfo | null): boolean {
   if (a === b) return true
@@ -234,9 +212,22 @@ export async function callTranslationAPI(
   memo?: Map<string, string>,
   shopTld?: string
 ): Promise<TranslationResult[]> {
+  console.log('[callTranslationAPI] Called with:', { 
+    itemCount: items.length, 
+    items: items.map(i => ({ 
+      sourceLang: i.sourceLang, 
+      targetLang: i.targetLang, 
+      field: i.field, 
+      textLength: i.text?.length 
+    })),
+    hasMemo: !!memo,
+    shopTld 
+  })
+  
   if (items.length === 0) return []
 
   if (!memo) {
+    console.log('[callTranslationAPI] Calling /api/translate without memo')
     const response = await fetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -244,9 +235,12 @@ export async function callTranslationAPI(
     })
     if (!response.ok) {
       const error = await response.json()
+      console.error('[callTranslationAPI] API error:', error)
       throw new Error(error.error || 'Translation failed')
     }
-    return await response.json()
+    const result = await response.json()
+    console.log('[callTranslationAPI] API success:', result)
+    return result
   }
 
   const resultByIndex = new Map<number, TranslationResult>()
@@ -297,7 +291,19 @@ export function prepareTranslationBatch(
   const copyLanguages: string[] = []
   const translatableFields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
 
+  // Validate source language
+  if (!sourceDefaultLang || typeof sourceDefaultLang !== 'string' || sourceDefaultLang.trim() === '') {
+    console.error('[prepareTranslationBatch] Invalid sourceDefaultLang:', sourceDefaultLang)
+    return { translationItems: [], copyLanguages: [] }
+  }
+
   targetLanguages.forEach((lang) => {
+    // Validate target language
+    if (!lang || !lang.code || typeof lang.code !== 'string' || lang.code.trim() === '') {
+      console.error('[prepareTranslationBatch] Invalid target language:', lang)
+      return // Skip this language
+    }
+
     if (lang.code === sourceDefaultLang) {
       copyLanguages.push(lang.code)
     } else {
@@ -393,6 +399,24 @@ export async function getBaseValueForField(
   memo?: Map<string, string>,
   shopTld?: string
 ): Promise<{ value: string; origin: TranslationOrigin }> {
+  // Validate parameters
+  if (!sourceDefaultLang || typeof sourceDefaultLang !== 'string' || sourceDefaultLang.trim() === '') {
+    console.error('[getBaseValueForField] Invalid sourceDefaultLang:', sourceDefaultLang)
+    throw new Error('Invalid source language code')
+  }
+  if (!targetLangCode || typeof targetLangCode !== 'string' || targetLangCode.trim() === '') {
+    console.error('[getBaseValueForField] Invalid targetLangCode:', targetLangCode)
+    throw new Error('Invalid target language code')
+  }
+
+  console.log('[getBaseValueForField] Called with:', {
+    sourceDefaultLang,
+    targetLangCode,
+    field,
+    sourceValueLength: sourceContent?.[field]?.length,
+    shopTld
+  })
+
   const sourceValue = sourceContent?.[field] || ''
 
   if (targetLangCode === sourceDefaultLang) {
@@ -402,19 +426,25 @@ export async function getBaseValueForField(
     return { value: '', origin: 'translated' }
   }
 
-  try {
-    const results = await callTranslationAPI(
-      [{ sourceLang: sourceDefaultLang, targetLang: targetLangCode, field, text: sourceValue }],
-      memo,
-      shopTld
-    )
-    return {
-      value: results[0]?.translatedText || sourceValue,
-      origin: 'translated',
-    }
-  } catch (error) {
-    console.error('Failed to translate field:', error)
-    return { value: sourceValue, origin: 'translated' }
+  // Translation call - let errors propagate
+  console.log('[getBaseValueForField] About to call callTranslationAPI with:', {
+    sourceLang: sourceDefaultLang,
+    targetLang: targetLangCode,
+    field,
+    textLength: sourceValue.length
+  })
+  
+  const results = await callTranslationAPI(
+    [{ sourceLang: sourceDefaultLang, targetLang: targetLangCode, field, text: sourceValue }],
+    memo,
+    shopTld
+  )
+  
+  console.log('[getBaseValueForField] Translation result:', results[0])
+  
+  return {
+    value: results[0]?.translatedText || '',
+    origin: 'translated',
   }
 }
 
@@ -451,6 +481,16 @@ export async function getBaseValuesForLanguage(
 ): Promise<Record<TranslatableField, { value: string; origin: TranslationOrigin }>> {
   const results: Record<string, { value: string; origin: TranslationOrigin }> = {}
 
+  // Validate parameters
+  if (!sourceDefaultLang || typeof sourceDefaultLang !== 'string' || sourceDefaultLang.trim() === '') {
+    console.error('[getBaseValuesForLanguage] Invalid sourceDefaultLang:', sourceDefaultLang)
+    throw new Error('Invalid source language code')
+  }
+  if (!targetLangCode || typeof targetLangCode !== 'string' || targetLangCode.trim() === '') {
+    console.error('[getBaseValuesForLanguage] Invalid targetLangCode:', targetLangCode)
+    throw new Error('Invalid target language code')
+  }
+
   if (targetLangCode === sourceDefaultLang) {
     fields.forEach((field) => {
       results[field] = { value: sourceContent?.[field] || '', origin: 'copied' }
@@ -478,28 +518,17 @@ export async function getBaseValuesForLanguage(
 
   if (translationItems.length === 0) return results
 
-  try {
-    const translationResults = await callTranslationAPI(translationItems, memo, shopTld)
-    translationResults.forEach((result, index) => {
-      const f = fieldIndexMap[index]
-      if (f) {
-        results[f] = {
-          value: result.translatedText || sourceContent?.[f] || '',
-          origin: 'translated',
-        }
+  // Translation call - let errors propagate
+  const translationResults = await callTranslationAPI(translationItems, memo, shopTld)
+  translationResults.forEach((result, index) => {
+    const f = fieldIndexMap[index]
+    if (f) {
+      results[f] = {
+        value: result.translatedText || '',
+        origin: 'translated',
       }
-    })
-  } catch (error) {
-    console.error('Failed to translate fields:', error)
-    fields.forEach((field) => {
-      if (!results[field]) {
-        results[field] = {
-          value: sourceContent?.[field] || '',
-          origin: 'translated',
-        }
-      }
-    })
-  }
+    }
+  })
 
   return results
 }

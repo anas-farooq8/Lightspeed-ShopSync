@@ -1,6 +1,6 @@
 /**
- * Product UI constants – visibility options and Quill editor toolbar titles.
- * Merged from visibility.ts and quill-toolbar.ts.
+ * Product UI constants – visibility options.
+ * Merged from visibility.ts.
  */
 
 import type { LucideIcon } from 'lucide-react'
@@ -47,23 +47,4 @@ export const VISIBILITY_OPTIONS: VisibilityOption[] = [
 export function getVisibilityOption(value: string | null | undefined): VisibilityOption {
   const normalized = (value ?? '').toLowerCase()
   return VISIBILITY_OPTIONS.find((o) => o.value === normalized) ?? VISIBILITY_OPTIONS[2]
-}
-
-// ─── Quill Toolbar ──────────────────────────────────────────────────────────
-
-/** Quill editor toolbar title map for accessibility (title attributes) */
-export const QL_TOOLBAR_TITLES: Record<string, string> = {
-  'ql-bold': 'Bold',
-  'ql-italic': 'Italic',
-  'ql-underline': 'Underline',
-  'ql-strike': 'Strikethrough',
-  'ql-list': 'List',
-  'ql-ordered': 'Ordered list',
-  'ql-bullet': 'Bullet list',
-  'ql-color': 'Text color',
-  'ql-background': 'Highlight',
-  'ql-link': 'Insert link',
-  'ql-image': 'Insert image',
-  'ql-clean': 'Clear formatting',
-  'ql-header': 'Heading',
 }

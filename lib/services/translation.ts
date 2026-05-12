@@ -30,54 +30,24 @@ function cleanPlainText(text: string, field: string): string {
   return he.decode(text).replace(/<br\s*\/?>/gi, '\r\n')
 }
 
-/**
- * Format HTML content with proper line breaks between tags.
- * This ensures the HTML displays correctly in Lightspeed storefront.
- * 
- * Google Translate sometimes returns HTML without line breaks between tags,
- * causing rendering issues in Lightspeed.
- */
-function formatHtmlWithLineBreaks(html: string): string {
-  if (!html || typeof html !== 'string') return html
-  
-  // Add line breaks after closing block-level tags
-  let formatted = html
-    .replace(/(<\/p>)/gi, '$1\n')
-    .replace(/(<\/h[1-6]>)/gi, '$1\n')
-    .replace(/(<\/div>)/gi, '$1\n')
-    .replace(/(<\/ul>)/gi, '$1\n')
-    .replace(/(<\/ol>)/gi, '$1\n')
-    .replace(/(<\/li>)/gi, '$1\n')
-    .replace(/(<\/blockquote>)/gi, '$1\n')
-    .replace(/(<\/pre>)/gi, '$1\n')
-    .replace(/(<br\s*\/?>)/gi, '$1\n')
-  
-  // Add line breaks before opening block-level tags (but not if already at start of line)
-  formatted = formatted
-    .replace(/([^\n])(<p[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<h[1-6][^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<div[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<ul[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<ol[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<li[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<blockquote[^>]*>)/gi, '$1\n$2')
-    .replace(/([^\n])(<pre[^>]*>)/gi, '$1\n$2')
-  
-  // Clean up multiple consecutive newlines (max 2)
-  formatted = formatted.replace(/\n{3,}/g, '\n\n')
-  
-  // Trim leading/trailing whitespace
-  formatted = formatted.trim()
-  
-  return formatted
-}
-
 function getClient(): TranslationServiceClient {
   const projectId = process.env.GOOGLE_PROJECT_ID
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
   const privateKey = process.env.GOOGLE_PRIVATE_KEY
 
+  console.log('[getClient] Environment variables status:', {
+    hasProjectId: !!projectId,
+    hasClientEmail: !!clientEmail,
+    hasPrivateKey: !!privateKey,
+    projectId: projectId ? `${projectId.substring(0, 10)}...` : 'missing'
+  })
+
   if (!projectId || !clientEmail || !privateKey) {
+    console.error('[getClient] Missing credentials:', {
+      projectId: !!projectId,
+      clientEmail: !!clientEmail,
+      privateKey: !!privateKey
+    })
     throw new Error('Set GOOGLE_PROJECT_ID, GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY')
   }
 
@@ -95,6 +65,7 @@ function getClient(): TranslationServiceClient {
     universe_domain: process.env.GOOGLE_UNIVERSE_DOMAIN || 'googleapis.com',
   }
 
+  console.log('[getClient] Creating TranslationServiceClient...')
   return new TranslationServiceClient({ projectId, credentials })
 }
 
@@ -104,47 +75,142 @@ async function callTranslateApi(
   sourceLang: string,
   targetLang: string
 ): Promise<string[]> {
-  const projectId = process.env.GOOGLE_PROJECT_ID!
+  console.log('[callTranslateApi] Called with:', {
+    sourceLang,
+    targetLang,
+    itemCount: items.length,
+    items: items.map(i => ({ field: i.field, textLength: i.text?.length }))
+  })
+  
+  // Validate environment variables
+  const projectId = process.env.GOOGLE_PROJECT_ID
+  if (!projectId) {
+    console.error('[callTranslateApi] GOOGLE_PROJECT_ID not set')
+    throw new Error('GOOGLE_PROJECT_ID environment variable is not set')
+  }
+  
+  // Validate language codes
+  if (!sourceLang || typeof sourceLang !== 'string' || sourceLang.trim() === '') {
+    console.error('[callTranslateApi] Invalid source language:', sourceLang)
+    throw new Error(`Invalid source language code: ${sourceLang}`)
+  }
+  if (!targetLang || typeof targetLang !== 'string' || targetLang.trim() === '') {
+    console.error('[callTranslateApi] Invalid target language:', targetLang)
+    throw new Error(`Invalid target language code: ${targetLang}`)
+  }
+  
   const parent = `projects/${projectId}/locations/global`
+  
+  const contents = items.map((i) => preserveNewlinesForSend(i.text, i.field))
+  console.log('[callTranslateApi] Prepared contents:', contents.map((c, i) => ({ 
+    field: items[i].field, 
+    length: c.length, 
+    preview: c.substring(0, 50) 
+  })))
 
-  const [response] = await client.translateText({
+  console.log('[callTranslateApi] About to call Google API with:', {
     parent,
-    contents: items.map((i) => preserveNewlinesForSend(i.text, i.field)),
     mimeType: 'text/html',
     sourceLanguageCode: sourceLang,
     targetLanguageCode: targetLang,
     model: `${parent}/models/general/translation-llm`,
+    contentCount: contents.length
   })
 
+  let response
+  try {
+    [response] = await client.translateText({
+      parent,
+      contents,
+      mimeType: 'text/html',
+      sourceLanguageCode: sourceLang,
+      targetLanguageCode: targetLang,
+      model: `${parent}/models/general/translation-llm`,
+    })
+    console.log('[callTranslateApi] Google API call successful')
+  } catch (googleError: any) {
+    console.error('[callTranslateApi] Google API error - Full error object:', JSON.stringify(googleError, null, 2))
+    console.error('[callTranslateApi] Google API error details:', {
+      message: googleError?.message,
+      code: googleError?.code,
+      details: googleError?.details,
+      statusDetails: googleError?.statusDetails,
+      metadata: googleError?.metadata,
+      name: googleError?.name,
+      cause: googleError?.cause,
+      error: googleError?.error,
+      // Try to get gRPC status code
+      grpcCode: (googleError as any)?.code,
+      grpcMessage: (googleError as any)?.message,
+      // Check prototype chain
+      toString: googleError?.toString(),
+    })
+    
+    // Try to extract meaningful error
+    let errorMsg = 'Google Translation API error'
+    
+    // Common gRPC error codes
+    const grpcStatusMessages: Record<number, string> = {
+      1: 'Request cancelled',
+      2: 'Unknown error',
+      3: 'Invalid argument',
+      4: 'Deadline exceeded',
+      5: 'Not found',
+      6: 'Already exists',
+      7: 'Permission denied - Check if Translation API is enabled and service account has proper IAM roles',
+      8: 'Resource exhausted - Quota exceeded',
+      9: 'Failed precondition',
+      10: 'Aborted',
+      11: 'Out of range',
+      12: 'Not implemented',
+      13: 'Internal error',
+      14: 'Service unavailable',
+      15: 'Data loss',
+      16: 'Unauthenticated - Invalid credentials'
+    }
+    
+    if (typeof googleError?.code === 'number' && grpcStatusMessages[googleError.code]) {
+      errorMsg = `${grpcStatusMessages[googleError.code]} (gRPC code: ${googleError.code})`
+    } else if (googleError?.message && googleError.message !== 'undefined undefined: undefined') {
+      errorMsg = googleError.message
+    } else if (googleError?.details) {
+      errorMsg = googleError.details
+    }
+    
+    console.error('[callTranslateApi] Parsed error message:', errorMsg)
+    throw new Error(`Google Translation failed: ${errorMsg}`)
+  }
+
   if (!response.translations?.length) {
+    console.error('[callTranslateApi] Invalid response from Google:', response)
     throw new Error('Invalid response from Google Translation API')
   }
 
-  return response.translations.map((t, i) => {
+  const cleanedResults = response.translations.map((t, i) => {
     const text = t.translatedText || ''
-    let cleanedText = cleanPlainText(text, items[i].field)
-    
-    // Format HTML content fields with proper line breaks
-    if (items[i].field === 'content') {
-      cleanedText = formatHtmlWithLineBreaks(cleanedText)
-    }
-    
-    // Debug: Log translation for content field to check line breaks
-    if (items[i].field === 'content') {
-      console.log('[TRANSLATION DEBUG] Field: content')
-      console.log('[TRANSLATION DEBUG] Original length:', items[i].text.length)
-      console.log('[TRANSLATION DEBUG] Translated length:', cleanedText.length)
-      console.log('[TRANSLATION DEBUG] Original has line breaks:', items[i].text.includes('\n'))
-      console.log('[TRANSLATION DEBUG] Translated has line breaks:', cleanedText.includes('\n'))
-      console.log('[TRANSLATION DEBUG] First 200 chars of original:', items[i].text.substring(0, 200))
-      console.log('[TRANSLATION DEBUG] First 200 chars of translated:', cleanedText.substring(0, 200))
-    }
-    
+    const cleanedText = cleanPlainText(text, items[i].field)
     return cleanedText
   })
+  
+  console.log('[callTranslateApi] Success:', cleanedResults.map((r, i) => ({ 
+    field: items[i].field, 
+    length: r.length 
+  })))
+  
+  return cleanedResults
 }
 
 export async function translateBatch(items: TranslationItem[]): Promise<TranslationResult[]> {
+  console.log('[translateBatch] Called with:', { 
+    itemCount: items.length,
+    items: items.map(i => ({ 
+      sourceLang: i.sourceLang, 
+      targetLang: i.targetLang, 
+      field: i.field, 
+      textLength: i.text?.length 
+    }))
+  })
+  
   if (items.length === 0) return []
 
   const empty: TranslationResult[] = []
@@ -177,6 +243,12 @@ export async function translateBatch(items: TranslationItem[]): Promise<Translat
 
   for (const [key, groupItems] of groups) {
     const [sourceLang, targetLang] = key.split(':')
+    console.log('[translateBatch] Calling callTranslateApi for group:', { 
+      key, 
+      sourceLang, 
+      targetLang, 
+      itemCount: groupItems.length 
+    })
     results.set(key, await callTranslateApi(client, groupItems, sourceLang, targetLang))
   }
 
