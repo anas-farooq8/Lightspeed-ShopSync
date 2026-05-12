@@ -48,6 +48,7 @@ export default function PreviewEditPage() {
     loading,
     error,
     targetErrors,
+    retranslateActionErrorByTld,
     productImages,
     updating,
     updateSuccess,
@@ -116,6 +117,7 @@ export default function PreviewEditPage() {
     resetShop,
     retranslateField,
     retranslateLanguage,
+    dismissRetranslateActionError,
     setContentFocused,
     cleanup,
   } = editor
@@ -579,6 +581,8 @@ export default function PreviewEditPage() {
       resettingField={resettingField}
       retranslatingField={retranslatingField}
       error={targetErrors[tld]}
+      retranslateActionError={retranslateActionErrorByTld[tld] ?? null}
+      onDismissRetranslateActionError={() => dismissRetranslateActionError(tld)}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
       targetImagesLoading={tld === activeTargetTld ? targetImagesLoading : false}
       onLanguageChange={handleLanguageChange(tld)}
@@ -620,6 +624,7 @@ export default function PreviewEditPage() {
     activeTargetTld,
     sourceProduct,
     targetErrors,
+    retranslateActionErrorByTld,
     productImages,
     targetImagesLoading,
     resettingField,
@@ -632,6 +637,7 @@ export default function PreviewEditPage() {
     resetLanguage,
     retranslateField,
     retranslateLanguage,
+    dismissRetranslateActionError,
     setContentFocused,
     resetShop,
     updateVariant,

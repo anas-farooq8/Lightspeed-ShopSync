@@ -8,6 +8,7 @@ import { twMerge } from 'tailwind-merge'
 import type { Language, ImageInfo, EditableVariant, ProductContent, TranslatableField, TranslationOrigin, LanguageTranslationMeta, TranslationMetaByLang } from '@/types/product'
 import type { SyncProduct } from '@/types/product'
 import type { TranslationItem, TranslationResult } from '@/lib/services/translation'
+import { TRANSLATION_UNAVAILABLE_USER_MESSAGE } from '@/lib/constants/translation-messages'
 
 // ─── UI / Formatting ────────────────────────────────────────────────────────
 
@@ -212,35 +213,27 @@ export async function callTranslationAPI(
   memo?: Map<string, string>,
   shopTld?: string
 ): Promise<TranslationResult[]> {
-  console.log('[callTranslationAPI] Called with:', { 
-    itemCount: items.length, 
-    items: items.map(i => ({ 
-      sourceLang: i.sourceLang, 
-      targetLang: i.targetLang, 
-      field: i.field, 
-      textLength: i.text?.length 
-    })),
-    hasMemo: !!memo,
-    shopTld 
-  })
-  
   if (items.length === 0) return []
 
   if (!memo) {
-    console.log('[callTranslationAPI] Calling /api/translate without memo')
     const response = await fetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items }),
     })
     if (!response.ok) {
-      const error = await response.json()
-      console.error('[callTranslationAPI] API error:', error)
-      throw new Error(error.error || 'Translation failed')
+      try {
+        await response.json()
+      } catch {
+        /* ignore */
+      }
+      throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
     }
-    const result = await response.json()
-    console.log('[callTranslationAPI] API success:', result)
-    return result
+    const parsed: TranslationResult[] = await response.json()
+    if (!Array.isArray(parsed) || parsed.length !== items.length) {
+      throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
+    }
+    return parsed
   }
 
   const resultByIndex = new Map<number, TranslationResult>()
@@ -267,15 +260,24 @@ export async function callTranslationAPI(
       body: JSON.stringify({ items: misses }),
     })
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Translation failed')
+      try {
+        await response.json()
+      } catch {
+        /* ignore */
+      }
+      throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
     }
     const missResults: TranslationResult[] = await response.json()
+    if (!Array.isArray(missResults) || missResults.length !== misses.length) {
+      throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
+    }
     missResults.forEach((result) => {
-      memo.set(getTranslationMemoKey(result, shopTld), result.translatedText)
+      if (result.translatedText?.trim()) {
+        memo.set(getTranslationMemoKey(result, shopTld), result.translatedText)
+      }
     })
     missOriginalIndices.forEach((origIdx, i) => {
-      resultByIndex.set(origIdx, missResults[i])
+      resultByIndex.set(origIdx, missResults[i]!)
     })
   }
 
@@ -357,16 +359,25 @@ export function applyTranslationResults(
       if (sourceContent?.description) meta.description = 'copied'
       if (sourceContent?.content) meta.content = 'copied'
     } else {
-      content_by_language[langCode] = {
-        title: resultMap.get(`${langCode}:title`) || '',
-        fulltitle: resultMap.get(`${langCode}:fulltitle`) || '',
-        description: resultMap.get(`${langCode}:description`) || '',
-        content: resultMap.get(`${langCode}:content`) || '',
-      }
-      if (content_by_language[langCode].title) meta.title = 'translated'
-      if (content_by_language[langCode].fulltitle) meta.fulltitle = 'translated'
-      if (content_by_language[langCode].description) meta.description = 'translated'
-      if (content_by_language[langCode].content) meta.content = 'translated'
+      const langContent: ProductContent = { title: '', fulltitle: '', description: '', content: '' }
+      const fields: TranslatableField[] = ['title', 'fulltitle', 'description', 'content']
+      fields.forEach((f) => {
+        const key = `${langCode}:${f}`
+        const hasResult = resultMap.has(key)
+        const fromApi = resultMap.get(key)
+        if (hasResult) {
+          const text = fromApi ?? ''
+          if (text.trim() !== '') {
+            langContent[f] = text
+            meta[f] = 'translated'
+          } else {
+            langContent[f] = ''
+          }
+        } else {
+          langContent[f] = ''
+        }
+      })
+      content_by_language[langCode] = langContent
     }
 
     translationMeta[langCode] = meta
@@ -399,24 +410,6 @@ export async function getBaseValueForField(
   memo?: Map<string, string>,
   shopTld?: string
 ): Promise<{ value: string; origin: TranslationOrigin }> {
-  // Validate parameters
-  if (!sourceDefaultLang || typeof sourceDefaultLang !== 'string' || sourceDefaultLang.trim() === '') {
-    console.error('[getBaseValueForField] Invalid sourceDefaultLang:', sourceDefaultLang)
-    throw new Error('Invalid source language code')
-  }
-  if (!targetLangCode || typeof targetLangCode !== 'string' || targetLangCode.trim() === '') {
-    console.error('[getBaseValueForField] Invalid targetLangCode:', targetLangCode)
-    throw new Error('Invalid target language code')
-  }
-
-  console.log('[getBaseValueForField] Called with:', {
-    sourceDefaultLang,
-    targetLangCode,
-    field,
-    sourceValueLength: sourceContent?.[field]?.length,
-    shopTld
-  })
-
   const sourceValue = sourceContent?.[field] || ''
 
   if (targetLangCode === sourceDefaultLang) {
@@ -426,25 +419,23 @@ export async function getBaseValueForField(
     return { value: '', origin: 'translated' }
   }
 
-  // Translation call - let errors propagate
-  console.log('[getBaseValueForField] About to call callTranslationAPI with:', {
-    sourceLang: sourceDefaultLang,
-    targetLang: targetLangCode,
-    field,
-    textLength: sourceValue.length
-  })
-  
-  const results = await callTranslationAPI(
-    [{ sourceLang: sourceDefaultLang, targetLang: targetLangCode, field, text: sourceValue }],
-    memo,
-    shopTld
-  )
-  
-  console.log('[getBaseValueForField] Translation result:', results[0])
-  
-  return {
-    value: results[0]?.translatedText || '',
-    origin: 'translated',
+  try {
+    const results = await callTranslationAPI(
+      [{ sourceLang: sourceDefaultLang, targetLang: targetLangCode, field, text: sourceValue }],
+      memo,
+      shopTld
+    )
+    const translated = results[0]?.translatedText ?? ''
+    if (translated.trim() !== '') {
+      return { value: translated, origin: 'translated' }
+    }
+    throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
+  } catch (error) {
+    console.error('Failed to translate field:', error)
+    if (error instanceof Error && error.message === TRANSLATION_UNAVAILABLE_USER_MESSAGE) {
+      throw error
+    }
+    throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
   }
 }
 
@@ -481,16 +472,6 @@ export async function getBaseValuesForLanguage(
 ): Promise<Record<TranslatableField, { value: string; origin: TranslationOrigin }>> {
   const results: Record<string, { value: string; origin: TranslationOrigin }> = {}
 
-  // Validate parameters
-  if (!sourceDefaultLang || typeof sourceDefaultLang !== 'string' || sourceDefaultLang.trim() === '') {
-    console.error('[getBaseValuesForLanguage] Invalid sourceDefaultLang:', sourceDefaultLang)
-    throw new Error('Invalid source language code')
-  }
-  if (!targetLangCode || typeof targetLangCode !== 'string' || targetLangCode.trim() === '') {
-    console.error('[getBaseValuesForLanguage] Invalid targetLangCode:', targetLangCode)
-    throw new Error('Invalid target language code')
-  }
-
   if (targetLangCode === sourceDefaultLang) {
     fields.forEach((field) => {
       results[field] = { value: sourceContent?.[field] || '', origin: 'copied' }
@@ -518,17 +499,29 @@ export async function getBaseValuesForLanguage(
 
   if (translationItems.length === 0) return results
 
-  // Translation call - let errors propagate
-  const translationResults = await callTranslationAPI(translationItems, memo, shopTld)
-  translationResults.forEach((result, index) => {
-    const f = fieldIndexMap[index]
-    if (f) {
-      results[f] = {
-        value: result.translatedText || '',
-        origin: 'translated',
+  try {
+    const translationResults = await callTranslationAPI(translationItems, memo, shopTld)
+    translationResults.forEach((result, index) => {
+      const f = fieldIndexMap[index]
+      if (f) {
+        const src = sourceContent?.[f] || ''
+        const translated = result.translatedText ?? ''
+        if (translated.trim() !== '') {
+          results[f] = { value: translated, origin: 'translated' }
+        } else if (src.trim() !== '') {
+          throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
+        } else {
+          results[f] = { value: '', origin: 'translated' }
+        }
       }
+    })
+  } catch (error) {
+    console.error('Failed to translate fields:', error)
+    if (error instanceof Error && error.message === TRANSLATION_UNAVAILABLE_USER_MESSAGE) {
+      throw error
     }
-  })
+    throw new Error(TRANSLATION_UNAVAILABLE_USER_MESSAGE)
+  }
 
   return results
 }
@@ -601,6 +594,7 @@ export function getLanguageOrigin(meta: LanguageTranslationMeta | undefined): Tr
   if (origins.includes('manual')) return 'manual'
   if (origins.includes('translated')) return 'translated'
   if (origins.includes('copied')) return 'copied'
+  if (origins.includes('existing')) return 'existing'
 
   return undefined
 }

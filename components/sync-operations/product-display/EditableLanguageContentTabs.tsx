@@ -119,7 +119,7 @@ export function EditableLanguageContentTabs({
       // Fallback when meta not set
       if (isDirty) return 'Manually edited'
       if (isSameLanguage) return 'Copied from source'
-      return 'Translated from source'
+      return ''
     } else {
       // EDIT mode - use meta to determine status
       if (!meta || meta === 'existing') {

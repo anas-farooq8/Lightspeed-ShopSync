@@ -3,13 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star, Undo2 } from 'lucide-react'
+import { Package, ExternalLink, RotateCcw, Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, SquarePlus, Trash2, Star, Undo2, X } from 'lucide-react'
 import { getVisibilityOption, VISIBILITY_OPTIONS } from '@/lib/constants/product-ui'
 import { DuplicateProductSelector } from '@/components/sync-operations/product-display/DuplicateProductSelector'
 import { EditableLanguageContentTabs } from '@/components/sync-operations/product-display/EditableLanguageContentTabs'
 import { EditableVariantsList } from '@/components/sync-operations/product-display/EditableVariantsList'
 import { ProductImagesGrid, ImageTooltipPortal, ImagePreviewDialog, type ProductImageMeta } from '@/components/sync-operations/product-display/ProductImagesGrid'
 import { LoadingShimmer } from '@/components/ui/loading-shimmer'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toSafeExternalHref, isSameImageInfo, getImageUrl, getDisplayProductImage, sortImagesForDisplay, cn, getDefaultLanguageCode } from '@/lib/utils'
 import type { Language, EditableTargetData, ProductContent, ProductData } from '@/types/product'
 
@@ -30,6 +31,9 @@ interface TargetPanelProps {
   retranslatingField?: string | null
   translating?: boolean
   error?: string | null
+  /** Inline message when re-translate was attempted but failed (values unchanged). */
+  retranslateActionError?: string | null
+  onDismissRetranslateActionError?: () => void
   sourceImages?: ProductImageMeta[] | null
   /** When true (edit mode), show skeleton in images grid while target images are loading. */
   targetImagesLoading?: boolean
@@ -84,6 +88,8 @@ export function TargetPanel({
   retranslatingField,
   translating = false,
   error = null,
+  retranslateActionError = null,
+  onDismissRetranslateActionError,
   sourceImages,
   targetImagesLoading = false,
   onLanguageChange,
@@ -267,6 +273,25 @@ export function TargetPanel({
       </CardHeader>
 
       <CardContent className="space-y-3 sm:space-y-4 pt-0 px-4 sm:px-6 pb-4 sm:pb-6">
+        {retranslateActionError && (
+          <Alert variant="destructive" className="relative pr-12">
+            <AlertCircle className="shrink-0" />
+            <AlertTitle>Translation failed</AlertTitle>
+            <AlertDescription>{retranslateActionError}</AlertDescription>
+            {onDismissRetranslateActionError && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute top-2 right-2 h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={onDismissRetranslateActionError}
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </Alert>
+        )}
         <div className="flex flex-row gap-3 sm:gap-5 min-w-0">
           <div className="shrink-0 flex flex-col items-start gap-2">
             <div className="relative group">

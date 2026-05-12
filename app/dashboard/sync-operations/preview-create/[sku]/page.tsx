@@ -46,6 +46,7 @@ export default function PreviewCreatePage() {
     loading,
     error,
     targetErrors,
+    retranslateActionErrorByTld,
     productImages,
     translating,
     creating,
@@ -111,6 +112,7 @@ export default function PreviewCreatePage() {
     resetShop,
     retranslateField,
     retranslateLanguage,
+    dismissRetranslateActionError,
     setContentFocused,
     cleanup,
   } = editor
@@ -397,6 +399,8 @@ export default function PreviewCreatePage() {
       retranslatingField={retranslatingField}
       translating={translating}
       error={targetErrors[tld]}
+      retranslateActionError={retranslateActionErrorByTld[tld] ?? null}
+      onDismissRetranslateActionError={() => dismissRetranslateActionError(tld)}
       sourceImages={productImages[sourceProduct?.product_id ?? 0] ?? []}
       targetImagesLoading={sourceImagesLoading && (targetData[tld]?.images?.length ?? 0) === 0}
       onLanguageChange={handleLanguageChange(tld)}
@@ -424,7 +428,7 @@ export default function PreviewCreatePage() {
       onRemoveImageFromSource={(imgSrc) => removeImageFromTarget(tld, imgSrc)}
       onRestoreImageFromSource={(imgSrc) => restoreImageToTarget(tld, imgSrc)}
     />
-  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, productImages, sourceImagesLoading, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, setContentFocused, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
+  ), [details, targetData, activeLanguages, sourceProduct, targetErrors, retranslateActionErrorByTld, productImages, sourceImagesLoading, resettingField, retranslatingField, translating, handleLanguageChange, handleSelectVariantImage, handleSelectProductImage, updateField, resetField, resetLanguage, retranslateField, retranslateLanguage, dismissRetranslateActionError, setContentFocused, resetShop, updateVariant, updateVariantTitle, removeVariant, restoreVariant, setDefaultVariant, restoreDefaultVariant, resetVariant, resetVariantImage, resetAllVariants, updateVisibility, resetVisibility, resetProductImage, removeImageFromTarget, restoreImageToTarget])
 
   if (loading) {
     return (

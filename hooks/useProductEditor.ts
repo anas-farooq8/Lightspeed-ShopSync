@@ -41,7 +41,12 @@ import type {
   TranslatableField,
   TranslationOrigin,
   TranslationMetaByLang,
+  LanguageTranslationMeta,
 } from '@/types/product'
+import {
+  TRANSLATION_UNAVAILABLE_USER_MESSAGE,
+  RETRANSLATE_FAILED_BANNER_MESSAGE,
+} from '@/lib/constants/translation-messages'
 
 // ─── Module-level constants & helpers ───────────────────────────────────────
 
@@ -144,6 +149,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [targetErrors, setTargetErrors] = useState<Record<string, string>>({})
+  /** Shown when field/language re-translate fails; fields stay unchanged. */
+  const [retranslateActionErrorByTld, setRetranslateActionErrorByTld] = useState<Record<string, string>>({})
   const [productImages, setProductImages] = useState<Record<number, ProductImage[]>>({})
   
   // Mode-specific states
@@ -156,6 +163,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   const [updateErrors, setUpdateErrors] = useState<Record<string, string>>({})
 
   const translationMemoRef = useRef(new Map<string, string>())
+  const retranslateErrorClearTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // ─── Editor State ─────────────────────────────────────────────────────────
   const [selectedSourceProductId, setSelectedSourceProductId] = useState<number | null>(null)
@@ -366,7 +374,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         console.log(`✓ Translation complete`)
       } catch (error) {
         console.error('Translation failed:', error)
-        translationError = error instanceof Error ? error.message : 'Unknown error'
+        translationError = TRANSLATION_UNAVAILABLE_USER_MESSAGE
       } finally {
         setTranslating(false)
       }
@@ -2385,10 +2393,33 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     setIsDirty(anyDirty)
   }, [details, selectedSourceProductId, mode])
 
+  const showRetranslateActionError = useCallback((tld: string, message: string) => {
+    const existing = retranslateErrorClearTimersRef.current[tld]
+    if (existing) clearTimeout(existing)
+    setRetranslateActionErrorByTld((prev) => ({ ...prev, [tld]: message }))
+    retranslateErrorClearTimersRef.current[tld] = setTimeout(() => {
+      setRetranslateActionErrorByTld((prev) => {
+        const next = { ...prev }
+        delete next[tld]
+        return next
+      })
+      delete retranslateErrorClearTimersRef.current[tld]
+    }, 12_000)
+  }, [])
+
+  const dismissRetranslateActionError = useCallback((tld: string) => {
+    const existing = retranslateErrorClearTimersRef.current[tld]
+    if (existing) clearTimeout(existing)
+    delete retranslateErrorClearTimersRef.current[tld]
+    setRetranslateActionErrorByTld((prev) => {
+      const next = { ...prev }
+      delete next[tld]
+      return next
+    })
+  }, [])
+
   // ─── Re-translate Operations ──────────────────────────────────────────────
   const retranslateField = useCallback(async (tld: string, langCode: string, field: keyof ProductContent) => {
-    console.log('[retranslateField] Called with:', { tld, langCode, field })
-    
     if (!details || !selectedSourceProductId) return
 
     const sourceProduct = details.source.find(p => p.product_id === selectedSourceProductId)
@@ -2396,29 +2427,20 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
 
     const sourceShopLanguages = details.shops[sourceProduct.shop_tld]?.languages ?? []
     const sourceDefaultLang = sourceShopLanguages.find((l: { is_default?: boolean }) => l.is_default)?.code ?? sourceShopLanguages[0]?.code ?? ''
-    
-    console.log('[retranslateField] Source info:', {
-      sourceShopTld: sourceProduct.shop_tld,
-      sourceDefaultLang,
-      sourceShopLanguages: sourceShopLanguages.map(l => l.code)
-    })
-    
-    if (!sourceDefaultLang) {
-      console.error('[retranslateField] No source default language found!')
-      return
-    }
+    if (!sourceDefaultLang) return
     
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
     
     // In CREATE mode, don't allow re-translating same language (it's just a copy, use reset instead)
     // In EDIT mode, allow it for "Pick from source" functionality
     if (langCode === sourceDefaultLang && mode === 'create') {
-      console.warn('[retranslateField] Cannot re-translate content in the same language as source.')
+      alert('Cannot re-translate content in the same language as source.')
       return
     }
 
     const retranslateKey = `${tld}:${langCode}:${field}`
     setRetranslatingField(retranslateKey)
+    dismissRetranslateActionError(tld)
 
     if (field === 'content') {
       if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
@@ -2508,12 +2530,18 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         return updated
       })
     } catch (error) {
-      console.error('[retranslateField] Failed to re-translate field:', error)
-      // Don't show alert, just log the error
+      console.error('Failed to re-translate field:', error)
+      showRetranslateActionError(tld, RETRANSLATE_FAILED_BANNER_MESSAGE)
+      if (field === 'content') {
+        contentJustResetRef.current = null
+        contentJustResetMetaRef.current = null
+        if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+        contentEditorReadyRef.current[tld][langCode] = true
+      }
     } finally {
       setRetranslatingField(null)
     }
-  }, [details, selectedSourceProductId, mode])
+  }, [details, selectedSourceProductId, mode, showRetranslateActionError, dismissRetranslateActionError])
 
   const retranslateLanguage = useCallback(async (tld: string, langCode: string) => {
     if (!details || !selectedSourceProductId) return
@@ -2526,17 +2554,17 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     if (!sourceDefaultLang) return
     
     if (langCode === sourceDefaultLang) {
-      console.warn('[retranslateLanguage] Cannot re-translate content in the same language as source.')
+      alert('Cannot re-translate content in the same language as source.')
       return
     }
 
     const retranslateKey = `${tld}:${langCode}:all`
     setRetranslatingField(retranslateKey)
+    dismissRetranslateActionError(tld)
 
     if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
     contentEditorReadyRef.current[tld][langCode] = false
     contentJustResetRef.current = `${tld}:${langCode}`
-    contentJustResetMetaRef.current = 'translated'
 
     const sourceContent = sourceProduct.content_by_language?.[sourceDefaultLang] || {}
 
@@ -2549,6 +2577,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         undefined,
         tld
       )
+
+      contentJustResetMetaRef.current = results.content?.origin ?? null
       
       storeTranslationsInMemo(
         translationMemoRef.current,
@@ -2568,12 +2598,12 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         )
 
         const newContent: ProductContent = {}
-        const newLangMeta: any = {}
+        const newLangMeta: LanguageTranslationMeta = {}
         
         TRANSLATABLE_FIELDS.forEach((field) => {
-          const { value } = results[field]
+          const { value, origin } = results[field]
           newContent[field] = value
-          newLangMeta[field] = 'translated'
+          newLangMeta[field] = origin
         })
 
         if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
@@ -2588,12 +2618,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         }
 
         if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
-        originalTranslationMetaRef.current[tld][langCode] = {
-          title: 'translated',
-          fulltitle: 'translated',
-          description: 'translated',
-          content: 'translated'
-        }
+        originalTranslationMetaRef.current[tld][langCode] = { ...newLangMeta }
 
         const newTranslationMeta = {
           ...updated[tld].translationMeta,
@@ -2614,12 +2639,16 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         return updated
       })
     } catch (error) {
-      console.error('[retranslateLanguage] Failed to re-translate language:', error)
-      // Don't show alert, just log the error
+      console.error('Failed to re-translate language:', error)
+      showRetranslateActionError(tld, RETRANSLATE_FAILED_BANNER_MESSAGE)
+      contentJustResetRef.current = null
+      contentJustResetMetaRef.current = null
+      if (!contentEditorReadyRef.current[tld]) contentEditorReadyRef.current[tld] = {}
+      contentEditorReadyRef.current[tld][langCode] = true
     } finally {
       setRetranslatingField(null)
     }
-  }, [details, selectedSourceProductId])
+  }, [details, selectedSourceProductId, showRetranslateActionError, dismissRetranslateActionError])
 
 
   // ─── Cleanup ──────────────────────────────────────────────────────────────
@@ -2662,6 +2691,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     loading,
     error,
     targetErrors,
+    retranslateActionErrorByTld,
     productImages,
     translating,
     creating,
@@ -2748,6 +2778,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     resetShop,
     retranslateField,
     retranslateLanguage,
+    dismissRetranslateActionError,
     setContentFocused,
     getContentForSubmission,
     
