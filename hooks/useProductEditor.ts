@@ -2668,32 +2668,128 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
   }, [])
 
   // Get content for API submission - uses original translated content for content field if not manually edited
-  const getContentForSubmission = useCallback((tld: string): Record<string, ProductContent> => {
-    const data = targetData[tld]
-    if (!data) return {}
+  const getContentForSubmission = useCallback(
+    (tld: string, editable?: EditableTargetData): Record<string, ProductContent> => {
+      const data = editable ?? targetData[tld]
+      if (!data) return {}
 
-    const result: Record<string, ProductContent> = {}
-    const languages = Object.keys(data.content_by_language)
+      const result: Record<string, ProductContent> = {}
+      const languages = Object.keys(data.content_by_language)
 
-    languages.forEach(langCode => {
-      const currentContent = data.content_by_language[langCode]
-      const contentMeta = data.translationMeta?.[langCode]?.content
-      
-      // Use original translated content if it was translated/copied and not manually edited
-      const useOriginalContent = contentMeta === 'translated' || contentMeta === 'copied'
-      const originalContent = originalTranslatedContentRef.current[tld]?.[langCode]?.content || ''
-      
-      result[langCode] = {
-        title: currentContent.title || '',
-        fulltitle: currentContent.fulltitle || '',
-        description: currentContent.description || '',
-        // Use original translated content (with proper line breaks) instead of ReactQuill-modified version
-        content: useOriginalContent && originalContent ? originalContent : (currentContent.content || '')
-      }
-    })
+      languages.forEach(langCode => {
+        const currentContent = data.content_by_language[langCode]
+        const contentMeta = data.translationMeta?.[langCode]?.content
 
-    return result
-  }, [targetData])
+        // Use original translated content if it was translated/copied and not manually edited
+        const useOriginalContent = contentMeta === 'translated' || contentMeta === 'copied'
+        const originalContent = originalTranslatedContentRef.current[tld]?.[langCode]?.content || ''
+
+        result[langCode] = {
+          title: currentContent.title || '',
+          fulltitle: currentContent.fulltitle || '',
+          description: currentContent.description || '',
+          // Use original translated content (with proper line breaks) instead of ReactQuill-modified version
+          content: useOriginalContent && originalContent ? originalContent : (currentContent.content || ''),
+        }
+      })
+
+      return result
+    },
+    [targetData]
+  )
+
+  /** After a successful Lightspeed save: reset dirty baselines (supports partial multi-shop updates). */
+  const markTargetShopsPersisted = useCallback(
+    (tlds: string[]) => {
+      if (tlds.length === 0) return
+      setTargetData(prev => {
+        const next = { ...prev }
+        for (const tld of tlds) {
+          const td = prev[tld]
+          if (!td) continue
+
+          const submittedByLang = getContentForSubmission(tld, td)
+          const langs = Object.keys(td.content_by_language)
+
+          if (!originalTranslatedContentRef.current[tld]) originalTranslatedContentRef.current[tld] = {}
+          if (!originalTranslationMetaRef.current[tld]) originalTranslationMetaRef.current[tld] = {}
+          if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
+
+          langs.forEach(langCode => {
+            const snap = submittedByLang[langCode] ?? {
+              title: '',
+              fulltitle: '',
+              description: '',
+              content: '',
+            }
+            originalTranslatedContentRef.current[tld][langCode] = {
+              title: snap.title || '',
+              fulltitle: snap.fulltitle || '',
+              description: snap.description || '',
+              content: snap.content || '',
+            }
+            originalTranslationMetaRef.current[tld][langCode] = {
+              title: 'existing',
+              fulltitle: 'existing',
+              description: 'existing',
+              content: 'existing',
+            }
+            initialContentRef.current[tld][langCode] = snap.content || ''
+          })
+
+          const contentClone = JSON.parse(JSON.stringify(td.content_by_language))
+
+          const clearedVariants = td.variants.map(v => ({
+            ...v,
+            originalSku: v.sku,
+            originalPrice: v.price_excl,
+            originalIsDefault: v.is_default,
+            originalTitle: Object.fromEntries(
+              Object.entries(v.content_by_language || {}).map(([lc, vc]) => [lc, vc.title || ''])
+            ),
+            originalImage: v.image ? { ...v.image } : null,
+          }))
+
+          const syncedTranslationMeta: TranslationMetaByLang = {}
+          langs.forEach(lc => {
+            syncedTranslationMeta[lc] = {
+              title: 'existing',
+              fulltitle: 'existing',
+              description: 'existing',
+              content: 'existing',
+            }
+          })
+
+          const syncedImages = td.images.map((img, idx) => ({
+            ...img,
+            addedFromSource: false,
+            originalSortOrder: img.sort_order ?? img.originalSortOrder ?? idx,
+          }))
+
+          next[tld] = {
+            ...td,
+            content_by_language: contentClone,
+            originalContentByLanguage: JSON.parse(JSON.stringify(contentClone)),
+            translationMeta: syncedTranslationMeta,
+            dirty: false,
+            dirtyFields: new Set(),
+            dirtyVariants: new Set(),
+            removedImageSrcs: new Set(),
+            originalVisibility: td.visibility,
+            originalProductImage: td.productImage ? { ...td.productImage } : null,
+            variants: clearedVariants,
+            images: syncedImages,
+            originalImageOrder: syncedImages.map((_, idx) => idx),
+            orderChanged: false,
+            imageOrderChanged: false,
+          }
+        }
+        setIsDirty(checkAnyDirty(next))
+        return next
+      })
+    },
+    [getContentForSubmission]
+  )
 
   // ─── Return API ───────────────────────────────────────────────────────────
   return {
@@ -2792,7 +2888,8 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
     dismissRetranslateActionError,
     setContentFocused,
     getContentForSubmission,
-    
+    markTargetShopsPersisted,
+
     // Cleanup
     cleanup,
   }

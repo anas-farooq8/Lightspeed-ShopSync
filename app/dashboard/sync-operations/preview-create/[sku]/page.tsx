@@ -216,9 +216,14 @@ export default function PreviewCreatePage() {
     results.forEach((result, i) => {
       const tld = shopsToCreate[i]
       if (result.status === 'fulfilled') {
-        if (result.value.success) newSuccess[tld] = true
+        if (result.value.success) {
+          newSuccess[tld] = true
+        } else {
+          newErrors[tld] = 'Missing target data for this shop — refresh and try again'
+        }
       } else {
-        newErrors[tld] = result.reason instanceof Error ? result.reason.message : 'Unknown error occurred'
+        newErrors[tld] =
+          result.reason instanceof Error ? result.reason.message : 'Unknown error occurred'
       }
     })
 
@@ -230,7 +235,17 @@ export default function PreviewCreatePage() {
     if (allShopsCreated) {
       setTimeout(() => navigateBack(), 500)
     }
-  }, [targetData, sourceProduct, details, sortedTargetShops, navigateBack, setCreating, setCreateErrors, setCreateSuccess])
+  }, [
+    targetData,
+    sourceProduct,
+    details,
+    sortedTargetShops,
+    navigateBack,
+    setCreating,
+    setCreateErrors,
+    setCreateSuccess,
+    getContentForSubmission,
+  ])
 
   // Create confirmation dialog content (counts match what will be created) - all target shops
   const createConfirmationContent = useMemo(() => {

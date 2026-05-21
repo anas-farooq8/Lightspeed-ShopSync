@@ -20,7 +20,78 @@ import { TargetPanel } from '@/components/sync-operations/product-display/Target
 import { useProductNavigation } from '@/hooks/useProductNavigation'
 import { useProductEditor } from '@/hooks/useProductEditor'
 import { getVariantKey, sortBySortOrder } from '@/lib/utils'
-import type { ProductImage } from '@/types/product'
+import type { EditableTargetData, ProductImage } from '@/types/product'
+
+/** Summary lines for the update confirmation dialog and API payload (per shop). */
+function buildShopUpdateChangesSummary(data: EditableTargetData): string[] {
+  const changes: string[] = []
+
+  if (data.visibility !== data.originalVisibility) {
+    changes.push(`Visibility: ${data.originalVisibility} → ${data.visibility}`)
+  }
+
+  if (data.dirtyFields.size > 0) {
+    const fields = new Set<string>()
+    Array.from(data.dirtyFields).forEach(f => {
+      const parts = f.split('.')
+      if (parts.length >= 2) fields.add(parts[1])
+    })
+    const fieldLabels: Record<string, string> = {
+      title: 'Title',
+      fulltitle: 'Full title',
+      description: 'Description',
+      content: 'Content',
+    }
+    const names = Array.from(fields).map(f => fieldLabels[f] || f).filter(Boolean)
+    if (names.length > 0) {
+      changes.push(`Product content: ${names.join(', ')}`)
+    }
+  }
+
+  const deletedCount = data.variants.filter(v => v.deleted).length
+  if (deletedCount > 0) {
+    changes.push(`${deletedCount} variant${deletedCount !== 1 ? 's' : ''} removed`)
+  }
+
+  const addedCount = data.variants.filter(v => v.addedFromSource).length
+  if (addedCount > 0) {
+    changes.push(`${addedCount} variant${addedCount !== 1 ? 's' : ''} added from source`)
+  }
+
+  const updatedCount = data.variants.filter(
+    v => !v.deleted && !v.addedFromSource && data.dirtyVariants.has(getVariantKey(v))
+  ).length
+  if (updatedCount > 0) {
+    changes.push(`${updatedCount} variant${updatedCount !== 1 ? 's' : ''} updated`)
+  }
+
+  const productImageChanged = data.productImage?.src !== data.originalProductImage?.src
+  if (productImageChanged) {
+    changes.push('Product image')
+  }
+
+  const imagesAddedFromSource = data.images.filter(
+    (img: { addedFromSource?: boolean; src?: string }) =>
+      img.addedFromSource && !data.removedImageSrcs.has(img.src ?? '')
+  ).length
+  if (imagesAddedFromSource > 0) {
+    changes.push(`${imagesAddedFromSource} image${imagesAddedFromSource !== 1 ? 's' : ''} added from source`)
+  }
+
+  const imagesRemovedCount = data.images.filter(
+    (img: { addedFromSource?: boolean; src?: string }) =>
+      data.removedImageSrcs.has(img.src ?? '') && !img.addedFromSource
+  ).length
+  if (imagesRemovedCount > 0) {
+    changes.push(`${imagesRemovedCount} image${imagesRemovedCount !== 1 ? 's' : ''} removed`)
+  }
+
+  if (data.imageOrderChanged) {
+    changes.push('Image order')
+  }
+
+  return changes.length > 0 ? changes : ['No specific changes tracked']
+}
 
 export default function PreviewEditPage() {
   const params = useParams()
@@ -108,6 +179,7 @@ export default function PreviewEditPage() {
     removeImageFromTarget,
     restoreImageToTarget,
     getContentForSubmission,
+    markTargetShopsPersisted,
     resetProductImage,
     resetField,
     resetLanguage,
@@ -124,65 +196,70 @@ export default function PreviewEditPage() {
 
   // Event handlers
   const handleBack = useCallback(() => {
-    if (updateSuccess[activeTargetTld]) {
+    if (!isDirty) {
       navigateBack('edit')
-    } else if (isDirty) {
-      setShowCloseConfirmation(true)
     } else {
-      navigateBack('edit')
+      setShowCloseConfirmation(true)
     }
-  }, [isDirty, updateSuccess, activeTargetTld, navigateBack, setShowCloseConfirmation])
+  }, [isDirty, navigateBack, setShowCloseConfirmation])
 
   const handleUpdateClick = useCallback(() => {
     if (!sourceProduct || !details) return
-    const data = targetData[activeTargetTld]
-    if (!data) {
-      alert('No data available for this shop')
+    const dirtyTlds = sortedTargetShops.filter(t => targetData[t]?.dirty)
+    if (dirtyTlds.length === 0) {
       return
     }
-    if (!data.dirty) {
+    const missing = dirtyTlds.filter(t => !targetData[t])
+    if (missing.length > 0) {
+      alert(`No data available for shop(s): ${missing.join(', ')}`)
       return
     }
     setShowCreateConfirmation(true)
-  }, [sourceProduct, details, activeTargetTld, targetData, setShowCreateConfirmation])
+  }, [sourceProduct, details, sortedTargetShops, targetData, setShowCreateConfirmation])
 
   const handleConfirmUpdate = useCallback(async () => {
     if (!sourceProduct || !details) return
 
-    const tld = activeTargetTld
-    const data = targetData[tld]
-    
-    if (!data) {
-      setShowCreateConfirmation(false)
-      return
-    }
-
-    if (!data.dirty) {
+    const shopsToUpdate = sortedTargetShops.filter(tld => targetData[tld]?.dirty)
+    if (shopsToUpdate.length === 0) {
       setShowCreateConfirmation(false)
       return
     }
 
     setShowCreateConfirmation(false)
     setUpdating(true)
+
     setUpdateErrors(prev => {
-      const updated = { ...prev }
-      delete updated[tld]
-      return updated
+      const next = { ...prev }
+      shopsToUpdate.forEach(tld => {
+        delete next[tld]
+      })
+      return next
     })
     setUpdateSuccess(prev => {
-      const updated = { ...prev }
-      delete updated[tld]
-      return updated
+      const next = { ...prev }
+      shopsToUpdate.forEach(tld => {
+        delete next[tld]
+      })
+      return next
     })
 
-    try {
+    const newSuccess: Record<string, boolean> = {}
+    const newErrors: Record<string, string> = {}
+
+    const updatePromises = shopsToUpdate.map(async tld => {
+      const data = targetData[tld]
+      if (!data) {
+        return { tld, success: false as const }
+      }
+
       const activeVariants = data.variants.filter(v => !v.deleted)
       const intendedImages = sortBySortOrder(
         data.images.filter(img => !data.removedImageSrcs.has(img.src ?? ''))
       )
       const updateProductData = {
         visibility: data.visibility,
-        content_by_language: getContentForSubmission(tld), // Use original translated content with proper line breaks
+        content_by_language: getContentForSubmission(tld),
         variants: activeVariants.map(v => ({
           variant_id: v.addedFromSource ? null : v.variant_id,
           sku: v.sku || '',
@@ -195,12 +272,9 @@ export default function PreviewEditPage() {
         images: intendedImages
       }
 
-      console.log('[UI] Updating product in shop:', tld)
-      console.log('[UI] Product data:', updateProductData)
-
       const shopId = details.shops?.[tld]?.id
       const targetShopLanguages = details.shops?.[tld]?.languages
-      
+
       if (!shopId) {
         throw new Error(`Shop ID not found for ${tld}`)
       }
@@ -211,10 +285,9 @@ export default function PreviewEditPage() {
 
       const productId = data.targetProductId
       if (!productId) {
-        throw new Error('Target product ID not found')
+        throw new Error(`Target product ID not found for ${tld}`)
       }
 
-      // Build currentState from product-details (avoids DB load on backend)
       const existingVariants = data.variants.filter(v => !v.addedFromSource)
       const currentState = {
         visibility: data.originalVisibility,
@@ -234,7 +307,7 @@ export default function PreviewEditPage() {
         }))
       }
 
-      const changes = updateConfirmationContent?.changes ?? []
+      const changes = buildShopUpdateChangesSummary(data)
 
       const response = await fetch('/api/update-product', {
         method: 'PUT',
@@ -258,120 +331,92 @@ export default function PreviewEditPage() {
         throw new Error(result.error || 'Failed to update product')
       }
 
-      console.log('[UI] ✓ Product updated successfully:', result)
+      console.log('[UI] ✓ Product updated successfully:', tld, result)
+      return { tld, success: true as const }
+    })
 
-      setUpdateSuccess(prev => ({ ...prev, [tld]: true }))
+    const results = await Promise.allSettled(updatePromises)
 
-      // Edit updates one shop at a time; navigate back when this update succeeds (like create does)
+    const succeededTlds: string[] = []
+
+    results.forEach((result, i) => {
+      const tld = shopsToUpdate[i]
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          newSuccess[tld] = true
+          succeededTlds.push(tld)
+        } else {
+          newErrors[tld] = 'No target data for this shop'
+        }
+      } else {
+        const msg =
+          result.reason instanceof Error ? result.reason.message : 'Unknown error occurred'
+        newErrors[tld] = msg
+      }
+    })
+
+    markTargetShopsPersisted(succeededTlds)
+
+    setUpdateSuccess(prev => ({ ...prev, ...newSuccess }))
+    setUpdateErrors(prev => ({ ...prev, ...newErrors }))
+    setUpdating(false)
+
+    const allOk = shopsToUpdate.every(tld => newSuccess[tld])
+    if (allOk) {
       setTimeout(() => navigateBack('edit'), 500)
-
-    } catch (err) {
-      console.error('[UI] Failed to update product:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
-      setUpdateErrors(prev => ({ ...prev, [tld]: errorMessage }))
-    } finally {
-      setUpdating(false)
     }
-  }, [activeTargetTld, targetData, sourceProduct, details, navigateBack, setShowCreateConfirmation, setUpdating, setUpdateErrors, setUpdateSuccess])
+  }, [
+    sortedTargetShops,
+    targetData,
+    sourceProduct,
+    details,
+    navigateBack,
+    setShowCreateConfirmation,
+    setUpdating,
+    setUpdateErrors,
+    setUpdateSuccess,
+    getContentForSubmission,
+    markTargetShopsPersisted,
+  ])
 
-  // Update confirmation dialog content (changes that will be applied)
+  // Update confirmation dialog content — one card per dirty shop (multi-shop edits)
   const updateConfirmationContent = useMemo(() => {
     if (!details || !sourceProduct) return null
-    const tld = activeTargetTld
-    const data = targetData[tld]
-    if (!data) return null
+    const dirtyTlds = sortedTargetShops.filter(tld => targetData[tld]?.dirty)
+    if (dirtyTlds.length === 0) return null
 
-    const shopName = details.shops?.[tld]?.name ?? tld
-    const activeVariants = data.variants.filter(v => !v.deleted)
-    const skuVal = activeVariants[0]?.sku || sourceProduct.sku || sku
+    return dirtyTlds.flatMap(tld => {
+      const data = targetData[tld]
+      if (!data) return []
 
-    const productTitle = (() => {
-      const content = data.content_by_language
-      if (!content) return undefined
-      for (const lang of Object.keys(content)) {
-        const title = content[lang]?.title?.trim()
-        if (title) return title
+      const shopName = details.shops?.[tld]?.name ?? tld
+      const activeVariants = data.variants.filter(v => !v.deleted)
+      const skuVal = activeVariants[0]?.sku || sourceProduct.sku || sku
+
+      const productTitle = (() => {
+        const content = data.content_by_language
+        if (!content) return undefined
+        for (const lang of Object.keys(content)) {
+          const title = content[lang]?.title?.trim()
+          if (title) return title
+        }
+        return undefined
+      })()
+
+      const changes = buildShopUpdateChangesSummary(data)
+
+      return {
+        shopName,
+        shopTld: tld,
+        variantCount: activeVariants.length,
+        imageCount: data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length,
+        sku: skuVal,
+        defaultSku: skuVal,
+        productTitle: productTitle || undefined,
+        changes,
       }
-      return undefined
-    })()
-
-    const changes: string[] = []
-
-    if (data.visibility !== data.originalVisibility) {
-      changes.push(`Visibility: ${data.originalVisibility} → ${data.visibility}`)
-    }
-
-    if (data.dirtyFields.size > 0) {
-      const fields = new Set<string>()
-      Array.from(data.dirtyFields).forEach(f => {
-        const parts = f.split('.')
-        if (parts.length >= 2) fields.add(parts[1])
-      })
-      const fieldLabels: Record<string, string> = {
-        title: 'Title',
-        fulltitle: 'Full title',
-        description: 'Description',
-        content: 'Content',
-      }
-      const names = Array.from(fields).map(f => fieldLabels[f] || f).filter(Boolean)
-      if (names.length > 0) {
-        changes.push(`Product content: ${names.join(', ')}`)
-      }
-    }
-
-    const deletedCount = data.variants.filter(v => v.deleted).length
-    if (deletedCount > 0) {
-      changes.push(`${deletedCount} variant${deletedCount !== 1 ? 's' : ''} removed`)
-    }
-
-    const addedCount = data.variants.filter(v => v.addedFromSource).length
-    if (addedCount > 0) {
-      changes.push(`${addedCount} variant${addedCount !== 1 ? 's' : ''} added from source`)
-    }
-
-    const updatedCount = data.variants.filter(
-      v => !v.deleted && !v.addedFromSource && data.dirtyVariants.has(getVariantKey(v))
-    ).length
-    if (updatedCount > 0) {
-      changes.push(`${updatedCount} variant${updatedCount !== 1 ? 's' : ''} updated`)
-    }
-
-    const productImageChanged = data.productImage?.src !== data.originalProductImage?.src
-    if (productImageChanged) {
-      changes.push('Product image')
-    }
-
-    const imagesAddedFromSource = data.images.filter(
-      (img: { addedFromSource?: boolean; src?: string }) =>
-        img.addedFromSource && !data.removedImageSrcs.has(img.src ?? '')
-    ).length
-    if (imagesAddedFromSource > 0) {
-      changes.push(`${imagesAddedFromSource} image${imagesAddedFromSource !== 1 ? 's' : ''} added from source`)
-    }
-
-    const imagesRemovedCount = data.images.filter(
-      (img: { addedFromSource?: boolean; src?: string }) =>
-        data.removedImageSrcs.has(img.src ?? '') && !img.addedFromSource
-    ).length
-    if (imagesRemovedCount > 0) {
-      changes.push(`${imagesRemovedCount} image${imagesRemovedCount !== 1 ? 's' : ''} removed`)
-    }
-
-    if (data.imageOrderChanged) {
-      changes.push('Image order')
-    }
-
-    return {
-      shopName,
-      shopTld: tld,
-      variantCount: activeVariants.length,
-      imageCount: data.images.filter(img => !data.removedImageSrcs.has(img.src ?? '')).length,
-      sku: skuVal,
-      defaultSku: skuVal,
-      productTitle: productTitle || undefined,
-      changes: changes.length > 0 ? changes : ['No specific changes tracked'],
-    }
-  }, [details, sourceProduct, activeTargetTld, targetData, sku])
+    })
+  }, [details, sourceProduct, sortedTargetShops, targetData, sku])
 
   // Initial data fetch
   useEffect(() => {
@@ -831,19 +876,44 @@ export default function PreviewEditPage() {
             {updating && (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Updating product...</span>
+                <span>Updating product(s)...</span>
               </div>
             )}
-            {!updating && updateSuccess[activeTargetTld] && (
+            {!updating &&
+              sortedTargetShops.filter(tld => updateSuccess[tld]).length > 0 &&
+              sortedTargetShops.filter(tld => updateErrors[tld]).length === 0 && (
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Product updated successfully</span>
+                <span>
+                  {sortedTargetShops.filter(tld => updateSuccess[tld]).length === sortedTargetShops.length
+                    ? sortedTargetShops.length > 1
+                      ? `Products updated in all ${sortedTargetShops.length} shops`
+                      : 'Product updated successfully'
+                    : `Updated ${sortedTargetShops.filter(tld => updateSuccess[tld]).length} shop(s)`}
+                </span>
               </div>
             )}
-            {!updating && updateErrors[activeTargetTld] && (
-              <div className="flex items-center gap-2 text-destructive">
-                <XCircle className="h-4 w-4" />
-                <span>Update failed</span>
+            {!updating &&
+              sortedTargetShops.filter(tld => updateSuccess[tld]).length > 0 &&
+              sortedTargetShops.filter(tld => updateErrors[tld]).length > 0 && (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>
+                  Partial success: updated {sortedTargetShops.filter(tld => updateSuccess[tld]).length} of{' '}
+                  {sortedTargetShops.length} shop(s)
+                </span>
+              </div>
+            )}
+            {!updating && sortedTargetShops.some(tld => updateErrors[tld]) && (
+              <div className="flex flex-wrap items-center gap-2 text-destructive">
+                <XCircle className="h-4 w-4 shrink-0" />
+                <span>
+                  Update failed for:{' '}
+                  {sortedTargetShops
+                    .filter(tld => updateErrors[tld])
+                    .map(tld => tld.toUpperCase())
+                    .join(', ')}
+                </span>
               </div>
             )}
           </div>
@@ -855,15 +925,24 @@ export default function PreviewEditPage() {
               disabled={updating}
               className="min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer"
             >
-              {updateSuccess[activeTargetTld] ? 'Done' : 'Cancel'}
+              {!sortedTargetShops.some(tld => targetData[tld]?.dirty) &&
+              sortedTargetShops.some(tld => updateSuccess[tld])
+                ? 'Done'
+                : 'Cancel'}
             </Button>
             <Button
               onClick={handleUpdateClick}
-              disabled={updating || updateSuccess[activeTargetTld] || !targetData[activeTargetTld]?.dirty}
+              disabled={
+                updating ||
+                !sortedTargetShops.some(tld => targetData[tld]?.dirty)
+              }
               className="bg-red-600 hover:bg-red-700 min-h-[44px] sm:min-h-0 touch-manipulation cursor-pointer disabled:opacity-50"
             >
               {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {updateSuccess[activeTargetTld] ? '✓ Updated' : 'Update Product'}
+              {sortedTargetShops.every(tld => !targetData[tld]?.dirty) &&
+              sortedTargetShops.some(tld => updateSuccess[tld])
+                ? '✓ Updated'
+                : 'Update Product'}
             </Button>
           </div>
         </div>
