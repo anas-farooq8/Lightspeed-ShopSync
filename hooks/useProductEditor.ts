@@ -802,8 +802,6 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           contentJustResetClearTimeoutRef.current = null
         }
         const fieldKey = `${langCode}.${field}`
-        const newDirtyFields = new Set(updated[tld].dirtyFields)
-        newDirtyFields.delete(fieldKey)
         // Use incoming value (what ReactQuill sent) – do NOT overwrite with state, or we trigger another onChange → infinite loop
         if (!initialContentRef.current[tld]) initialContentRef.current[tld] = {}
         initialContentRef.current[tld][langCode] = value
@@ -820,6 +818,15 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
               }
             }
           : updated[tld].translationMeta
+
+        const baselineVal = originalTranslatedContentRef.current[tld]?.[langCode]?.content ?? ''
+        const newDirtyFields = new Set(updated[tld].dirtyFields)
+        if (value !== baselineVal) {
+          newDirtyFields.add(fieldKey)
+        } else {
+          newDirtyFields.delete(fieldKey)
+        }
+
         updated[tld] = {
           ...updated[tld],
           content_by_language: {
@@ -862,25 +869,16 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           // Only mark as changed when user has focused the content field – avoids false "Manually edited"
           const focusKey = `${tld}:${langCode}`
           const userHasFocused = !!contentFocusedRef.current[focusKey]
-          const valueMatchesSource = value.trim() === sourceValue.trim()
+          const valueMatchesSource = value === sourceValue
           isChanged = userHasFocused && !valueMatchesSource
         }
       } else if (field === 'description') {
-        const normalizedValue = value.replace(/\r\n/g, '\n')
-        const normalizedSource = sourceValue.replace(/\r\n/g, '\n')
-        isChanged = normalizedValue !== normalizedSource
+        isChanged = value !== sourceValue
       } else {
         isChanged = value !== sourceValue
       }
 
       const fieldKey = `${langCode}.${field}`
-      const newDirtyFields = new Set(updated[tld].dirtyFields)
-      if (isChanged) {
-        newDirtyFields.add(fieldKey)
-      } else {
-        newDirtyFields.delete(fieldKey)
-      }
-      
       const translatableField = field as TranslatableField
       let newTranslationMeta = updated[tld].translationMeta
       
@@ -898,11 +896,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           // Do NOT overwrite 'copied' or 'translated' when value matches original - for same language
           // Pick, the value equals original but meta should stay 'copied'.
           const originalValue = originalTranslatedContentRef.current[tld]?.[langCode]?.[translatableField as keyof ProductContent] ?? (translatableField === 'content' ? initialContentRef.current[tld]?.[langCode] : undefined) ?? ''
-          const valueMatchesOriginal = translatableField === 'content'
-            ? value.trim() === originalValue.trim()
-            : translatableField === 'description'
-              ? value.replace(/\r\n/g, '\n') === originalValue.replace(/\r\n/g, '\n')
-              : value === originalValue
+          const valueMatchesOriginal = value === originalValue
           const currentMeta = newTranslationMeta?.[langCode]?.[translatableField]
           if (valueMatchesOriginal && currentMeta === 'manual') {
             // User had manually edited and reverted to original - restore meta
@@ -919,6 +913,13 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           }
           // When value matches original but meta is 'copied' or 'translated', keep it - user picked
         }
+      }
+
+      const newDirtyFields = new Set(updated[tld].dirtyFields)
+      if (isChanged) {
+        newDirtyFields.add(fieldKey)
+      } else {
+        newDirtyFields.delete(fieldKey)
       }
       
       const visibilityChanged = updated[tld].visibility !== updated[tld].originalVisibility
@@ -2478,8 +2479,6 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
         if (!updated[tld]) return prev
 
         const fieldKey = `${langCode}.${field}`
-        const newDirtyFields = new Set(updated[tld].dirtyFields)
-        newDirtyFields.delete(fieldKey)
 
         // Use the origin from getBaseValueForField ('copied' or 'translated')
         const newTranslationMeta = {
@@ -2488,6 +2487,17 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
             ...updated[tld].translationMeta?.[langCode],
             [field]: origin
           }
+        }
+
+        const baselineVal =
+          originalTranslatedContentRef.current[tld]?.[langCode]?.[field as keyof ProductContent] ?? ''
+        const fieldNeedsPersist = value !== baselineVal
+
+        const newDirtyFields = new Set(updated[tld].dirtyFields)
+        if (fieldNeedsPersist) {
+          newDirtyFields.add(fieldKey)
+        } else {
+          newDirtyFields.delete(fieldKey)
         }
 
         if (field === 'content') {
@@ -2527,6 +2537,7 @@ export function useProductEditor({ mode, sku, selectedTargetShops }: UseProductE
           translationMeta: newTranslationMeta
         }
 
+        setIsDirty(checkAnyDirty(updated))
         return updated
       })
     } catch (error) {
